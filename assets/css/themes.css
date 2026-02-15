@@ -1,0 +1,940 @@
+/* assets/css/themes.css
+   FAZ IDE (v0) - reserved for:
+   - purple theme overrides
+   - light theme overrides
+   - theme toggle hooks
+   - high-contrast accessibility theme
+*/
+
+:root[data-theme="purple"] {
+    color-scheme: dark;
+    --bg: #120a1f;
+    --text: #f3e8ff;
+    --muted: rgba(196, 181, 253, 0.88);
+    --border: rgba(167, 139, 250, 0.35);
+    --accent: #c084fc;
+    --danger: #fb7185;
+}
+
+:root[data-theme="purple"] body {
+    background: var(--bg);
+    color: var(--text);
+}
+
+:root[data-theme="purple"] .top,
+:root[data-theme="purple"] .foot,
+:root[data-theme="purple"] .card,
+:root[data-theme="purple"] .card-hd {
+    background: #170f29;
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+:root[data-theme="purple"] .status,
+:root[data-theme="purple"] .health-pill {
+    background: #1c1232;
+    border-color: rgba(167, 139, 250, 0.34);
+    color: rgba(221, 214, 254, 0.95);
+}
+
+:root[data-theme="purple"] .dot {
+    box-shadow: 0 0 0 4px rgba(192, 132, 252, 0.25);
+}
+
+:root[data-theme="purple"] button {
+    background: #24153d;
+    border-color: rgba(167, 139, 250, 0.35);
+    color: #f3e8ff;
+}
+
+:root[data-theme="purple"] button:hover {
+    background: #2b1a49;
+    border-color: rgba(192, 132, 252, 0.5);
+}
+
+:root[data-theme="purple"] .top.strip button {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: rgba(243, 232, 255, 0.95);
+}
+
+:root[data-theme="purple"] .top.strip button:hover {
+    background: rgba(167, 139, 250, 0.14);
+    border-color: rgba(167, 139, 250, 0.24);
+}
+
+:root[data-theme="purple"] .top.strip button[data-panel-toggle="true"][data-panel-open="false"] {
+    background: transparent;
+    border-color: transparent;
+    text-decoration-color: rgba(221, 214, 254, 0.82);
+}
+
+:root[data-theme="purple"] .top.strip button[data-panel-toggle="true"][data-panel-open="false"]:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="purple"] button.primary {
+    background: rgba(128, 90, 213, 0.38);
+    border-color: rgba(196, 181, 253, 0.55);
+    color: #f5ecff;
+}
+
+:root[data-theme="purple"] button.danger {
+    background: rgba(56, 17, 35, 0.85);
+    border-color: rgba(251, 113, 133, 0.5);
+    color: #ffd4dd;
+}
+
+:root[data-theme="purple"] button:focus-visible,
+:root[data-theme="purple"] .top-theme-select:focus-visible {
+    border-color: rgba(192, 132, 252, 0.72);
+    box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.28);
+}
+
+:root[data-theme="purple"] .top-theme-select {
+    background-color: #24153d;
+    border-color: rgba(167, 139, 250, 0.35);
+    color: #f3e8ff;
+    background-image:
+        linear-gradient(45deg, transparent 50%, rgba(221, 214, 254, 0.9) 50%),
+        linear-gradient(135deg, rgba(221, 214, 254, 0.9) 50%, transparent 50%);
+}
+
+:root[data-theme="purple"] .top-theme-select:hover {
+    background-color: #2b1a49;
+    border-color: rgba(192, 132, 252, 0.5);
+}
+
+:root[data-theme="purple"] .files-search,
+:root[data-theme="purple"] #fileSearch,
+:root[data-theme="purple"] #fileSearchClear,
+:root[data-theme="purple"] .files-sort select,
+:root[data-theme="purple"] #gameSelect {
+    background: #201536;
+    color: #f3e8ff;
+}
+
+:root[data-theme="purple"] .files-search,
+:root[data-theme="purple"] .files-menu {
+    border-color: rgba(167, 139, 250, 0.32);
+}
+
+:root[data-theme="purple"] .files-menu-item:hover {
+    background: #2b1a49;
+    border-color: rgba(192, 132, 252, 0.5);
+}
+
+:root[data-theme="purple"] .files-games {
+    border-top-color: rgba(167, 139, 250, 0.24);
+}
+
+:root[data-theme="purple"] .files-games-label,
+:root[data-theme="purple"] .files-sub,
+:root[data-theme="purple"] .files-menu-label,
+:root[data-theme="purple"] .file-info,
+:root[data-theme="purple"] .file-section {
+    color: rgba(221, 214, 254, 0.78);
+}
+
+:root[data-theme="purple"] .files-menu {
+    background: #201536;
+    box-shadow: 0 16px 40px rgba(6, 3, 12, 0.55);
+}
+
+:root[data-theme="purple"] .files-menu-btn {
+    background: #24153d;
+    border-color: rgba(167, 139, 250, 0.35);
+    color: rgba(243, 232, 255, 0.88);
+}
+
+:root[data-theme="purple"] .file-menu-btn {
+    background: transparent;
+    border-color: transparent;
+    color: rgba(221, 214, 254, 0.82);
+}
+
+:root[data-theme="purple"] .files-menu-divider {
+    background: rgba(167, 139, 250, 0.26);
+}
+
+:root[data-theme="purple"] #filesMenu [data-files-toggle][aria-pressed="true"] {
+    background: rgba(124, 58, 237, 0.28);
+    border-color: rgba(196, 181, 253, 0.55);
+}
+
+:root[data-theme="purple"] .file-item:hover .file-menu-btn,
+:root[data-theme="purple"] .file-item:focus-within .file-menu-btn,
+:root[data-theme="purple"] .file-row[data-active="true"] + .file-menu-btn,
+:root[data-theme="purple"] .file-row[data-selected="true"] + .file-menu-btn {
+    background: rgba(124, 58, 237, 0.24);
+    border-color: transparent;
+}
+
+:root[data-theme="purple"] .file-folder-row {
+    color: rgba(233, 225, 255, 0.9);
+}
+
+:root[data-theme="purple"] .file-folder-name {
+    color: rgba(221, 214, 254, 0.94);
+}
+
+:root[data-theme="purple"] .file-folder-row:hover {
+    background: rgba(124, 58, 237, 0.2);
+}
+
+:root[data-theme="purple"] .file-row {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="purple"] .file-row:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="purple"] .file-row:hover::before {
+    background: rgba(124, 58, 237, 0.2);
+}
+
+:root[data-theme="purple"] .file-row[data-selected="true"]:not([data-active="true"]) {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+:root[data-theme="purple"] .file-row[data-selected="true"]:not([data-active="true"])::before {
+    background: rgba(124, 58, 237, 0.28);
+    box-shadow: inset 2px 0 0 rgba(196, 181, 253, 0.65);
+}
+
+:root[data-theme="purple"] .file-row[data-editing="true"] {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="purple"] .file-row[data-editing="true"]::before {
+    background: rgba(124, 58, 237, 0.3);
+}
+
+:root[data-theme="purple"] .file-row[data-active="true"] {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+:root[data-theme="purple"] .file-row[data-active="true"]::before {
+    background: rgba(139, 92, 246, 0.36);
+    box-shadow: inset 2px 0 0 rgba(216, 180, 254, 0.88);
+}
+
+:root[data-theme="purple"] .file-meta {
+    color: rgba(237, 233, 254, 0.96);
+}
+
+:root[data-theme="purple"] .file-row[data-dirty="true"] .file-name {
+    color: rgba(253, 230, 138, 0.98);
+}
+
+:root[data-theme="purple"] .file-meta-dirty {
+    color: rgba(254, 240, 138, 0.96);
+}
+
+:root[data-theme="purple"] .quick-open-backdrop {
+    background: rgba(4, 2, 9, 0.52);
+}
+
+:root[data-theme="purple"] .quick-open,
+:root[data-theme="purple"] .layout-panel {
+    background: #1f1434;
+    border-color: rgba(167, 139, 250, 0.34);
+    box-shadow: 0 24px 60px rgba(4, 2, 9, 0.55);
+}
+
+:root[data-theme="purple"] .quick-open-sub,
+:root[data-theme="purple"] .quick-open-meta,
+:root[data-theme="purple"] .quick-open-hint,
+:root[data-theme="purple"] .quick-open-empty {
+    color: rgba(221, 214, 254, 0.78);
+}
+
+:root[data-theme="purple"] #quickOpenInput,
+:root[data-theme="purple"] #commandPaletteInput,
+:root[data-theme="purple"] #editorFindInput,
+:root[data-theme="purple"] #editorReplaceInput,
+:root[data-theme="purple"] #symbolSearchInput,
+:root[data-theme="purple"] #projectSearchInput,
+:root[data-theme="purple"] #projectReplaceInput {
+    background: #281a45;
+    color: #f3e8ff;
+    border-color: rgba(167, 139, 250, 0.38);
+}
+
+:root[data-theme="purple"] .quick-open-item:hover {
+    background: rgba(124, 58, 237, 0.22);
+}
+
+:root[data-theme="purple"] .quick-open-item[data-active="true"] {
+    background: rgba(124, 58, 237, 0.35);
+    border-color: rgba(196, 181, 253, 0.52);
+}
+
+:root[data-theme="purple"] #editor,
+:root[data-theme="purple"] .CodeMirror,
+:root[data-theme="purple"] .runner,
+:root[data-theme="purple"] .log {
+    background: #130a23;
+    color: #f3e8ff;
+}
+
+:root[data-theme="purple"] .runner {
+    background: transparent;
+}
+
+:root[data-theme="purple"] .CodeMirror-gutters {
+    background: #130a23;
+    border-right-color: rgba(167, 139, 250, 0.28);
+}
+
+:root[data-theme="purple"] .editor-panel .CodeMirror-scrollbar-filler,
+:root[data-theme="purple"] #editor::-webkit-scrollbar-corner,
+:root[data-theme="purple"] .editor-panel .CodeMirror-scroll::-webkit-scrollbar-corner {
+    background: #130a23;
+}
+
+:root[data-theme="purple"] .editor-shortcut-help-btn {
+    border-color: rgba(167, 139, 250, 0.45);
+    color: rgba(243, 232, 255, 0.95);
+}
+
+:root[data-theme="light"] {
+    --bg: #f6f7fb;
+    --text: #0f172a;
+    --muted: rgba(71, 85, 105, 0.9);
+    --border: rgba(148, 163, 184, 0.45);
+    --accent: #0ea5e9;
+    --danger: #e11d48;
+}
+
+:root[data-theme="light"] body {
+    background: var(--bg);
+    color: var(--text);
+}
+
+:root[data-theme="light"] .top,
+:root[data-theme="light"] .foot,
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .card-hd {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .status,
+:root[data-theme="light"] .health-pill {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: rgba(71, 85, 105, 0.95);
+}
+
+:root[data-theme="light"] .dot {
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18);
+}
+
+:root[data-theme="light"] button {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] button:hover {
+    background: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.6);
+}
+
+:root[data-theme="light"] .top.strip button {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .top.strip button:hover {
+    background: rgba(148, 163, 184, 0.18);
+    border-color: rgba(148, 163, 184, 0.36);
+}
+
+:root[data-theme="light"] .top.strip button[data-panel-toggle="true"][data-panel-open="false"] {
+    background: transparent;
+    border-color: transparent;
+    text-decoration-color: rgba(71, 85, 105, 0.82);
+}
+
+:root[data-theme="light"] .top.strip button[data-panel-toggle="true"][data-panel-open="false"]:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .top-theme-select {
+    background-color: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+    background-image:
+        linear-gradient(45deg, transparent 50%, rgba(71, 85, 105, 0.88) 50%),
+        linear-gradient(135deg, rgba(71, 85, 105, 0.88) 50%, transparent 50%);
+}
+
+:root[data-theme="light"] .top-theme-select:hover {
+    background-color: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.6);
+}
+
+:root[data-theme="light"] button.primary {
+    background: #e0f2fe;
+    border-color: rgba(14, 165, 233, 0.6);
+    color: #0c4a6e;
+}
+
+:root[data-theme="light"] button.danger {
+    background: #ffe4e6;
+    border-color: rgba(244, 63, 94, 0.55);
+    color: #9f1239;
+}
+
+:root[data-theme="light"] .files-search,
+:root[data-theme="light"] #fileSearch,
+:root[data-theme="light"] #fileSearchClear,
+:root[data-theme="light"] .files-sort select,
+:root[data-theme="light"] #gameSelect {
+    background: #ffffff;
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .files-search {
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .files-games {
+    border-top-color: rgba(148, 163, 184, 0.25);
+}
+
+:root[data-theme="light"] .files-games-label {
+    color: rgba(71, 85, 105, 0.7);
+}
+
+:root[data-theme="light"] .files-sub {
+    color: rgba(71, 85, 105, 0.82);
+}
+
+:root[data-theme="light"] .files-menu {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.35);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme="light"] .files-menu-item {
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .files-menu-item:hover {
+    background: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.45);
+}
+
+:root[data-theme="light"] #filesMenu [data-files-toggle][aria-pressed="true"] {
+    background: #e0f2fe;
+    border-color: rgba(14, 165, 233, 0.45);
+}
+
+:root[data-theme="light"] .files-menu-label {
+    color: rgba(71, 85, 105, 0.8);
+}
+
+:root[data-theme="light"] .files-menu-divider {
+    background: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .files-menu-group + .files-menu-group {
+    border-top-color: rgba(148, 163, 184, 0.3);
+}
+
+:root[data-theme="light"] .files-menu-btn,
+:root[data-theme="light"] .files-menu-btn {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.35);
+    color: rgba(71, 85, 105, 0.9);
+}
+
+:root[data-theme="light"] .file-menu-btn {
+    background: transparent;
+    border-color: transparent;
+    color: rgba(71, 85, 105, 0.88);
+}
+
+:root[data-theme="light"] .file-item:hover .file-menu-btn,
+:root[data-theme="light"] .file-item:focus-within .file-menu-btn,
+:root[data-theme="light"] .file-row[data-active="true"] + .file-menu-btn,
+:root[data-theme="light"] .file-row[data-selected="true"] + .file-menu-btn {
+    background: #f1f5f9;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .file-folder-row {
+    color: rgba(71, 85, 105, 0.92);
+}
+
+:root[data-theme="light"] .file-folder-name {
+    color: rgba(71, 85, 105, 0.95);
+}
+
+:root[data-theme="light"] .file-folder-row:hover {
+    background: rgba(148, 163, 184, 0.18);
+}
+
+:root[data-theme="light"] .file-row {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .file-row:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .file-row:hover::before {
+    background: rgba(148, 163, 184, 0.18);
+}
+
+:root[data-theme="light"] .file-row[data-selected="true"]:not([data-active="true"]) {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+:root[data-theme="light"] .file-row[data-selected="true"]:not([data-active="true"])::before {
+    background: rgba(14, 165, 233, 0.16);
+    box-shadow: inset 2px 0 0 rgba(14, 165, 233, 0.58);
+}
+
+:root[data-theme="light"] .file-row[data-editing="true"] {
+    background: transparent;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .file-row[data-editing="true"]::before {
+    background: rgba(14, 165, 233, 0.16);
+}
+
+:root[data-theme="light"] .file-row[data-active="true"] {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+:root[data-theme="light"] .file-row[data-active="true"]::before {
+    background: rgba(14, 165, 233, 0.22);
+    box-shadow: inset 2px 0 0 rgba(14, 165, 233, 0.85);
+}
+
+:root[data-theme="light"] .file-row[data-selected="true"] + .file-menu-btn {
+    background: #f1f5f9;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .file-meta {
+    color: rgba(3, 105, 161, 0.95);
+}
+
+:root[data-theme="light"] .file-info,
+:root[data-theme="light"] .file-section {
+    color: rgba(71, 85, 105, 0.75);
+}
+
+:root[data-theme="light"] .file-row[data-pinned="true"] .file-info::before {
+    color: rgba(3, 105, 161, 0.9);
+}
+
+:root[data-theme="light"] .file-row[data-locked="true"] .file-info {
+    color: rgba(146, 64, 14, 0.9);
+}
+
+:root[data-theme="light"] .file-list::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    background-clip: padding-box;
+}
+
+:root[data-theme="light"] .file-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.55);
+    background-clip: padding-box;
+}
+
+:root[data-theme="light"] .file-section-toggle {
+    color: rgba(71, 85, 105, 0.85);
+}
+
+:root[data-theme="light"] .file-section-toggle:hover {
+    background: rgba(148, 163, 184, 0.2);
+    border-color: rgba(148, 163, 184, 0.4);
+}
+
+:root[data-theme="light"] .file-section-caret {
+    border-right-color: rgba(71, 85, 105, 0.7);
+    border-bottom-color: rgba(71, 85, 105, 0.7);
+}
+
+:root[data-theme="light"] .file-rename {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .file-row[data-dirty="true"] .file-name {
+    color: rgba(146, 64, 14, 0.95);
+}
+
+:root[data-theme="light"] .file-meta-dirty {
+    color: rgba(146, 64, 14, 0.95);
+}
+
+:root[data-theme="light"] .quick-open-backdrop {
+    background: rgba(15, 23, 42, 0.28);
+}
+
+:root[data-theme="light"] .quick-open {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.35);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+
+:root[data-theme="light"] .quick-open-sub,
+:root[data-theme="light"] .quick-open-meta,
+:root[data-theme="light"] .quick-open-hint,
+:root[data-theme="light"] .quick-open-empty {
+    color: rgba(71, 85, 105, 0.86);
+}
+
+:root[data-theme="light"] #quickOpenInput {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] #commandPaletteInput {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] #editorFindInput,
+:root[data-theme="light"] #editorReplaceInput,
+:root[data-theme="light"] #symbolSearchInput,
+:root[data-theme="light"] #projectSearchInput,
+:root[data-theme="light"] #projectReplaceInput {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .quick-open-list {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .quick-open-item:hover {
+    background: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.45);
+}
+
+:root[data-theme="light"] .quick-open-item[data-active="true"] {
+    background: #e0f2fe;
+    border-color: rgba(14, 165, 233, 0.55);
+}
+
+:root[data-theme="light"] .command-palette-item[data-disabled="true"] {
+    opacity: 0.55;
+}
+
+:root[data-theme="light"] #editor,
+:root[data-theme="light"] .CodeMirror,
+:root[data-theme="light"] .runner,
+:root[data-theme="light"] .log {
+    --editor-surface: #ffffff;
+    --editor-gutter-surface: #f1f5f9;
+    background: #ffffff;
+    color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.35);
+    box-shadow: none;
+}
+
+:root[data-theme="light"] .CodeMirror-gutters {
+    background: #f1f5f9;
+    border-right: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .editor-panel .CodeMirror-scrollbar-filler,
+:root[data-theme="light"] #editor::-webkit-scrollbar-corner,
+:root[data-theme="light"] .editor-panel .CodeMirror-scroll::-webkit-scrollbar-corner {
+    background: var(--editor-surface);
+}
+
+:root[data-theme="light"] .editor-panel .CodeMirror-gutter-filler {
+    background: var(--editor-gutter-surface);
+}
+
+:root[data-theme="light"] .runner {
+    background: transparent;
+}
+
+:root[data-theme="light"] .editor-mirror {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.35);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .runner-actions button {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .runner-exit {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .runner-shell[data-fullscreen="true"] {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] body.runner-fullscreen::before {
+    background: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .inspect-panel,
+:root[data-theme="light"] .diagnostics-panel,
+:root[data-theme="light"] .diagnostics-item {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.35);
+    color: rgba(71, 85, 105, 0.9);
+}
+
+:root[data-theme="light"] #debugWatchInput {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .inspect-text {
+    color: rgba(71, 85, 105, 0.85);
+}
+
+:root[data-theme="light"] .layout-panel {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .layout-backdrop {
+    background: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .layout-select,
+:root[data-theme="light"] .layout-row input[type="number"] {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .quick-bar button {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .dock-overlay::before {
+    background: rgba(226, 232, 240, 0.5);
+}
+
+:root[data-theme="light"] .dock-zone {
+    background: transparent;
+    border-color: transparent;
+    color: transparent;
+}
+
+:root[data-theme="light"] .dock-zone::before {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.5);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme="light"] .dock-center {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: rgba(30, 41, 59, 0.85);
+}
+
+:root[data-theme="light"] .dock-left,
+:root[data-theme="light"] .dock-right,
+:root[data-theme="light"] .dock-bottom {
+    color: rgba(30, 41, 59, 0.7);
+}
+
+:root[data-theme="light"] .dock-zone::after {
+    background: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+:root[data-theme="light"] .dock-zone[data-dock-zone="left"]::after {
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.85) 0 4px, #f1f5f9 4px 100%);
+}
+
+:root[data-theme="light"] .dock-zone[data-dock-zone="right"]::after {
+    background: linear-gradient(90deg, #f1f5f9 0 calc(100% - 4px), rgba(14, 165, 233, 0.85) calc(100% - 4px));
+}
+
+:root[data-theme="light"] .dock-zone[data-dock-zone="bottom"]::after {
+    background: linear-gradient(180deg, #f1f5f9 0 calc(100% - 4px), rgba(14, 165, 233, 0.85) calc(100% - 4px));
+}
+
+:root[data-theme="light"] .dock-zone[data-active="true"]::before {
+    border-color: rgba(14, 165, 233, 0.75);
+    box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.35), 0 16px 30px rgba(14, 165, 233, 0.2);
+}
+
+:root[data-theme="light"] .dock-zone[data-active="true"]::after {
+    border-color: rgba(14, 165, 233, 0.75);
+}
+
+:root[data-theme="light"] .splitter::before {
+    background: transparent;
+}
+
+:root[data-theme="light"] body[data-resize] .splitter::before {
+    background: rgba(14, 165, 233, 0.6);
+}
+
+:root[data-theme="light"] .panel-ghost {
+    background: #ffffff;
+    border-color: rgba(14, 165, 233, 0.45);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+}
+
+:root[data-theme="light"] .panel-ghost-title {
+    background: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .panel-floating {
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+
+:root[data-theme="light"] .drag-handle {
+    background: #e2e8f0;
+}
+
+:root[data-theme="light"] .drag-handle::before {
+    background:
+        radial-gradient(circle at 2px 2px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px),
+        radial-gradient(circle at 2px 10px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px),
+        radial-gradient(circle at 10px 2px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px),
+        radial-gradient(circle at 10px 10px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px);
+}
+
+:root[data-theme="light"] .editor-shortcut-help-btn {
+    background: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .editor-tabs {
+    border-bottom-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .editor-tab {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .editor-tab:hover {
+    background: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.45);
+}
+
+:root[data-theme="light"] .editor-tab[data-active="true"] {
+    background: #ffffff;
+    border-color: rgba(14, 165, 233, 0.6);
+    box-shadow: inset 0 -2px 0 rgba(14, 165, 233, 0.85);
+}
+
+:root[data-theme="light"] .editor-tab[data-dirty="true"] {
+    border-color: rgba(245, 158, 11, 0.45);
+}
+
+:root[data-theme="light"] .editor-tab-dirty {
+    color: rgba(146, 64, 14, 0.95);
+}
+
+:root[data-theme="light"] .editor-tab-close {
+    color: rgba(71, 85, 105, 0.9);
+}
+
+:root[data-theme="light"] .editor-tab-close:hover {
+    background: rgba(148, 163, 184, 0.25);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .shortcut-help-list li {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.35);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .shortcut-help-list kbd {
+    background: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .editor-history-row {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .editor-history-row[data-active="true"] {
+    background: #e0f2fe;
+    border-color: rgba(14, 165, 233, 0.55);
+}
+
+:root[data-theme="light"] .editor-history-meta {
+    color: rgba(71, 85, 105, 0.85);
+}
+
+:root[data-theme="light"] .editor-history-diff {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.35);
+    color: #0f172a;
+}
+
+:root[data-theme="light"] .editor-settings-panel .layout-toggle {
+    background: #f8fafc;
+    border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .symbol-row-kind {
+    color: rgba(71, 85, 105, 0.78);
+}
+
+:root[data-theme="light"] .project-search-item:hover {
+    background: #f1f5f9;
+    border-color: rgba(148, 163, 184, 0.45);
+}
+
+:root[data-theme="light"] .project-search-item[data-active="true"] {
+    background: #e0f2fe;
+    border-color: rgba(14, 165, 233, 0.55);
+}
+
+:root[data-theme="light"] .project-search-preview {
+    color: rgba(71, 85, 105, 0.85);
+}

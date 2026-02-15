@@ -1,0 +1,879 @@
+<!-- index.html
+    FAZ IDE (v0)
+    Author: Faz (FazyBear)
+    
+    Goals:
+    - Professional structure: no inline JS/CSS
+    - ES modules for clean organization
+    - Sandboxed execution + captured console/errors
+    -->
+    <!DOCTYPE html>
+    <html lang="en">
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>FAZ IDE</title>
+            <meta name="description" content="FAZ IDE: a tiny in-browser IDE for JavaScript experiments." />
+            <link rel="manifest" href="./manifest.webmanifest" />
+            <link rel="icon" href="./favicon.ico" sizes="any" />
+            <link rel="apple-touch-icon" href="./assets/icons/faz-192.svg" />
+
+            <!-- 
+                CSS order matters:
+                base -> layout -> components -> themes 
+            -->
+            <link rel="stylesheet" href="./assets/css/base.css" />
+            <link rel="stylesheet" href="./assets/css/layout.css" />
+            <link rel="stylesheet" href="./assets/css/components.css" />
+            <link rel="stylesheet" href="./assets/css/themes.css" />
+            <link rel="stylesheet" href="./assets/vendor/codemirror/codemirror.min.css" />
+            <link rel="stylesheet" href="./assets/vendor/codemirror/theme/material-darker.min.css" />
+
+            <script src="./assets/vendor/codemirror/codemirror.min.js"></script>
+            <script src="./assets/vendor/codemirror/mode/xml/xml.min.js"></script>
+            <script src="./assets/vendor/codemirror/mode/css/css.min.js"></script>
+            <script src="./assets/vendor/codemirror/mode/javascript/javascript.min.js"></script>
+            <script src="./assets/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
+
+            <!-- App entry -->
+            <script type="module" src="./assets/js/app.js"></script>
+        </head>
+
+        <body>
+            <div id="appShell" class="app-shell" data-log="open" data-editor="open" data-files="open" data-sandbox="open" data-tools="closed" data-header="open" data-footer="open">
+                <div class="wrap">
+                    <header class="top strip" aria-label="Top bar">
+                        <div class="strip-left">
+                            <div class="brand">
+                                <h1>FAZ IDE</h1>
+                            </div>
+                            <div class="status" aria-label="Status">
+                                <span class="dot" aria-hidden="true"></span>
+                                <span id="statusText">Ready</span>
+                            </div>
+                        </div>
+
+                        <div class="strip-center" aria-label="Run actions">
+                            <div class="strip-group">
+                            </div>
+                        </div>
+
+                        <div class="strip-right">
+                            <div class="strip-group" aria-label="Shortcut help">
+                                <button
+                                    id="editorShortcutHelpBtn"
+                                    class="editor-shortcut-help-btn top-shortcut-help-btn"
+                                    type="button"
+                                    aria-label="Editor shortcuts"
+                                    title="Editor shortcuts: Ctrl/Cmd+Enter Run, Ctrl/Cmd+S Save, Ctrl/Cmd+Shift+S Save all, Ctrl/Cmd+F Find, Ctrl/Cmd+H Replace, Ctrl/Cmd+Shift+F Project search, Ctrl/Cmd+Shift+O Symbols. Press F1 for full list."
+                                >
+                                    ?
+                                </button>
+                            </div>
+                            <div class="strip-group" aria-label="Panel toggles">
+                                <button id="toggleLog" type="button" data-panel-toggle="true" aria-controls="logPanel" aria-expanded="true">Console</button>
+                                <button id="toggleEditor" type="button" data-panel-toggle="true" aria-controls="editorPanel" aria-expanded="true">Editor</button>
+                                <button id="toggleFiles" type="button" data-panel-toggle="true" aria-controls="side" aria-expanded="true">Files</button>
+                                <button id="toggleSandbox" type="button" data-panel-toggle="true" aria-controls="sandboxPanel" aria-expanded="true">Sandbox</button>
+                                <button id="toggleTools" type="button" data-panel-toggle="true" aria-controls="toolsPanel" aria-expanded="false">Tools</button>
+                            </div>
+                            <div class="strip-group" aria-label="Workspace actions">
+                                <label class="sr-only" for="themeSelect">Theme</label>
+                                <select id="themeSelect" class="top-theme-select" aria-label="Theme selector">
+                                    <option value="dark">Theme: Dark</option>
+                                    <option value="light">Theme: Light</option>
+                                    <option value="purple">Theme: Purple</option>
+                                </select>
+                                <button id="layoutToggle" type="button" aria-expanded="false">Layout</button>
+                                <button id="toggleHeader" type="button" data-panel-toggle="true">Header</button>
+                            </div>
+                            <div class="health" aria-label="System health">
+                                <span id="healthEditor" class="health-pill" data-state="ok">Editor: Ready</span>
+                                <span id="healthSandbox" class="health-pill" data-state="idle">Sandbox: Idle</span>
+                                <span id="healthStorage" class="health-pill" data-state="ok">Storage: OK</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main id="workspace" class="workspace" aria-label="Main content">
+                        <div id="workspaceTop" class="workspace-row" data-row="top">
+                            <aside id="side" class="card side" aria-label="Files sidebar">
+                            <div id="filesPanel" class="files-panel" aria-label="Files">
+                                <div class="files-header">
+                                    <div class="files-title-row">
+                                        <button class="drag-handle" type="button" data-panel="files" aria-label="Drag Files panel">::</button>
+                                        <div>
+                                            <p class="files-title">FILES</p>
+                                        </div>
+                                    </div>
+                                    <div class="files-actions">
+                                        <button id="filesMenuButton" type="button" class="files-menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="filesMenu">...</button>
+                                    </div>
+                                </div>
+                                <div id="filesToolbar" class="files-toolbar" aria-label="Files toolbar">
+                                    <div class="files-search">
+                                        <label class="sr-only" for="fileSearch">Filter files</label>
+                                        <input id="fileSearch" type="text" placeholder="Filter files" autocomplete="off" />
+                                        <button id="fileSearchClear" type="button" aria-label="Clear filter">Clear</button>
+                                    </div>
+                                    <div class="files-sort">
+                                        <label class="sr-only" for="fileSort">Sort files</label>
+                                        <select id="fileSort">
+                                            <option value="manual">Manual</option>
+                                            <option value="name">Name</option>
+                                            <option value="recent">Recent</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div id="filesGames" class="files-games" aria-label="Games library">
+                                    <div class="files-games-row">
+                                        <span class="files-games-label">Games</span>
+                                        <label class="sr-only" for="gameSelect">Select game</label>
+                                        <select id="gameSelect"></select>
+                                        <button id="gameLoad" type="button" title="Load selected game into editor">Load ></button>
+                                    </div>
+                                </div>
+                                <ul id="fileList" class="file-list" role="listbox" aria-label="Saved files"></ul>
+                                <div id="filesMenu" class="files-menu" role="menu" aria-hidden="true">
+                                    <section class="files-menu-group" aria-label="File actions">
+                                        <p class="files-menu-label">Files</p>
+                                        <div class="files-menu-grid files-menu-grid-2">
+                                            <label class="sr-only" for="newFileTypeSelect">New file type</label>
+                                            <select id="newFileTypeSelect" class="files-menu-item files-menu-select" aria-label="New file type">
+                                                <option value="auto">Type: Auto</option>
+                                                <option value="js">Type: JavaScript</option>
+                                                <option value="html">Type: HTML</option>
+                                                <option value="css">Type: CSS</option>
+                                            </select>
+                                            <button type="button" class="files-menu-item" data-files-menu="new">Create</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="new-folder">New Folder</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="duplicate">Duplicate</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="rename">Rename</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="delete-all" data-variant="danger">Delete All</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="save-file">Save</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="save-all">Save All</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="export-workspace">Export</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="import-workspace">Import</button>
+                                        </div>
+                                    </section>
+
+                                    <section class="files-menu-group" aria-label="History actions">
+                                        <p class="files-menu-label">History</p>
+                                        <div class="files-menu-grid files-menu-grid-2">
+                                            <button type="button" class="files-menu-item" data-files-menu="undo-action">Undo</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="redo-action">Redo</button>
+                                        </div>
+                                    </section>
+
+                                    <section class="files-menu-group" aria-label="Selection actions">
+                                        <p class="files-menu-label">Selection</p>
+                                        <div class="files-menu-grid files-menu-grid-3">
+                                            <button type="button" class="files-menu-item" data-files-menu="select-all">Select All</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="clear-selection">Clear</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="trash-selected" data-variant="danger">Trash</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="move-selected">Move</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="pin-selected">Pin</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="unpin-selected">Unpin</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="lock-selected">Lock</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="unlock-selected">Unlock</button>
+                                        </div>
+                                    </section>
+
+                                    <section class="files-menu-group" aria-label="Trash actions">
+                                        <p class="files-menu-label">Trash</p>
+                                        <div class="files-menu-grid files-menu-grid-2">
+                                            <button type="button" class="files-menu-item" data-files-menu="undo-delete">Undo</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="restore-last">Restore Last</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="restore-all">Restore All</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="empty-trash" data-variant="danger">Empty</button>
+                                        </div>
+                                    </section>
+
+                                    <section class="files-menu-group" aria-label="View actions">
+                                        <p class="files-menu-label">View</p>
+                                        <div class="files-menu-grid files-menu-grid-3">
+                                            <button type="button" class="files-menu-item" data-files-toggle="filters" aria-pressed="false">Filters</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="games" aria-pressed="false">Games</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="open-editors" aria-pressed="true">Editors</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="files" aria-pressed="true">Files</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="trash" aria-pressed="false">Trash</button>
+                                        </div>
+                                    </section>
+                                </div>
+                                <div id="fileRowMenu" class="files-menu" role="menu" aria-hidden="true">
+                                    <button type="button" class="files-menu-item" data-file-menu-action="pin">Pin</button>
+                                    <button type="button" class="files-menu-item" data-file-menu-action="lock">Lock</button>
+                                    <button type="button" class="files-menu-item" data-file-menu-action="rename">Rename</button>
+                                    <button type="button" class="files-menu-item" data-file-menu-action="duplicate">Duplicate</button>
+                                    <button type="button" class="files-menu-item" data-file-menu-action="delete" data-variant="danger">Delete</button>
+                                </div>
+                                <div id="fileFolderMenu" class="files-menu" role="menu" aria-hidden="true">
+                                    <button type="button" class="files-menu-item" data-folder-menu-action="rename">Rename Folder</button>
+                                    <button type="button" class="files-menu-item" data-folder-menu-action="new-file">New File Here</button>
+                                    <button type="button" class="files-menu-item" data-folder-menu-action="new-folder">New Folder Here</button>
+                                    <button type="button" class="files-menu-item" data-folder-menu-action="delete" data-variant="danger">Delete Folder</button>
+                                    <button type="button" class="files-menu-item" data-folder-menu-action="collapse-all">Collapse All</button>
+                                    <button type="button" class="files-menu-item" data-folder-menu-action="expand-all">Expand All</button>
+                                </div>
+                                <input id="workspaceImportInput" class="sr-only" type="file" accept=".json,application/json" aria-label="Import workspace JSON file" />
+                            </div>
+                            </aside>
+
+                            <div id="splitFiles" class="splitter splitter-vertical" role="separator" aria-orientation="vertical" aria-label="Resize files panel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0" data-resize="files"></div>
+
+                            <!-- Editor Panel -->
+                            <section id="editorPanel" class="card editor-panel" aria-label="Editor panel">
+                            <div class="card-hd">
+                                <div class="editor-header" aria-label="Editor header">
+                                    <button class="drag-handle" type="button" data-panel="editor" aria-label="Drag Editor panel">::</button>
+                                    <h2 class="editor-title">Editor</h2>
+                                    <div class="editor-buttons" aria-label="Editor buttons">
+                                        <button class="primary" id="run" type="button">Run</button>
+                                        <button class="danger" id="clear" type="button">Clear</button>
+                                        <button id="format" type="button">Format</button>
+                                    </div>
+                                    <div class="editor-pro-buttons" aria-label="Editor tools">
+                                        <button id="editorFindBtn" type="button" title="Find and replace">Find</button>
+                                        <button id="editorSymbolsBtn" type="button" title="Outline and symbols">Symbols</button>
+                                        <button id="projectSearchBtn" type="button" title="Search across files">Project</button>
+                                        <button id="editorSplitBtn" type="button" title="Split compare view">Split</button>
+                                        <button id="editorHistoryBtn" type="button" title="Local code history">History</button>
+                                        <button id="editorSettingsBtn" type="button" title="Editor settings">Settings</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card-bd" aria-label="Code workspace">
+                                <div class="editor-tabs" aria-label="Open files">
+                                    <div id="editorTabs" class="editor-tabs-list" role="tablist"></div>
+                                </div>
+                                <div class="editor-pane">
+                                    <textarea id="editor" spellcheck="false" aria-label="Code editor"></textarea>
+                                    <pre id="editorMirror" class="editor-mirror" aria-label="Saved version preview"></pre>
+                                </div>
+                            </div>
+                            </section>
+
+                            <div id="splitSandbox" class="splitter splitter-vertical" role="separator" aria-orientation="vertical" aria-label="Resize sandbox panel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0" data-resize="sandbox"></div>
+
+                            <!-- Sandbox Panel -->
+                            <section id="sandboxPanel" class="card sandbox-panel" aria-label="Sandbox panel">
+                                <div class="card-hd">
+                                    <div class="card-title">
+                                        <div class="title-row">
+                                            <button class="drag-handle" type="button" data-panel="sandbox" aria-label="Drag Sandbox panel">::</button>
+                                            <h2>Sandbox</h2>
+                                        </div>
+                                    </div>
+                                    <div class="row" aria-label="Sandbox actions">
+                                        <button id="closeSandbox" type="button">Close</button>
+                                    </div>
+                                </div>
+
+                                <div class="card-bd">
+                                    <div class="sandbox-layout">
+                                    <div class="sandbox-main">
+                                        <div id="runnerShell" class="runner-shell" data-fullscreen="false">
+                                            <div class="runner-actions">
+                                                <button id="popoutSandbox" type="button">Pop out</button>
+                                                <button id="runnerFull" type="button">Expand</button>
+                                                <button id="runnerExit" class="runner-exit" type="button" aria-label="Exit fullscreen">
+                                                    X
+                                                </button>
+                                            </div>
+                                            <iframe
+                                                id="runner"
+                                                class="runner"
+                                                sandbox="allow-scripts"
+                                                title="FAZ IDE sandbox runner"
+                                            ></iframe>
+                                        </div>
+                                    </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <div id="splitTools" class="splitter splitter-vertical" role="separator" aria-orientation="vertical" aria-label="Resize tools panel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0" data-resize="tools"></div>
+
+                            <section id="toolsPanel" class="card tools-panel" aria-label="Tools panel">
+                                <div class="card-hd">
+                                    <div class="card-title">
+                                        <div class="title-row">
+                                            <button class="drag-handle" type="button" data-panel="tools" aria-label="Drag Tools panel">::</button>
+                                            <h2>Tools</h2>
+                                        </div>
+                                        <p>Diagnostics and inspect</p>
+                                    </div>
+                                    <div class="row" aria-label="Tools actions">
+                                        <button id="closeTools" type="button">Close</button>
+                                    </div>
+                                </div>
+                                <div class="card-bd">
+                                    <section id="taskRunnerPanel" class="diagnostics-panel task-runner-panel" aria-live="polite">
+                                        <header class="diagnostics-header">
+                                            <div>
+                                                <p class="diagnostics-label">Task Runner</p>
+                                                <p class="diagnostics-sub">Run workspace tasks and inspect output</p>
+                                            </div>
+                                            <div class="diagnostics-actions">
+                                                <span id="taskRunnerStatus" class="task-runner-status" data-state="idle">Idle</span>
+                                                <button id="taskRunnerClear" type="button">Clear</button>
+                                            </div>
+                                        </header>
+                                        <div class="task-runner-actions" role="group" aria-label="Task runner actions">
+                                            <button id="taskRunAll" type="button">Run All</button>
+                                            <button id="taskRunApp" type="button">Run App</button>
+                                            <button id="taskRunLint" type="button">Lint Workspace</button>
+                                            <button id="taskRunFormat" type="button">Format Active</button>
+                                            <button id="taskRunSaveAll" type="button">Save All</button>
+                                        </div>
+                                        <ul id="taskRunnerOutput" class="diagnostics-list task-runner-output" role="list"></ul>
+                                    </section>
+
+                                    <section id="problemsPanel" class="diagnostics-panel problems-panel" aria-live="polite">
+                                        <header class="diagnostics-header">
+                                            <div>
+                                                <p class="diagnostics-label">Problems</p>
+                                                <p class="diagnostics-sub">Lint and runtime issues</p>
+                                            </div>
+                                            <div class="diagnostics-actions">
+                                                <button id="problemsRefresh" type="button">Refresh</button>
+                                                <button id="problemsClear" type="button">Clear</button>
+                                            </div>
+                                        </header>
+                                        <ul id="problemsList" class="diagnostics-list problems-list" role="list"></ul>
+                                    </section>
+
+                                    <section class="diagnostics-panel" aria-live="polite">
+                                        <header class="diagnostics-header">
+                                            <div>
+                                                <p class="diagnostics-label">Diagnostics</p>
+                                                <p class="diagnostics-sub">Storage & clipboard events</p>
+                                            </div>
+                                            <div class="diagnostics-actions">
+                                                <button id="toggleDiagnostics" type="button" aria-pressed="false">Verbose: Off</button>
+                                                <button id="clearDiagnostics" type="button">Clear</button>
+                                            </div>
+                                        </header>
+                                        <ul id="diagnosticsList" class="diagnostics-list" role="list"></ul>
+                                    </section>
+
+                                    <section id="inspectPanel" class="inspect-panel" aria-live="polite">
+                                        <header class="inspect-header">
+                                            <div>
+                                                <p class="inspect-label">Inspect</p>
+                                                <p class="inspect-sub">Hover elements inside the sandbox</p>
+                                            </div>
+                                            <div class="inspect-actions">
+                                                <button id="inspect" type="button">Inspect</button>
+                                                <button id="inspectCopy" type="button">Copy Selector</button>
+                                                <span id="inspectStatus" class="inspect-status">Off</span>
+                                            </div>
+                                        </header>
+                                        <div id="inspectDetails" class="inspect-details">
+                                            <p>Run code, then toggle Inspect to explore the sandbox DOM.</p>
+                                        </div>
+                                    </section>
+
+                                    <section id="debugPanel" class="diagnostics-panel debug-panel" aria-live="polite">
+                                        <header class="diagnostics-header">
+                                            <div>
+                                                <p class="diagnostics-label">Debugger</p>
+                                                <p class="diagnostics-sub">Breakpoints and watch expressions</p>
+                                            </div>
+                                            <div class="diagnostics-actions">
+                                                <button id="debugModeToggle" type="button" aria-pressed="false">Debug: Off</button>
+                                                <button id="debugRun" type="button">Run Debug</button>
+                                                <button id="debugClearBreakpoints" type="button">Clear BP</button>
+                                                <button id="debugClearWatches" type="button">Clear Watches</button>
+                                            </div>
+                                        </header>
+                                        <ul id="debugBreakpointList" class="diagnostics-list" role="list"></ul>
+                                        <div class="debug-watch-row">
+                                            <label class="sr-only" for="debugWatchInput">Watch expression</label>
+                                            <input id="debugWatchInput" type="text" placeholder="Watch expression (e.g. playerHP)" />
+                                            <button id="debugWatchAdd" type="button">Add Watch</button>
+                                        </div>
+                                        <ul id="debugWatchList" class="diagnostics-list" role="list"></ul>
+                                    </section>
+                                </div>
+                            </section>
+                        </div>
+
+                        <div id="splitRow" class="splitter splitter-horizontal" role="separator" aria-orientation="horizontal" aria-label="Resize bottom dock" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0" data-resize="row"></div>
+                        <div id="workspaceBottom" class="workspace-row" data-row="bottom">
+                            <!-- Log Panel -->
+                            <section id="logPanel" class="card log-panel" aria-label="Console log">
+                            <div class="card-hd">
+                                <div class="card-title">
+                                    <div class="title-row">
+                                        <button class="drag-handle" type="button" data-panel="log" aria-label="Drag Console panel">::</button>
+                                        <h2>Console</h2>
+                                    </div>
+                                </div>
+
+                                <div class="row" aria-label="Console actions">
+                                    <button id="copyLog" type="button">Copy</button>
+                                    <button id="clearLog" type="button">Clear</button>
+                                    <button id="closeLog" type="button">Close</button>
+                                </div>
+                            </div>
+                            <div class="card-bd" aria-label="Console output">
+                                <pre id="log" class="log" aria-live="polite"></pre>
+                            </div>
+                            </section>
+
+                            <div id="splitLog" class="splitter splitter-vertical" role="separator" aria-orientation="vertical" aria-label="Resize console panel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0" data-resize="log"></div>
+                        </div>
+                    </main>
+
+                    <footer class="foot" aria-label="Footer">
+                        <span>FAZ IDE v0.2.0 - local-only</span>
+                        <span>Storage: localStorage</span>
+                    </footer>
+                </div>
+            </div>
+            <div id="dockOverlay" class="dock-overlay" aria-hidden="true">
+                <button class="dock-zone dock-left" type="button" data-dock-zone="left" aria-label="Dock left" title="Dock left">Left</button>
+                <button class="dock-zone dock-right" type="button" data-dock-zone="right" aria-label="Dock right" title="Dock right">Right</button>
+                <button class="dock-zone dock-bottom" type="button" data-dock-zone="bottom" aria-label="Dock bottom" title="Dock bottom">Bottom</button>
+                <button class="dock-zone dock-center" type="button" data-dock-zone="center" aria-label="Reset layout" title="Reset layout">Reset</button>
+            </div>
+            <div id="quickOpenBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
+            <section id="quickOpenPalette" class="quick-open" data-open="false" aria-hidden="true" aria-label="Quick open files">
+                <div class="quick-open-head">
+                    <p class="quick-open-title">Quick Open</p>
+                    <p class="quick-open-sub">Type to find files</p>
+                </div>
+                <label class="sr-only" for="quickOpenInput">Search files</label>
+                <input id="quickOpenInput" type="text" placeholder="Search files..." autocomplete="off" spellcheck="false" />
+                <ul id="quickOpenList" class="quick-open-list" role="listbox" aria-label="Quick open results"></ul>
+                <p id="quickOpenHint" class="quick-open-hint">Enter to open • Esc to close</p>
+            </section>
+
+            <div id="commandPaletteBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
+            <section id="commandPalette" class="quick-open command-palette" data-open="false" aria-hidden="true" aria-label="Command palette">
+                <div class="quick-open-head">
+                    <p class="quick-open-title">Command Palette</p>
+                    <p class="quick-open-sub">Run any action</p>
+                </div>
+                <label class="sr-only" for="commandPaletteInput">Search commands</label>
+                <input id="commandPaletteInput" type="text" placeholder="Type a command..." autocomplete="off" spellcheck="false" />
+                <ul id="commandPaletteList" class="quick-open-list" role="listbox" aria-label="Command results"></ul>
+                <p id="commandPaletteHint" class="quick-open-hint">Enter to run • Esc to close</p>
+            </section>
+
+            <div id="editorSearchBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
+            <section id="editorSearchPanel" class="quick-open editor-search-panel" data-open="false" aria-hidden="true" aria-label="Find and replace">
+                <div class="quick-open-head">
+                    <p class="quick-open-title">Find and Replace</p>
+                    <p class="quick-open-sub">Regex, case, whole word and multi-cursor safe replace</p>
+                </div>
+                <div class="editor-search-grid">
+                    <label class="sr-only" for="editorFindInput">Find text</label>
+                    <input id="editorFindInput" type="text" placeholder="Find..." autocomplete="off" spellcheck="false" />
+                    <label class="sr-only" for="editorReplaceInput">Replace with</label>
+                    <input id="editorReplaceInput" type="text" placeholder="Replace with..." autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="editor-search-controls" role="group" aria-label="Find options">
+                    <button id="editorFindCase" type="button" aria-pressed="false">Aa</button>
+                    <button id="editorFindWord" type="button" aria-pressed="false">Word</button>
+                    <button id="editorFindRegex" type="button" aria-pressed="false">.*</button>
+                    <button id="editorFindSelection" type="button" aria-pressed="false">Selection</button>
+                    <button id="editorFindPrev" type="button">Prev</button>
+                    <button id="editorFindNext" type="button" class="primary">Next</button>
+                    <button id="editorReplaceOne" type="button">Replace</button>
+                    <button id="editorReplaceAll" type="button">Replace All</button>
+                </div>
+                <p id="editorFindStatus" class="quick-open-hint">Type to search the active file.</p>
+            </section>
+
+            <div id="symbolPaletteBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
+            <section id="symbolPalette" class="quick-open symbol-palette" data-open="false" aria-hidden="true" aria-label="Symbols">
+                <div class="quick-open-head">
+                    <p class="quick-open-title">Symbols</p>
+                    <p class="quick-open-sub">Outline, go to symbol, rename, and find references</p>
+                </div>
+                <div class="editor-search-grid">
+                    <label class="sr-only" for="symbolSearchInput">Search symbols</label>
+                    <input id="symbolSearchInput" type="text" placeholder="Filter symbols..." autocomplete="off" spellcheck="false" />
+                </div>
+                <ul id="symbolList" class="quick-open-list" role="listbox" aria-label="Symbols list"></ul>
+                <div class="editor-search-controls" role="group" aria-label="Symbol actions">
+                    <button id="symbolGoLine" type="button">Go to Line</button>
+                    <button id="symbolRename" type="button">Rename Symbol</button>
+                    <button id="symbolFindRefs" type="button">Find Refs</button>
+                </div>
+                <ul id="symbolRefsList" class="quick-open-list symbol-refs-list" role="listbox" aria-label="Symbol references"></ul>
+                <p id="symbolHint" class="quick-open-hint">Enter to jump • Ctrl/Cmd+G for line</p>
+            </section>
+
+            <div id="projectSearchBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
+            <section id="projectSearchPanel" class="quick-open project-search-panel" data-open="false" aria-hidden="true" aria-label="Project search and replace">
+                <div class="quick-open-head">
+                    <p class="quick-open-title">Project Search</p>
+                    <p class="quick-open-sub">Search and replace across workspace files</p>
+                </div>
+                <div class="editor-search-grid">
+                    <label class="sr-only" for="projectSearchInput">Search project text</label>
+                    <input id="projectSearchInput" type="text" placeholder="Search in files..." autocomplete="off" spellcheck="false" />
+                    <label class="sr-only" for="projectReplaceInput">Replace project text</label>
+                    <input id="projectReplaceInput" type="text" placeholder="Replace with..." autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="editor-search-controls" role="group" aria-label="Project search options">
+                    <button id="projectSearchCase" type="button" aria-pressed="false">Aa</button>
+                    <button id="projectSearchWord" type="button" aria-pressed="false">Word</button>
+                    <button id="projectSearchRegex" type="button" aria-pressed="false">.*</button>
+                    <button id="projectSearchRun" type="button" class="primary">Scan</button>
+                    <button id="projectSearchSelectAll" type="button">Select All</button>
+                    <button id="projectSearchClearSel" type="button">Clear Selection</button>
+                    <button id="projectReplaceSelected" type="button">Replace Selected</button>
+                </div>
+                <ul id="projectSearchList" class="quick-open-list" role="listbox" aria-label="Project search results"></ul>
+                <p id="projectSearchHint" class="quick-open-hint">Scan to search all files. Esc to close.</p>
+            </section>
+
+            <div id="editorHistoryBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="editorHistoryPanel" class="layout-panel editor-history-panel" data-open="false" aria-hidden="true" aria-label="Editor history">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Editor History</p>
+                        <p class="layout-sub">Local checkpoints for the active file</p>
+                    </div>
+                    <button id="editorHistoryClose" type="button">Close</button>
+                </header>
+                <div class="layout-body">
+                    <div class="editor-history-actions">
+                        <button id="editorHistorySnapshot" type="button">Snapshot Now</button>
+                        <button id="editorHistoryRestore" type="button">Restore Selected</button>
+                        <button id="editorHistoryClear" type="button" class="danger">Clear File History</button>
+                    </div>
+                    <ul id="editorHistoryList" class="editor-history-list" role="list"></ul>
+                    <pre id="editorHistoryDiff" class="editor-history-diff" aria-live="polite"></pre>
+                </div>
+            </section>
+
+            <div id="editorSettingsBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="editorSettingsPanel" class="layout-panel editor-settings-panel" data-open="false" aria-hidden="true" aria-label="Editor settings">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Editor Settings</p>
+                        <p class="layout-sub">Profiles, formatting, and typing behavior</p>
+                    </div>
+                    <button id="editorSettingsClose" type="button">Close</button>
+                </header>
+                <div class="layout-body">
+                    <div class="layout-group">
+                        <label class="layout-label" for="editorProfileSelect">Profile</label>
+                        <select id="editorProfileSelect" class="layout-select">
+                            <option value="balanced">Balanced</option>
+                            <option value="focus">Focus</option>
+                            <option value="presentation">Presentation</option>
+                        </select>
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-label" for="editorFormatterSelect">Formatter</label>
+                        <select id="editorFormatterSelect" class="layout-select">
+                            <option value="auto">Auto (Prettier fallback)</option>
+                            <option value="prettier">Prettier only</option>
+                            <option value="basic">Basic formatter only</option>
+                        </select>
+                    </div>
+                    <div class="layout-row">
+                        <label class="layout-label" for="editorTabSize">Tab size</label>
+                        <input id="editorTabSize" type="number" min="2" max="8" step="1" />
+                    </div>
+                    <div class="layout-row">
+                        <label class="layout-label" for="editorFontSize">Font size</label>
+                        <input id="editorFontSize" type="number" min="11" max="22" step="1" />
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-label" for="editorFontFamilySelect">Font family</label>
+                        <select id="editorFontFamilySelect" class="layout-select">
+                            <option value="default">System Mono</option>
+                            <option value="jetbrains-mono">JetBrains Mono</option>
+                            <option value="fira-code">Fira Code</option>
+                            <option value="source-code-pro">Source Code Pro</option>
+                            <option value="ibm-plex-mono">IBM Plex Mono</option>
+                            <option value="roboto-mono">Roboto Mono</option>
+                            <option value="inconsolata">Inconsolata</option>
+                            <option value="ubuntu-mono">Ubuntu Mono</option>
+                            <option value="cascadia-mono">Cascadia Mono</option>
+                        </select>
+                    </div>
+                    <div class="layout-row">
+                        <label class="layout-label" for="editorAutoSaveMs">Autosave delay (ms)</label>
+                        <input id="editorAutoSaveMs" type="number" min="100" max="5000" step="100" />
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-toggle">
+                            <input id="editorWrapToggle" type="checkbox" />
+                            <span>Line wrap</span>
+                        </label>
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-toggle">
+                            <input id="editorLintToggle" type="checkbox" />
+                            <span>Inline diagnostics</span>
+                        </label>
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-toggle">
+                            <input id="editorErrorLensToggle" type="checkbox" />
+                            <span>Error lens</span>
+                        </label>
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-toggle">
+                            <input id="editorSnippetToggle" type="checkbox" />
+                            <span>Tab snippets</span>
+                        </label>
+                    </div>
+                    <div class="layout-group snippet-manager-group">
+                        <p class="layout-label">Snippet Manager</p>
+                        <div class="snippet-manager-grid">
+                            <input id="snippetTriggerInput" type="text" placeholder="Trigger (ex: clg)" autocomplete="off" spellcheck="false" />
+                            <select id="snippetScopeSelect" class="layout-select">
+                                <option value="*">All files</option>
+                                <option value="javascript">JavaScript</option>
+                                <option value="typescript">TypeScript</option>
+                                <option value="json">JSON</option>
+                                <option value="html">HTML</option>
+                                <option value="css">CSS</option>
+                                <option value="markdown">Markdown</option>
+                                <option value="text">Text</option>
+                            </select>
+                            <button id="snippetAdd" type="button">Add / Update</button>
+                        </div>
+                        <textarea id="snippetTemplateInput" rows="3" placeholder="Snippet template (supports ${1:placeholder} and ${0})" spellcheck="false"></textarea>
+                        <ul id="snippetList" class="snippet-list" role="list"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <div id="shortcutHelpBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="shortcutHelpPanel" class="layout-panel shortcut-help-panel" data-open="false" aria-hidden="true" aria-label="Keyboard shortcuts">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Keyboard Shortcuts</p>
+                        <p class="layout-sub">File system and workflow</p>
+                    </div>
+                    <button id="shortcutHelpClose" type="button">Close</button>
+                </header>
+                <div class="layout-body">
+                    <div class="layout-group">
+                        <p class="files-menu-label">Core</p>
+                        <ul class="shortcut-help-list" role="list">
+                            <li><span>Run code</span><kbd>Ctrl/Cmd + Enter</kbd></li>
+                            <li><span>Save file</span><kbd>Ctrl/Cmd + S</kbd></li>
+                            <li><span>Save all</span><kbd>Ctrl/Cmd + Shift + S</kbd></li>
+                            <li><span>Quick open files</span><kbd>Ctrl/Cmd + P</kbd></li>
+                            <li><span>Command palette</span><kbd>Ctrl/Cmd + Shift + P</kbd></li>
+                            <li><span>New file</span><kbd>Ctrl/Cmd + N</kbd></li>
+                        </ul>
+                    </div>
+                    <div class="layout-group">
+                        <p class="files-menu-label">Editor Pro</p>
+                        <ul class="shortcut-help-list" role="list">
+                            <li><span>Find</span><kbd>Ctrl/Cmd + F</kbd></li>
+                            <li><span>Replace</span><kbd>Ctrl/Cmd + H</kbd></li>
+                            <li><span>Project search</span><kbd>Ctrl/Cmd + Shift + F</kbd></li>
+                            <li><span>Go to line</span><kbd>Ctrl/Cmd + G</kbd></li>
+                            <li><span>Symbols</span><kbd>Ctrl/Cmd + Shift + O</kbd></li>
+                            <li><span>Add cursor down/up</span><kbd>Ctrl/Cmd + Alt + Arrow</kbd></li>
+                            <li><span>Expand snippet</span><kbd>Tab</kbd></li>
+                            <li><span>Split compare view</span><kbd>Header: Split</kbd></li>
+                        </ul>
+                    </div>
+                    <div class="layout-group">
+                        <p class="files-menu-label">File Ops</p>
+                        <ul class="shortcut-help-list" role="list">
+                            <li><span>Undo file action</span><kbd>Ctrl/Cmd + Z</kbd></li>
+                            <li><span>Redo file action</span><kbd>Ctrl/Cmd + Shift + Z</kbd></li>
+                            <li><span>Redo (alt)</span><kbd>Ctrl/Cmd + Y</kbd></li>
+                            <li><span>Duplicate selected</span><kbd>Ctrl/Cmd + D</kbd></li>
+                            <li><span>Select all files</span><kbd>Ctrl/Cmd + A</kbd></li>
+                            <li><span>Open this panel</span><kbd>F1</kbd></li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <div id="promptDialogBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
+            <section
+                id="promptDialog"
+                class="quick-open prompt-dialog"
+                data-open="false"
+                aria-hidden="true"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="promptDialogTitle"
+                aria-describedby="promptDialogMessage"
+            >
+                <div class="quick-open-head">
+                    <p id="promptDialogTitle" class="quick-open-title">Confirm</p>
+                </div>
+                <p id="promptDialogMessage" class="quick-open-sub prompt-dialog-message" data-visible="false"></p>
+                <div id="promptDialogList" class="prompt-dialog-list" data-open="false"></div>
+                <div id="promptDialogInputWrap" class="prompt-dialog-input-wrap" data-open="false">
+                    <label class="sr-only" for="promptDialogInput">Dialog input</label>
+                    <input id="promptDialogInput" type="text" autocomplete="off" spellcheck="false" />
+                </div>
+                <p id="promptDialogError" class="prompt-dialog-error" data-visible="false"></p>
+                <div class="prompt-dialog-actions" role="group" aria-label="Dialog actions">
+                    <button id="promptDialogCancel" type="button">Cancel</button>
+                    <button id="promptDialogConfirm" type="button" data-variant="primary">Confirm</button>
+                </div>
+            </section>
+
+            <div id="layoutBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <aside id="layoutPanel" class="layout-panel" aria-hidden="true" aria-label="Layout settings">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Layout</p>
+                        <p class="layout-sub">Precision controls</p>
+                    </div>
+                    <button id="layoutClose" type="button">Close</button>
+                </header>
+                <div class="layout-body">
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutPreset">Presets</label>
+                        <select id="layoutPreset" class="layout-select">
+                            <option value="">Choose a preset…</option>
+                            <option value="studio">Studio (default)</option>
+                            <option value="focus">Focus (zen)</option>
+                            <option value="review">Review (wide console)</option>
+                            <option value="wide">Wide panels</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutOrderLog">Console position</label>
+                        <select id="layoutOrderLog" class="layout-select">
+                            <option value="0">1 (Left)</option>
+                            <option value="1">2</option>
+                            <option value="2">3</option>
+                            <option value="3">4 (Right)</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutOrderEditor">Editor position</label>
+                        <select id="layoutOrderEditor" class="layout-select">
+                            <option value="0">1 (Left)</option>
+                            <option value="1">2</option>
+                            <option value="2">3</option>
+                            <option value="3">4 (Right)</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutOrderFiles">Files position</label>
+                        <select id="layoutOrderFiles" class="layout-select">
+                            <option value="0">1 (Left)</option>
+                            <option value="1">2</option>
+                            <option value="2">3</option>
+                            <option value="3">4 (Right)</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutOrderSandbox">Sandbox position</label>
+                        <select id="layoutOrderSandbox" class="layout-select">
+                            <option value="0">1 (Left)</option>
+                            <option value="1">2</option>
+                            <option value="2">3</option>
+                            <option value="3">4 (Right)</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutLogWidth">Console width (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutLogWidth" type="range" min="160" max="620" step="1" />
+                            <input id="layoutLogWidthInput" type="number" min="160" max="620" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutSidebarWidth">Files width (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutSidebarWidth" type="range" min="140" max="520" step="1" />
+                            <input id="layoutSidebarWidthInput" type="number" min="140" max="520" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutSandboxWidth">Sandbox width (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutSandboxWidth" type="range" min="240" max="760" step="1" />
+                            <input id="layoutSandboxWidthInput" type="number" min="240" max="760" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutToolsWidth">Tools width (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutToolsWidth" type="range" min="200" max="760" step="1" />
+                            <input id="layoutToolsWidthInput" type="number" min="200" max="760" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutPanelGap">Panel gap (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutPanelGap" type="range" min="0" max="24" step="1" />
+                            <input id="layoutPanelGapInput" type="number" min="0" max="24" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutCornerRadius">Corner radius (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutCornerRadius" type="range" min="0" max="16" step="1" />
+                            <input id="layoutCornerRadiusInput" type="number" min="0" max="16" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group layout-toggles">
+                        <label class="layout-toggle">
+                            <input id="layoutLogOpen" type="checkbox" />
+                            <span>Console open</span>
+                        </label>
+                        <label class="layout-toggle">
+                            <input id="layoutEditorOpen" type="checkbox" />
+                            <span>Editor open</span>
+                        </label>
+                        <label class="layout-toggle">
+                            <input id="layoutFilesOpen" type="checkbox" />
+                            <span>Files open</span>
+                        </label>
+                        <label class="layout-toggle">
+                            <input id="layoutSandboxOpen" type="checkbox" />
+                            <span>Sandbox open</span>
+                        </label>
+                        <label class="layout-toggle">
+                            <input id="layoutToolsOpen" type="checkbox" />
+                            <span>Tools open</span>
+                        </label>
+                        <label class="layout-toggle">
+                            <input id="layoutHeaderOpen" type="checkbox" />
+                            <span>Header open</span>
+                        </label>
+                        <label class="layout-toggle">
+                            <input id="layoutFooterOpen" type="checkbox" />
+                            <span>Footer open</span>
+                        </label>
+                    </div>
+
+                    <div class="layout-actions">
+                        <button id="layoutReset" type="button" class="danger">Reset Layout</button>
+                    </div>
+                </div>
+            </aside>
+            <div id="quickBar" class="quick-bar" aria-hidden="true">
+                <button id="quickHeader" type="button" data-panel-toggle="true">Header</button>
+                <button id="quickLayout" type="button">Layout</button>
+            </div>
+        </body>
+    </html>

@@ -1,0 +1,54 @@
+# FILE : .github/workflows/ci.yml
+# This file is a "robot checklist" for GitHub.
+#GitHub will run these steps automatically so you don't forget checks/tests.
+
+# The name of this workflow (you see this in Actions tab)
+name: CI
+
+# When should GitHub run this workflow?
+on:
+  # Run when you push code
+  push:
+    branches:
+      # "**" " means: run on pushes to ANY branch
+      # (main, dev, feature branches, everything)
+      - "**"
+
+  # Also run when you make or update a Pull Request
+  pull_request:
+
+# A workflow can have one or more "jobs"
+jobs:
+  # Job name (this is just a label)
+  test:
+    # What kind of GitHub computer runs this job
+    runs-on: ubuntu-latest
+
+    # A job is just a list of steps (runs top -> bottom)
+    steps:
+      # STEP 1: Grab your repo code onto the GitHub runner
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # STEP 2: Install Node.js so we can run "node" and "npm"
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          # Use Node Version 20 (your project expects this)
+          node-version: 20
+
+          # Cache npm downloads so future runs are faster
+          cache: npm
+
+      #STEP 3: Install the packages from your package-lock.json
+      - name: Install dependencies
+        # "npm ci" installs EXACT versions from package-lock.json
+        # Good for CI because it is clean + consistent
+        run: npm ci
+
+      # STEP 4; Check that this file has NO JavaScript syntax errors
+      - name: Run syntax checks
+        run: node --check assets/js/app.js
+
+      - name: Run Playwright tests
+        run: npm test

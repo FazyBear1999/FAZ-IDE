@@ -1,0 +1,76 @@
+/* assets/css/base.css
+   FAZ IDE (v0) - foundation
+
+   Rules:
+   - tokens + reset + global typography/background only
+   - layout and components live elsewhere
+*/
+
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Inconsolata:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Ubuntu+Mono:wght@400;700&display=swap");
+
+:root {
+    /* Core palette */
+    --bg: #0b0f14;
+
+    --text: #e6edf3;
+    --muted: rgba(164, 176, 192, 0.85);
+
+    --border: rgba(148, 163, 184, 0.28);
+
+    /* Accents */
+    --accent: #34d399;
+    --danger: #f87171;
+
+    /* Radius + shadow */
+    --radius: 0px;
+    --radius-sm: 0px;
+    --shadow: none;
+
+    /* Typography */
+    --font: "Space Grotesk", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+}
+
+/* Reset */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; }
+
+/* Consistent scrollbars (chromium + firefox) */
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.28);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.45);
+    background-clip: padding-box;
+}
+
+/* Base body style */
+body {
+    font-family: var(--font);
+    color: var(--text);
+    line-height: 1.4;
+    background-color: var(--bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

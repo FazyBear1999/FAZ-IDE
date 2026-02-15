@@ -1,0 +1,468 @@
+/* assets/css/layout.css
+   FAZ IDE (v0) - layout only
+*/
+
+/* App shell: full-height container */
+.app-shell {
+    --sidebar-width: 240px;
+    --log-width: 320px;
+    --sandbox-width: 360px;
+    --tools-width: 320px;
+    --panel-pad-y: 6px;
+    --panel-pad-x: 8px;
+    --panel-section-pad: 10px;
+    --panel-gap: 0px;
+    --bottom-height: 240px;
+    --shell-pad-y: 0px;
+    --shell-pad-x: 0px;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-shell[data-header="closed"] {
+    --shell-pad-y: 0px;
+}
+
+.app-shell[data-header="closed"][data-footer="closed"] {
+    --shell-pad-y: 0px;
+}
+
+/* Splitters */
+.splitter {
+    background: transparent;
+    position: relative;
+    z-index: 2;
+}
+
+.splitter-vertical {
+    width: 12px;
+    margin-left: -6px;
+    margin-right: -6px;
+    cursor: col-resize;
+}
+
+.splitter-horizontal {
+    height: 12px;
+    margin-top: -6px;
+    margin-bottom: -6px;
+    cursor: row-resize;
+}
+
+#splitRow.splitter-horizontal {
+    margin-top: 0;
+    margin-bottom: -6px;
+}
+
+.splitter::before {
+    content: "";
+    position: absolute;
+    background: transparent;
+    pointer-events: none;
+}
+
+.splitter-vertical::before {
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-0.5px);
+    width: 1px;
+}
+
+.splitter-horizontal::before {
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-0.5px);
+    height: 1px;
+}
+
+.splitter::after {
+    display: none;
+}
+
+body[data-resize] .splitter::before {
+    background: transparent;
+}
+
+body[data-resize] .card[data-resize-active="true"],
+body[data-resize] .side[data-resize-active="true"] {
+    outline: 1px solid rgba(56, 189, 248, 0.25);
+    outline-offset: -1px;
+}
+
+body[data-resize] .log-panel,
+body[data-resize] .side,
+body[data-resize] .sandbox-panel,
+body[data-resize] .tools-panel {
+    transition: none;
+}
+
+body[data-resize="row"] .workspace-row[data-resize-active="true"] {
+    outline: 1px solid rgba(56, 189, 248, 0.2);
+    outline-offset: -1px;
+}
+
+/* Panels (log / editor / files / sandbox) */
+.log-panel {
+    width: var(--log-width);
+    flex: 0 0 var(--log-width);
+    min-width: 160px;
+    min-height: 0;
+    transition: width 0.2s ease, flex-basis 0.2s ease, opacity 0.2s ease;
+}
+
+.side {
+    width: var(--sidebar-width);
+    flex: 0 0 var(--sidebar-width);
+    min-width: 140px;
+    transition: width 0.2s ease, flex-basis 0.2s ease, opacity 0.2s ease;
+    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sandbox-panel {
+    width: var(--sandbox-width);
+    flex: 0 0 var(--sandbox-width);
+    min-width: 240px;
+    min-height: 0;
+    transition: width 0.2s ease, flex-basis 0.2s ease, opacity 0.2s ease;
+}
+
+.tools-panel {
+    width: var(--tools-width);
+    flex: 0 0 var(--tools-width);
+    min-width: 200px;
+    min-height: 0;
+    transition: width 0.2s ease, flex-basis 0.2s ease, opacity 0.2s ease;
+}
+
+.app-shell[data-log="closed"] #logPanel,
+.app-shell[data-editor="closed"] #editorPanel,
+.app-shell[data-files="closed"] #side,
+.app-shell[data-sandbox="closed"] #sandboxPanel,
+.app-shell[data-tools="closed"] #toolsPanel {
+    display: none;
+}
+
+.app-shell[data-log="closed"] #splitLog,
+.app-shell[data-files="closed"] #splitFiles,
+.app-shell[data-sandbox="closed"] #splitSandbox,
+.app-shell[data-tools="closed"] #splitTools {
+    display: none;
+}
+
+/* Main content column (header + workspace + footer) */
+.wrap {
+    width: 100%;
+    min-height: 0;
+    margin: 0 auto;
+    padding: var(--shell-pad-y) var(--shell-pad-x);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Workspace: four-pane horizontal layout */
+.workspace {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    align-items: stretch;
+    gap: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.workspace-row {
+    display: flex;
+    flex-direction: row;
+    min-height: 0;
+    min-width: 0;
+    align-items: stretch;
+    gap: var(--panel-gap);
+    overflow: hidden;
+}
+
+.workspace-row[data-row="top"] {
+    flex: 1 1 0%;
+    min-height: 0;
+}
+
+.workspace-row[data-row="bottom"] {
+    flex: 0 0 var(--bottom-height);
+    height: var(--bottom-height);
+    min-height: 0;
+}
+
+/* Editor fills remaining space */
+.editor-panel {
+    flex: 1 1 0%;
+    min-width: 0;
+    min-height: 0;
+}
+
+.top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    height: 40px;
+    min-height: 40px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 0;
+    background: #0f1117;
+    box-shadow: none;
+    column-gap: 12px;
+}
+
+.strip-left,
+.strip-center,
+.strip-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.strip-left {
+    flex: 0 1 auto;
+    min-width: 0;
+    justify-self: start;
+}
+
+.strip-center {
+    flex: 1 1 260px;
+    justify-content: center;
+    min-width: 0;
+    justify-self: center;
+}
+
+.strip-right {
+    flex: 1 1 320px;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -ms-overflow-style: none;
+    justify-self: end;
+}
+
+.strip-right::-webkit-scrollbar {
+    height: 0;
+}
+
+.strip-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.brand h1 {
+    margin: 0;
+    font-size: 12px;
+    letter-spacing: 0.32px;
+    text-transform: uppercase;
+}
+
+.brand p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* Stack header on smaller screens */
+@media (max-width: 760px) {
+    .top {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        height: auto;
+        min-height: 0;
+        padding: 6px 10px;
+    }
+}
+
+/* Responsive: panels stack vertically */
+@media (max-width: 980px) {
+    .workspace {
+        flex-direction: column;
+    }
+
+    .workspace-row {
+        flex-direction: column;
+    }
+
+    .workspace-row[data-row="bottom"] {
+        flex: 0 0 auto;
+        height: auto;
+    }
+
+    .log-panel,
+    .side,
+    .sandbox-panel {
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+    }
+
+    #splitLog,
+    #splitFiles,
+    #splitSandbox,
+    #splitRow {
+        display: none;
+    }
+}
+
+.card {
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+    background: #0f1117;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    position: relative;
+}
+
+.card[data-resize-edge="left"]::after,
+.card[data-resize-edge="right"]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(56, 189, 248, 0.7);
+    pointer-events: none;
+}
+
+.card[data-resize-edge="left"]::after {
+    left: -1px;
+}
+
+.card[data-resize-edge="right"]::after {
+    right: -1px;
+}
+
+.workspace {
+    --resize-guide-color: rgba(56, 189, 248, 0.8);
+}
+
+.workspace .resize-guide {
+    position: absolute;
+    background: var(--resize-guide-color);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    z-index: 5;
+}
+
+.workspace .resize-guide-row {
+    left: 0;
+    right: 0;
+    height: 1px;
+}
+
+.workspace .resize-guide-col {
+    top: 0;
+    bottom: 0;
+    width: 1px;
+}
+
+.workspace .resize-guide[data-active="true"] {
+    opacity: 1;
+}
+
+.card-hd {
+    padding: 8px 10px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    background: #0f1117;
+    min-height: 42px;
+}
+
+.editor-panel .card-hd,
+.sandbox-panel .card-hd {
+    padding: 8px 10px 6px;
+    min-height: 42px;
+}
+
+.editor-panel .card-hd {
+    flex: 0 0 auto;
+    overflow: hidden;
+}
+
+.card-title {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.editor-panel .card-title {
+    align-items: center;
+    text-align: center;
+}
+
+.card-title h2 {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 700;
+}
+
+.card-title p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.card-bd {
+    padding: var(--panel-pad-y) var(--panel-pad-x);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: rgba(170, 179, 199, 0.70);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    background: #0f1117;
+}
+
+.app-shell[data-header="closed"] .top {
+    display: none;
+}
+
+.app-shell[data-footer="closed"] .foot {
+    display: none;
+}
