@@ -46,6 +46,10 @@ jobs:
         # Good for CI because it is clean + consistent
         run: npm ci
 
+      # STEP 3.5: Install Playwright browser binaries used by tests
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
       # STEP 4; Check that this file has NO JavaScript syntax errors
       - name: Run syntax checks
         run: node --check assets/js/app.js
