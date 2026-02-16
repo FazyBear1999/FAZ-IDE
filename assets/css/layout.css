@@ -579,6 +579,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .foot[data-middle-pan-active="true"] {
     cursor: ew-resize;
+    -webkit-user-select: none;
     user-select: none;
 }
 

@@ -37,82 +37,77 @@ export const STORAGE = {
 
 // Optional local games library that can be loaded into the IDE.
 // Templates can be one or many files.
-const GAME_ICON_COLOR = "%2388f9d0";
-const GAME_ICON_SIZE = "16";
+const TWEMOJI_CDN = "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg";
 
-function buildIconifyGameIcon(prefix, name) {
-    return `https://api.iconify.design/${prefix}/${name}.svg?width=${GAME_ICON_SIZE}&height=${GAME_ICON_SIZE}&color=${GAME_ICON_COLOR}`;
-}
-
-function buildDiceBearGameIcon(seed) {
-    return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}&size=64&backgroundColor=0b1220,111827`;
+function buildThemedIcon(codepoint) {
+    return `${TWEMOJI_CDN}/${codepoint}.svg`;
 }
 
 export const GAMES = [
     {
         id: "balloon-pop",
         name: "Balloon Pop",
-        icon: buildIconifyGameIcon("mdi", "balloon"),
+        icon: buildThemedIcon("1f388"),
         src: "./assets/games/balloon-pop.js",
     },
     {
         id: "click-counter",
         name: "Click Counter",
-        icon: buildIconifyGameIcon("mdi", "cursor-default-click-outline"),
+        icon: buildThemedIcon("1f5b1"),
         src: "./assets/games/click-counter.js",
     },
     {
         id: "coin-flip",
         name: "Coin Flip",
-        icon: buildIconifyGameIcon("mdi", "coin"),
+        icon: buildThemedIcon("1fa99"),
         src: "./assets/games/coin-flip.js",
     },
     {
         id: "dice-race",
         name: "Dice Race",
-        icon: buildIconifyGameIcon("mdi", "dice-multiple"),
+        icon: buildThemedIcon("1f3b2"),
         src: "./assets/games/dice-race.js",
     },
     {
         id: "guess-number",
         name: "Guess Number",
-        icon: buildIconifyGameIcon("mdi", "numeric"),
+        icon: buildThemedIcon("1f522"),
         src: "./assets/games/guess-number.js",
     },
     {
         id: "high-low",
         name: "High Low",
-        icon: buildIconifyGameIcon("mdi", "chart-line-variant"),
+        icon: buildThemedIcon("1f4c8"),
         src: "./assets/games/high-low.js",
     },
     {
         id: "quick-math",
         name: "Quick Math",
-        icon: buildIconifyGameIcon("mdi", "calculator-variant-outline"),
+        icon: buildThemedIcon("1f9ee"),
         src: "./assets/games/quick-math.js",
     },
     {
         id: "reaction-timer",
         name: "Reaction Timer",
-        icon: buildIconifyGameIcon("mdi", "timer-outline"),
+        icon: buildThemedIcon("23f1"),
         src: "./assets/games/reaction-timer.js",
     },
     {
         id: "rock-paper-scissors",
         name: "Rock Paper Scissors",
-        icon: buildIconifyGameIcon("mdi", "hand-back-right-outline"),
+        icon: buildThemedIcon("270a"),
         src: "./assets/games/rock-paper-scissors.js",
     },
     {
         id: "target-tap",
         name: "Target Tap",
-        icon: buildIconifyGameIcon("mdi", "target"),
+        icon: buildThemedIcon("1f3af"),
         src: "./assets/games/target-tap.js",
     },
     {
         id: "neon-drift-arena",
         name: "Neon Drift Arena",
-        icon: buildIconifyGameIcon("mdi", "rocket-launch-outline"),
+        icon: buildThemedIcon("1f680"),
         files: [
             { path: "index.html", src: "./assets/games/neon-drift-arena/index.html" },
             { path: "styles.css", src: "./assets/games/neon-drift-arena/styles.css" },
@@ -126,9 +121,20 @@ export const GAMES = [
 // that showcase HTML + CSS + JavaScript working together.
 export const APPLICATIONS = [
     {
+        id: "roofing-tools-app",
+        name: "Roofing Tools",
+        icon: buildThemedIcon("1f6e0"),
+        files: [
+            { path: "index.html", src: "./assets/apps/roofing-tools/index.html" },
+            { path: "styles.css", src: "./assets/apps/roofing-tools/styles.css" },
+            { path: "app.js", src: "./assets/apps/roofing-tools/app.js" },
+        ],
+        entryFile: "app.js",
+    },
+    {
         id: "calculator-app",
         name: "Calculator",
-        icon: buildDiceBearGameIcon("calculator-app"),
+        icon: buildThemedIcon("1f9ee"),
         files: [
             { path: "index.html", src: "./assets/apps/calculator/index.html" },
             { path: "styles.css", src: "./assets/apps/calculator/styles.css" },
@@ -139,7 +145,7 @@ export const APPLICATIONS = [
     {
         id: "unit-converter-app",
         name: "Unit Converter",
-        icon: buildDiceBearGameIcon("unit-converter-app"),
+        icon: buildThemedIcon("1f4d0"),
         files: [
             { path: "index.html", src: "./assets/apps/unit-converter/index.html" },
             { path: "styles.css", src: "./assets/apps/unit-converter/styles.css" },
@@ -150,7 +156,7 @@ export const APPLICATIONS = [
     {
         id: "geometry-lab-app",
         name: "Geometry Lab",
-        icon: buildDiceBearGameIcon("geometry-lab-app"),
+        icon: buildThemedIcon("1f4cf"),
         files: [
             { path: "index.html", src: "./assets/apps/geometry-lab/index.html" },
             { path: "styles.css", src: "./assets/apps/geometry-lab/styles.css" },

@@ -24,30 +24,38 @@ const SANDBOX_THEME_SURFACE = {
     temple: { background: "#0f3fc6", foreground: "#fef7e6", colorScheme: "dark" },
 };
 
-function getSandboxThemeSurface() {
+function getSandboxTheme() {
     const rawTheme = document?.documentElement?.getAttribute("data-theme");
     const theme = String(rawTheme || "dark").toLowerCase();
+    return SANDBOX_THEME_SURFACE[theme] ? theme : "dark";
+}
+
+function getSandboxThemeSurface(theme) {
     return SANDBOX_THEME_SURFACE[theme] || SANDBOX_THEME_SURFACE.dark;
 }
 
-function buildThemeLockScript(surface) {
+function buildThemeLockScript(surface, theme) {
     const backgroundColor = JSON.stringify(surface.background);
     const foregroundColor = JSON.stringify(surface.foreground);
     const colorScheme = JSON.stringify(surface.colorScheme);
+    const themeName = JSON.stringify(theme || "dark");
     return (
         `<script>(function __fazLockSandboxBg(){` +
         `const bg=${backgroundColor};` +
         `const fg=${foregroundColor};` +
         `const scheme=${colorScheme};` +
+        `const theme=${themeName};` +
         `const apply=function(){` +
         `const root=document.documentElement;` +
         `const body=document.body;` +
         `if(root){` +
+        `root.setAttribute("data-theme",theme);` +
         `root.style.setProperty("color-scheme",scheme);` +
         `root.style.setProperty("background",bg,"important");` +
         `root.style.setProperty("background-color",bg,"important");` +
         `}` +
         `if(body){` +
+        `body.setAttribute("data-theme",theme);` +
         `body.style.setProperty("margin","0","important");` +
         `body.style.setProperty("min-height","100%","important");` +
         `body.style.setProperty("background",bg,"important");` +
@@ -89,7 +97,7 @@ function buildStorageShimScript() {
     );
 }
 
-function buildSandboxJsDocument(userCode, token, surface) {
+function buildSandboxJsDocument(userCode, token, surface, theme) {
     const safeCode = sanitizeUserCode(userCode);
     const shellStyle =
         `<style>` +
@@ -97,9 +105,9 @@ function buildSandboxJsDocument(userCode, token, surface) {
         `html,body{margin:0;min-height:100%;background:transparent !important;background-image:linear-gradient(${surface.background},${surface.background});color:${surface.foreground};}` +
         `</style>`;
     const storageShimScript = buildStorageShimScript();
-    const backgroundLockScript = buildThemeLockScript(surface);
+    const backgroundLockScript = buildThemeLockScript(surface, theme);
     return (
-        `<!doctype html><html><head><meta charset="utf-8" />${shellStyle}</head><body>` +
+        `<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8" />${shellStyle}</head><body>` +
         storageShimScript +
         bridgeScript(token) +
         `<script>\n${safeCode}\n<\/script>` +
@@ -108,10 +116,11 @@ function buildSandboxJsDocument(userCode, token, surface) {
     );
 }
 
-function buildSandboxHtmlDocument(userHtml, token, surface) {
+function buildSandboxHtmlDocument(userHtml, token, surface, theme) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(String(userHtml ?? ""), "text/html");
     const htmlEl = doc.documentElement || doc.appendChild(doc.createElement("html"));
+    htmlEl.setAttribute("data-theme", theme || "dark");
     const head = doc.head || htmlEl.insertBefore(doc.createElement("head"), htmlEl.firstChild);
     const body = doc.body || htmlEl.appendChild(doc.createElement("body"));
 
@@ -129,7 +138,7 @@ function buildSandboxHtmlDocument(userHtml, token, surface) {
     head.appendChild(shellStyle);
 
     head.insertAdjacentHTML("afterbegin", buildStorageShimScript());
-    body.insertAdjacentHTML("afterbegin", `${bridgeScript(token)}${buildThemeLockScript(surface)}`);
+    body.insertAdjacentHTML("afterbegin", `${bridgeScript(token)}${buildThemeLockScript(surface, theme)}`);
 
     const html = "<!doctype html>\n" + htmlEl.outerHTML;
     if (!/^<!doctype html>/i.test(html.trim())) {
@@ -141,11 +150,12 @@ function buildSandboxHtmlDocument(userHtml, token, surface) {
 export function runInSandbox(iframeEl, sourceCode, token, options = {}) {
     if (!iframeEl) throw new Error("FAZ IDE: runner iframe missing");
     const mode = String(options?.mode || "javascript").toLowerCase();
-    const surface = getSandboxThemeSurface();
+    const theme = getSandboxTheme();
+    const surface = getSandboxThemeSurface(theme);
 
     const html = mode === "html"
-        ? buildSandboxHtmlDocument(sourceCode, token, surface)
-        : buildSandboxJsDocument(sourceCode, token, surface);
+        ? buildSandboxHtmlDocument(sourceCode, token, surface, theme)
+        : buildSandboxJsDocument(sourceCode, token, surface, theme);
 
     // Prefer srcdoc so sandbox can stay same-origin locked.
     if ("srcdoc" in iframeEl) {

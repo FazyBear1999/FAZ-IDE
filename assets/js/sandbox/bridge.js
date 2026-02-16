@@ -180,11 +180,13 @@ export function bridgeScript(token) {
             const root = document.documentElement;
             const body = document.body;
             if (root) {
+                root.setAttribute("data-theme", theme);
                 root.style.setProperty("color-scheme", surface.colorScheme);
                 root.style.setProperty("background", surface.background, "important");
                 root.style.setProperty("background-color", surface.background, "important");
             }
             if (body) {
+                body.setAttribute("data-theme", theme);
                 body.style.setProperty("margin", "0", "important");
                 body.style.setProperty("min-height", "100%", "important");
                 body.style.setProperty("background", surface.background, "important");

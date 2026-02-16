@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roofing Tools</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hero">
+      <h1>Roofing Tools</h1>
+      <p class="subtitle">Professional field calculators for estimates, ordering, and install planning.</p>
+      <p class="micro">Master-grade reference only — verify against local code, manufacturer instructions, and site conditions.</p>
+    </header>
+
+    <section class="ops" aria-label="Job setup controls">
+      <div class="ops-group">
+        <label class="ops-label" for="jobPreset">Quick Preset</label>
+        <select id="jobPreset">
+          <option value="residential" selected>Residential Asphalt (Typical)</option>
+          <option value="steep">Steep-Slope Premium</option>
+          <option value="low">Low-Slope / Simple</option>
+          <option value="commercial">Commercial Steep Roof</option>
+        </select>
+      </div>
+      <div class="ops-actions">
+        <button type="button" id="applyPreset">Apply Preset</button>
+        <button type="button" id="copyFullReport">Copy Full Job Report</button>
+        <button type="button" id="resetForms" class="ghost">Reset Defaults</button>
+      </div>
+      <p class="ops-note">Includes auto-save, live updates, and copy-ready results per tool.</p>
+    </section>
+
+    <nav class="tool-nav" aria-label="Tool categories">
+      <button type="button" class="tool-tab is-active" data-tab="layout">Roof Math</button>
+      <button type="button" class="tool-tab" data-tab="material">Materials</button>
+      <button type="button" class="tool-tab" data-tab="system">Systems</button>
+      <button type="button" class="tool-tab" data-tab="reference">Reference</button>
+    </nav>
+
+    <section class="tool-panel is-active" data-panel="layout" aria-label="Roof math tools">
+      <header class="panel-intro">
+        <h2>Roof Math</h2>
+        <p>Core geometry and slope calculations for fast layout and framing decisions.</p>
+      </header>
+
+      <article class="tool-card" data-tool="pitch-from-rise">
+        <h2>Pitch → Angle + Multiplier</h2>
+        <form class="tool-form">
+          <label>Rise
+            <input name="rise" type="number" min="0" step="0.01" value="6" required />
+          </label>
+          <label>Run
+            <input name="run" type="number" min="0.01" step="0.01" value="12" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="pitch-from-angle">
+        <h2>Angle → Pitch + Multiplier</h2>
+        <form class="tool-form">
+          <label>Roof Angle (degrees)
+            <input name="angle" type="number" min="0" max="89" step="0.01" value="26.57" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="roof-area">
+        <h2>Roof Area + Squares</h2>
+        <form class="tool-form two-col">
+          <label>Building Length (ft)
+            <input name="length" type="number" min="0" step="0.01" value="48" required />
+          </label>
+          <label>Building Width (ft)
+            <input name="width" type="number" min="0" step="0.01" value="32" required />
+          </label>
+          <label>Overhang (in)
+            <input name="overhang" type="number" min="0" step="0.01" value="12" required />
+          </label>
+          <label>Pitch Rise (X in X/12)
+            <input name="rise" type="number" min="0" step="0.01" value="6" required />
+          </label>
+          <label>Waste (%)
+            <input name="waste" type="number" min="0" step="0.01" value="10" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="rafter-length">
+        <h2>Rafter Length + Ridge Height</h2>
+        <form class="tool-form two-col">
+          <label>Building Span (ft)
+            <input name="span" type="number" min="0" step="0.01" value="32" required />
+          </label>
+          <label>Pitch Rise (X in X/12)
+            <input name="rise" type="number" min="0" step="0.01" value="6" required />
+          </label>
+          <label>Ridge Board Thickness (in)
+            <input name="ridge" type="number" min="0" step="0.01" value="1.5" required />
+          </label>
+          <label>Horizontal Overhang (in)
+            <input name="overhang" type="number" min="0" step="0.01" value="12" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="slope-percent">
+        <h2>Slope Percent + Grade</h2>
+        <form class="tool-form two-col">
+          <label>Rise (in)
+            <input name="rise" type="number" min="0" step="0.01" value="6" required />
+          </label>
+          <label>Run (in)
+            <input name="run" type="number" min="0.01" step="0.01" value="12" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="valley-angle">
+        <h2>Valley / Hip Angle Helper</h2>
+        <form class="tool-form two-col">
+          <label>Main Roof Pitch (rise in 12)
+            <input name="mainRise" type="number" min="0" step="0.01" value="6" required />
+          </label>
+          <label>Intersecting Roof Pitch (rise in 12)
+            <input name="crossRise" type="number" min="0" step="0.01" value="8" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+    </section>
+
+    <section class="tool-panel" data-panel="material" aria-label="Material tools">
+      <header class="panel-intro">
+        <h2>Materials</h2>
+        <p>Production-grade quantity takeoffs for shingles, flashing, underlayment, and fasteners.</p>
+      </header>
+
+      <article class="tool-card" data-tool="bundle-estimator">
+        <h2>Bundles + Shingle Count</h2>
+        <form class="tool-form two-col">
+          <label>Order Squares
+            <input name="squares" type="number" min="0" step="0.01" value="22.5" required />
+          </label>
+          <label>Bundles per Square
+            <input name="bps" type="number" min="0.01" step="0.01" value="3" required />
+          </label>
+          <label>Shingles per Bundle
+            <input name="spb" type="number" min="1" step="1" value="21" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="edge-cap">
+        <h2>Drip Edge + Ridge Cap</h2>
+        <form class="tool-form two-col">
+          <label>Eave Length (ft)
+            <input name="eave" type="number" min="0" step="0.01" value="96" required />
+          </label>
+          <label>Rake Length (ft)
+            <input name="rake" type="number" min="0" step="0.01" value="72" required />
+          </label>
+          <label>Ridge Length (ft)
+            <input name="ridge" type="number" min="0" step="0.01" value="48" required />
+          </label>
+          <label>Hip Length (ft)
+            <input name="hip" type="number" min="0" step="0.01" value="24" required />
+          </label>
+          <label>Drip Edge Piece Length (ft)
+            <input name="dripPiece" type="number" min="0.01" step="0.01" value="10" required />
+          </label>
+          <label>Ridge Cap Bundle Coverage (ft)
+            <input name="ridgeCoverage" type="number" min="0.01" step="0.01" value="33" required />
+          </label>
+          <label>Waste (%)
+            <input name="waste" type="number" min="0" step="0.01" value="10" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="underlayment">
+        <h2>Underlayment + Ice &amp; Water</h2>
+        <form class="tool-form two-col">
+          <label>Total Roof Area (sq ft)
+            <input name="roofArea" type="number" min="0" step="0.01" value="2450" required />
+          </label>
+          <label>Synthetic Roll Coverage (sq ft)
+            <input name="synCoverage" type="number" min="0.01" step="0.01" value="400" required />
+          </label>
+          <label>Eave Length (ft)
+            <input name="eaveLength" type="number" min="0" step="0.01" value="96" required />
+          </label>
+          <label>Ice Shield Width (ft)
+            <input name="iceWidth" type="number" min="0" step="0.01" value="3" required />
+          </label>
+          <label>Ice Shield Courses
+            <input name="courses" type="number" min="0" step="1" value="1" required />
+          </label>
+          <label>Ice Roll Coverage (sq ft)
+            <input name="iceCoverage" type="number" min="0.01" step="0.01" value="200" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="nails">
+        <h2>Fastener Estimator</h2>
+        <form class="tool-form two-col">
+          <label>Order Squares
+            <input name="squares" type="number" min="0" step="0.01" value="22.5" required />
+          </label>
+          <label>Nails per Square
+            <input name="nailsPerSquare" type="number" min="1" step="1" value="320" required />
+          </label>
+          <label>Nails per Box/Coil Pack
+            <input name="nailsPerBox" type="number" min="1" step="1" value="7200" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="decking">
+        <h2>Roof Decking Sheet Count</h2>
+        <form class="tool-form two-col">
+          <label>Roof Area (sq ft)
+            <input name="roofArea" type="number" min="0" step="0.01" value="2450" required />
+          </label>
+          <label>Sheet Size
+            <select name="sheetType">
+              <option value="32">4x8 (32 sq ft)</option>
+              <option value="40">4x10 (40 sq ft)</option>
+            </select>
+          </label>
+          <label>Waste (%)
+            <input name="waste" type="number" min="0" step="0.01" value="12" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="valley-flashing">
+        <h2>Valley + Flashing Takeoff</h2>
+        <form class="tool-form two-col">
+          <label>Total Valley Length (ft)
+            <input name="valley" type="number" min="0" step="0.01" value="44" required />
+          </label>
+          <label>Step Flashing Count
+            <input name="stepCount" type="number" min="0" step="1" value="140" required />
+          </label>
+          <label>Valley Piece Length (ft)
+            <input name="pieceLen" type="number" min="0.01" step="0.01" value="10" required />
+          </label>
+          <label>Waste (%)
+            <input name="waste" type="number" min="0" step="0.01" value="10" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="starter-strip">
+        <h2>Starter Strip + Eave Protection</h2>
+        <form class="tool-form two-col">
+          <label>Total Eave Length (ft)
+            <input name="eaveLength" type="number" min="0" step="0.01" value="96" required />
+          </label>
+          <label>Bundle Coverage (linear ft)
+            <input name="bundleCoverage" type="number" min="0.01" step="0.01" value="105" required />
+          </label>
+          <label>Waste (%)
+            <input name="waste" type="number" min="0" step="0.01" value="10" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="material-weight">
+        <h2>Material Weight + Delivery Loads</h2>
+        <form class="tool-form two-col">
+          <label>Order Squares
+            <input name="squares" type="number" min="0" step="0.01" value="22.5" required />
+          </label>
+          <label>Weight per Square (lb)
+            <input name="weightPerSquare" type="number" min="0" step="0.01" value="240" required />
+          </label>
+          <label>Max Lift Load (lb)
+            <input name="liftCap" type="number" min="1" step="1" value="2500" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="waste-advisor">
+        <h2>Waste Factor Advisor</h2>
+        <form class="tool-form two-col">
+          <label>Complexity
+            <select name="complexity">
+              <option value="simple">Simple Gable</option>
+              <option value="moderate" selected>Moderate</option>
+              <option value="complex">Complex / Valley Heavy</option>
+            </select>
+          </label>
+          <label>Cutup Intensity (%)
+            <input name="cutup" type="number" min="0" step="0.01" value="8" required />
+          </label>
+          <label>Steep Pitch? (1 yes / 0 no)
+            <input name="steep" type="number" min="0" max="1" step="1" value="0" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+    </section>
+
+    <section class="tool-panel" data-panel="system" aria-label="System tools">
+      <header class="panel-intro">
+        <h2>Systems</h2>
+        <p>Ventilation, safety, runoff, and bid-level planning tools for complete roof packages.</p>
+      </header>
+
+      <article class="tool-card" data-tool="ventilation">
+        <h2>Attic Ventilation (NFA)</h2>
+        <form class="tool-form two-col">
+          <label>Attic Area (sq ft)
+            <input name="atticArea" type="number" min="0" step="0.01" value="1500" required />
+          </label>
+          <label>Ventilation Ratio
+            <select name="ratio">
+              <option value="150">1 / 150</option>
+              <option value="300" selected>1 / 300</option>
+            </select>
+          </label>
+          <label>Intake Split (%)
+            <input name="intakePct" type="number" min="0" max="100" step="0.01" value="50" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="safety-lines">
+        <h2>Safety Line Length</h2>
+        <form class="tool-form two-col">
+          <label>Roof Plane Length (ft)
+            <input name="length" type="number" min="0" step="0.01" value="48" required />
+          </label>
+          <label>Roof Plane Width (ft)
+            <input name="width" type="number" min="0" step="0.01" value="16" required />
+          </label>
+          <label>Runs of Lifeline
+            <input name="runs" type="number" min="1" step="1" value="2" required />
+          </label>
+          <label>Slack/Contingency (%)
+            <input name="slack" type="number" min="0" step="0.01" value="15" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="summary">
+        <h2>Quick Job Summary</h2>
+        <form class="tool-form two-col">
+          <label>Roof Squares
+            <input name="squares" type="number" min="0" step="0.01" value="22.5" required />
+          </label>
+          <label>Waste (%)
+            <input name="waste" type="number" min="0" step="0.01" value="10" required />
+          </label>
+          <label>Labor Rate ($/square)
+            <input name="laborRate" type="number" min="0" step="0.01" value="145" required />
+          </label>
+          <label>Material Rate ($/square)
+            <input name="matRate" type="number" min="0" step="0.01" value="128" required />
+          </label>
+          <label>Overhead + Margin (%)
+            <input name="margin" type="number" min="0" step="0.01" value="22" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="production">
+        <h2>Crew Production Planner</h2>
+        <form class="tool-form two-col">
+          <label>Roof Squares
+            <input name="squares" type="number" min="0" step="0.01" value="22.5" required />
+          </label>
+          <label>Crew Size
+            <input name="crew" type="number" min="1" step="1" value="6" required />
+          </label>
+          <label>Install Rate (squares / person / day)
+            <input name="rate" type="number" min="0.01" step="0.01" value="0.7" required />
+          </label>
+          <label>Workday Hours
+            <input name="hours" type="number" min="1" step="0.25" value="8" required />
+          </label>
+          <label>Weather / Access Loss (%)
+            <input name="loss" type="number" min="0" step="0.01" value="12" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="runoff">
+        <h2>Rain Runoff + Downspout Planning</h2>
+        <form class="tool-form two-col">
+          <label>Projected Roof Area (sq ft)
+            <input name="area" type="number" min="0" step="0.01" value="1800" required />
+          </label>
+          <label>Rainfall Intensity (in/hr)
+            <input name="rain" type="number" min="0" step="0.01" value="2" required />
+          </label>
+          <label>One Downspout Capacity (gpm)
+            <input name="spoutCapacity" type="number" min="0.01" step="0.01" value="12" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="ridge-vent-plan">
+        <h2>Ridge Vent Linear Planning</h2>
+        <form class="tool-form two-col">
+          <label>Attic Area (sq ft)
+            <input name="atticArea" type="number" min="0" step="0.01" value="1500" required />
+          </label>
+          <label>Ventilation Ratio
+            <select name="ratio">
+              <option value="150">1 / 150</option>
+              <option value="300" selected>1 / 300</option>
+            </select>
+          </label>
+          <label>Intake Split (%)
+            <input name="intakePct" type="number" min="0" max="100" step="0.01" value="50" required />
+          </label>
+          <label>Ridge Vent NFA (sq in / linear ft)
+            <input name="ridgeNfaPerFt" type="number" min="0.01" step="0.01" value="18" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="estimate-package">
+        <h2>Master Estimate Package</h2>
+        <form class="tool-form two-col">
+          <label>Roof Squares
+            <input name="squares" type="number" min="0" step="0.01" value="22.5" required />
+          </label>
+          <label>Waste (%)
+            <input name="waste" type="number" min="0" step="0.01" value="10" required />
+          </label>
+          <label>Material ($ / square)
+            <input name="materialRate" type="number" min="0" step="0.01" value="128" required />
+          </label>
+          <label>Labor ($ / square)
+            <input name="laborRate" type="number" min="0" step="0.01" value="145" required />
+          </label>
+          <label>Tear-off ($ / square)
+            <input name="tearOffRate" type="number" min="0" step="0.01" value="38" required />
+          </label>
+          <label>Permit Fee ($)
+            <input name="permitFee" type="number" min="0" step="0.01" value="350" required />
+          </label>
+          <label>Dump / Haul Fee ($)
+            <input name="dumpFee" type="number" min="0" step="0.01" value="420" required />
+          </label>
+          <label>Tax (%)
+            <input name="taxPct" type="number" min="0" step="0.01" value="7" required />
+          </label>
+          <label>Overhead + Profit (%)
+            <input name="marginPct" type="number" min="0" step="0.01" value="22" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="unit-conversion">
+        <h2>Imperial ↔ Metric Conversion Pack</h2>
+        <form class="tool-form two-col">
+          <label>Length (ft)
+            <input name="lengthFt" type="number" min="0" step="0.01" value="48" required />
+          </label>
+          <label>Area (sq ft)
+            <input name="areaSqFt" type="number" min="0" step="0.01" value="2450" required />
+          </label>
+          <label>Rainfall (in / hr)
+            <input name="rainInHr" type="number" min="0" step="0.01" value="2" required />
+          </label>
+          <label>Weight (lb)
+            <input name="weightLb" type="number" min="0" step="0.01" value="80" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="drain-spacing">
+        <h2>Drain / Scupper Spacing</h2>
+        <form class="tool-form two-col">
+          <label>Roof Length (ft)
+            <input name="length" type="number" min="0" step="0.01" value="120" required />
+          </label>
+          <label>Roof Width (ft)
+            <input name="width" type="number" min="0" step="0.01" value="40" required />
+          </label>
+          <label>Max Area per Drain (sq ft)
+            <input name="areaPerDrain" type="number" min="1" step="1" value="600" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="dewpoint-risk">
+        <h2>Dew Point / Condensation Check</h2>
+        <form class="tool-form two-col">
+          <label>Indoor Temp (°F)
+            <input name="indoorTemp" type="number" step="0.01" value="70" required />
+          </label>
+          <label>Indoor RH (%)
+            <input name="indoorRh" type="number" min="1" max="100" step="0.01" value="45" required />
+          </label>
+          <label>Deck Temp (°F)
+            <input name="deckTemp" type="number" step="0.01" value="40" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="snow-load-quick">
+        <h2>Snow Load Quick Screen</h2>
+        <form class="tool-form two-col">
+          <label>Ground Snow Load psf
+            <input name="groundPsf" type="number" min="0" step="0.01" value="30" required />
+          </label>
+          <label>Thermal Factor Ct
+            <input name="ct" type="number" min="0.1" step="0.01" value="1" required />
+          </label>
+          <label>Importance Factor I
+            <input name="iFactor" type="number" min="0.5" step="0.01" value="1" required />
+          </label>
+          <label>Exposure Factor Ce
+            <input name="ce" type="number" min="0.1" step="0.01" value="1" required />
+          </label>
+          <button type="submit">Calculate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+    </section>
+
+    <section class="tool-panel" data-panel="reference" aria-label="Reference tools">
+      <header class="panel-intro">
+        <h2>Reference</h2>
+        <p>On-site planning helpers, checklists, and quick reference output for team communication.</p>
+      </header>
+
+      <article class="tool-card" data-tool="measurement-pack">
+        <h2>Measurement Pack Builder</h2>
+        <form class="tool-form two-col">
+          <label>Roof Faces Count
+            <input name="faces" type="number" min="1" step="1" value="8" required />
+          </label>
+          <label>Valleys Count
+            <input name="valleys" type="number" min="0" step="1" value="3" required />
+          </label>
+          <label>Penetrations Count
+            <input name="penetrations" type="number" min="0" step="1" value="7" required />
+          </label>
+          <label>Skylights Count
+            <input name="skylights" type="number" min="0" step="1" value="1" required />
+          </label>
+          <button type="submit">Generate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="job-checklist">
+        <h2>Install Checklist Generator</h2>
+        <form class="tool-form two-col">
+          <label>Project Type
+            <select name="projectType">
+              <option value="replacement" selected>Replacement</option>
+              <option value="new">New Construction</option>
+              <option value="repair">Repair / Partial</option>
+            </select>
+          </label>
+          <label>Include Tear-off (1/0)
+            <input name="tearoff" type="number" min="0" max="1" step="1" value="1" required />
+          </label>
+          <label>Include Decking (1/0)
+            <input name="decking" type="number" min="0" max="1" step="1" value="1" required />
+          </label>
+          <button type="submit">Generate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="crew-kit">
+        <h2>Crew Tool Kit Count</h2>
+        <form class="tool-form two-col">
+          <label>Crew Size
+            <input name="crew" type="number" min="1" step="1" value="6" required />
+          </label>
+          <label>Air Nailers Available
+            <input name="nailers" type="number" min="0" step="1" value="4" required />
+          </label>
+          <label>Harnesses Available
+            <input name="harness" type="number" min="0" step="1" value="5" required />
+          </label>
+          <button type="submit">Check</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+
+      <article class="tool-card" data-tool="daily-brief">
+        <h2>Daily Brief Generator</h2>
+        <form class="tool-form two-col">
+          <label>Target Squares Today
+            <input name="targetSq" type="number" min="0" step="0.01" value="7.5" required />
+          </label>
+          <label>Weather Delay Risk (%)
+            <input name="delayRisk" type="number" min="0" max="100" step="0.01" value="20" required />
+          </label>
+          <label>Complex Detail Zones
+            <input name="detailZones" type="number" min="0" step="1" value="3" required />
+          </label>
+          <button type="submit">Generate</button>
+        </form>
+        <div class="result" aria-live="polite"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

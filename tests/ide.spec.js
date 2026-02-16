@@ -832,7 +832,7 @@ test("editor open file tabs use square corners", async ({ page }) => {
   expect(result.closeSquare).toBeTruthy();
 });
 
-test("games catalog empty keeps games section disabled and hidden", async ({ page }) => {
+test("games catalog populated keeps section available and collapsed by default", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
@@ -855,17 +855,17 @@ test("games catalog empty keeps games section disabled and hidden", async ({ pag
     };
   });
 
-  expect(result.count).toBe(0);
-  expect(result.sectionHidden).toBeTruthy();
-  expect(result.toggleDisabled).toBeTruthy();
+  expect(result.count).toBeGreaterThan(0);
+  expect(result.sectionHidden).toBeFalsy();
+  expect(result.toggleDisabled).toBeFalsy();
   expect(result.toggleExpanded).toBe("false");
   expect(result.listHidden).toBeTruthy();
-  expect(result.listCount).toBe(0);
+  expect(result.listCount).toBe(result.count);
   expect(result.loadHidden).toBeTruthy();
   expect(result.loadDisabled).toBeTruthy();
 });
 
-test("applications catalog empty keeps applications section disabled and hidden", async ({ page }) => {
+test("applications catalog populated keeps section available and collapsed by default", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
@@ -888,17 +888,17 @@ test("applications catalog empty keeps applications section disabled and hidden"
     };
   });
 
-  expect(result.count).toBe(0);
-  expect(result.sectionHidden).toBeTruthy();
-  expect(result.toggleDisabled).toBeTruthy();
+  expect(result.count).toBeGreaterThan(0);
+  expect(result.sectionHidden).toBeFalsy();
+  expect(result.toggleDisabled).toBeFalsy();
   expect(result.toggleExpanded).toBe("false");
   expect(result.listHidden).toBeTruthy();
-  expect(result.listCount).toBe(0);
+  expect(result.listCount).toBe(result.count);
   expect(result.loadHidden).toBeTruthy();
   expect(result.loadDisabled).toBeTruthy();
 });
 
-test("games and applications load buttons stay hidden when catalogs are empty", async ({ page }) => {
+test("games and applications load buttons reveal and enable when catalogs are expanded", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
@@ -925,12 +925,12 @@ test("games and applications load buttons stay hidden when catalogs are empty", 
   });
 
   expect(result.ready).toBeTruthy();
-  expect(result.gamesToggleDisabled).toBeTruthy();
-  expect(result.appsToggleDisabled).toBeTruthy();
-  expect(result.gameLoadHidden).toBeTruthy();
-  expect(result.appLoadHidden).toBeTruthy();
-  expect(result.gameLoadDisabled).toBeTruthy();
-  expect(result.appLoadDisabled).toBeTruthy();
+  expect(result.gamesToggleDisabled).toBeFalsy();
+  expect(result.appsToggleDisabled).toBeFalsy();
+  expect(result.gameLoadHidden).toBeFalsy();
+  expect(result.appLoadHidden).toBeFalsy();
+  expect(result.gameLoadDisabled).toBeFalsy();
+  expect(result.appLoadDisabled).toBeFalsy();
 });
 
 test("files panel sections can be reordered and persist in layout state", async ({ page }) => {
