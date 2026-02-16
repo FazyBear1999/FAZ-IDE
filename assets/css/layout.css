@@ -242,19 +242,27 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     -webkit-overflow-scrolling: touch;
 }
 
-.top::-webkit-scrollbar {
+.top::-webkit-scrollbar,
+.card-hd::-webkit-scrollbar,
+.foot::-webkit-scrollbar {
     height: var(--scrollbar-size);
 }
 
-.top::-webkit-scrollbar-track {
+.top::-webkit-scrollbar-track,
+.card-hd::-webkit-scrollbar-track,
+.foot::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.top::-webkit-scrollbar-thumb {
+.top::-webkit-scrollbar-thumb,
+.card-hd::-webkit-scrollbar-thumb,
+.foot::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
 }
 
-.top::-webkit-scrollbar-thumb:hover {
+.top::-webkit-scrollbar-thumb:hover,
+.card-hd::-webkit-scrollbar-thumb:hover,
+.foot::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
 }
 
@@ -439,43 +447,13 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     -webkit-overflow-scrolling: touch;
 }
 
-.card-hd::-webkit-scrollbar {
-    height: var(--scrollbar-size);
-}
-
-.card-hd::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.card-hd::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb);
-}
-
-.card-hd::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover);
-}
-
 .card-hd > * {
     flex: 0 0 auto;
     min-width: max-content;
 }
 
-.editor-panel .card-hd,
-.sandbox-panel .card-hd,
-.tools-panel .card-hd,
-.log-panel .card-hd {
-    padding-top: 0;
-    padding-bottom: 0;
-    padding-left: max(var(--panel-header-pad-x), env(safe-area-inset-left));
-    padding-right: max(var(--panel-header-pad-x), env(safe-area-inset-right));
-    height: var(--panel-header-height);
-    min-height: var(--panel-header-height);
-}
-
 .editor-panel .card-hd {
     flex: 0 0 auto;
-    overflow-x: auto;
-    overflow-y: hidden;
 }
 
 .card-title {
@@ -559,22 +537,6 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 .foot * {
     font-size: 11px;
     line-height: 1.2;
-}
-
-.foot::-webkit-scrollbar {
-    height: var(--scrollbar-size);
-}
-
-.foot::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.foot::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb);
-}
-
-.foot::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover);
 }
 
 .foot[data-middle-pan-active="true"] {

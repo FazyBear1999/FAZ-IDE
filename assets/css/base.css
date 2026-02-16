@@ -283,7 +283,29 @@
     scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 html, body { height: 100%; }
-body { margin: 0; overflow: hidden; }
+html {
+    text-rendering: optimizeLegibility;
+    font-kerning: normal;
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-synthesis-weight: none;
+    font-synthesis-style: none;
+}
+
+::selection {
+    background: var(--syntax-selection-bg-focus);
+    color: var(--text);
+}
+
+::-moz-selection {
+    background: var(--syntax-selection-bg-focus);
+    color: var(--text);
+}
 
 /* Consistent scrollbars (chromium + firefox) */
 *::-webkit-scrollbar {
@@ -320,6 +342,9 @@ input,
 select,
 textarea {
     font-family: inherit;
+    text-rendering: optimizeLegibility;
+    font-kerning: normal;
+    font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {

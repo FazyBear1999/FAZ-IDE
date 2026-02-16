@@ -45,6 +45,12 @@
     flex: 0 0 auto;
 }
 
+.top .strip-right .status {
+    margin-left: auto;
+    margin-right: 8px;
+    flex: 0 0 auto;
+}
+
 .health-pill {
     display: inline-flex;
     align-items: center;
@@ -231,7 +237,7 @@ button:focus-visible {
     height: var(--control-height-sm);
     min-width: 0;
     margin: 0;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 0;
     background-color: var(--surface-panel);
     color: var(--text-top-control);
@@ -243,7 +249,6 @@ button:focus-visible {
     appearance: none;
     cursor: pointer;
     box-sizing: border-box;
-    vertical-align: middle;
     padding: 0 22px 0 8px;
     background-image:
         linear-gradient(45deg, transparent 50%, var(--files-caret-color) 50%),
@@ -254,6 +259,13 @@ button:focus-visible {
     background-size: 4px 4px, 4px 4px;
     background-repeat: no-repeat;
     color-scheme: inherit;
+    transform: translateY(0);
+    transition:
+        background-color var(--motion-base) var(--motion-ease),
+        border-color var(--motion-base) var(--motion-ease),
+        box-shadow var(--motion-base) var(--motion-ease),
+        transform var(--motion-fast) var(--motion-ease),
+        background-position var(--motion-fast) var(--motion-ease);
 }
 
 .strip-theme-group {
@@ -269,11 +281,50 @@ button:focus-visible {
 
 .top-theme-select:hover {
     background-color: var(--surface-top-hover);
+    border-color: var(--border-top-hover);
 }
 
 .top-theme-select:focus-visible {
     outline: none;
+    border-color: var(--border-focus-soft);
     box-shadow: 0 0 0 2px var(--ring-focus-soft);
+    transform: translateY(-1px);
+    background-position:
+        calc(100% - 12px) calc(50% + 1px),
+        calc(100% - 8px) calc(50% + 1px);
+    animation: theme-select-pulse var(--motion-ui) var(--motion-ease);
+}
+
+.top-theme-select:active {
+    transform: translateY(0);
+    box-shadow: 0 0 0 1px var(--ring-focus-soft);
+    background-position:
+        calc(100% - 12px) calc(50% + 2px),
+        calc(100% - 8px) calc(50% + 2px);
+}
+
+@keyframes theme-select-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 2px var(--ring-focus-soft);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .top-theme-select {
+        transition: none;
+    }
+
+    .top-theme-select:focus-visible {
+        animation: none;
+        transform: none;
+    }
+
+    .top-theme-select:active {
+        transform: none;
+    }
 }
 
 .top-theme-select option {
@@ -2377,16 +2428,20 @@ div.CodeMirror-selected {
     display: none;
 }
 
-.dock-zone::before {
+.dock-zone::before,
+.dock-zone::after {
     content: "";
     position: absolute;
-    width: 42px;
-    height: 42px;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-strong);
+}
+
+.dock-zone::before {
+    width: 42px;
+    height: 42px;
     background: var(--surface-elevated);
     box-shadow: var(--menu-shadow);
     transition: border-color var(--motion-ui) var(--motion-ease), box-shadow var(--motion-ui) var(--motion-ease), background var(--motion-ui) var(--motion-ease);
@@ -2394,14 +2449,8 @@ div.CodeMirror-selected {
 
 .dock-zone::after {
     content: "";
-    position: absolute;
     width: 18px;
     height: 18px;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-strong);
     background: var(--surface-elevated-alt);
     transition: border-color var(--motion-ui) var(--motion-ease), background var(--motion-ui) var(--motion-ease);
 }
@@ -2428,7 +2477,6 @@ div.CodeMirror-selected {
 }
 
 .dock-center {
-    position: absolute;
     z-index: 3;
     position: absolute;
     left: 50%;
@@ -2446,10 +2494,7 @@ div.CodeMirror-selected {
     font-weight: 600;
 }
 
-.dock-center::before {
-    display: none;
-}
-
+.dock-center::before,
 .dock-center::after {
     display: none;
 }
@@ -3460,10 +3505,6 @@ body[data-resize-preview="row"] {
     overflow: auto;
 }
 
-.shortcut-help-panel[data-open="true"] {
-    transform: translate(-50%, -50%);
-}
-
 .editor-history-panel,
 .editor-settings-panel {
     left: 50%;
@@ -3474,11 +3515,6 @@ body[data-resize-preview="row"] {
     transform: translate(-50%, -50%);
     z-index: 1380;
     overflow: hidden;
-}
-
-.editor-history-panel[data-open="true"],
-.editor-settings-panel[data-open="true"] {
-    transform: translate(-50%, -50%);
 }
 
 .editor-history-actions {
@@ -3534,7 +3570,9 @@ body[data-resize-preview="row"] {
     line-height: 1.45;
 }
 
-#editorHistoryPanel {
+#editorHistoryPanel,
+#shortcutHelpPanel,
+#editorSettingsPanel {
     border-radius: 0;
     border-color: var(--border-control);
     background: var(--menu-bg);
@@ -3549,13 +3587,17 @@ body[data-resize-preview="row"] {
     border-bottom: 1px solid var(--border-soft);
 }
 
-#editorHistoryPanel .layout-title {
+#editorHistoryPanel .layout-title,
+#shortcutHelpPanel .layout-title,
+#editorSettingsPanel .layout-title {
     font-size: 11px;
     letter-spacing: 0.45px;
     text-transform: uppercase;
 }
 
-#editorHistoryPanel .layout-sub {
+#editorHistoryPanel .layout-sub,
+#shortcutHelpPanel .layout-sub,
+#editorSettingsPanel .layout-sub {
     font-size: 11px;
     color: var(--text-muted-quiet);
 }
@@ -3650,14 +3692,7 @@ body[data-resize-preview="row"] {
     gap: 2px;
 }
 
-#editorHistoryPanel .editor-history-title {
-    display: block;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
+#editorHistoryPanel .editor-history-title,
 #editorHistoryPanel .editor-history-reason {
     display: block;
     min-width: 0;
@@ -3677,33 +3712,18 @@ body[data-resize-preview="row"] {
     padding: 8px;
 }
 
-#shortcutHelpPanel {
-    border-radius: 0;
-    border-color: var(--border-control);
-    background: var(--menu-bg);
-    box-shadow: var(--menu-shadow);
-    padding: 10px;
-    gap: 8px;
-}
-
 #shortcutHelpPanel .layout-header {
     align-items: center;
     padding-bottom: 6px;
     border-bottom: 0;
 }
 
-#shortcutHelpPanel .layout-title {
-    font-size: 11px;
-    letter-spacing: 0.45px;
-    text-transform: uppercase;
-}
-
-#shortcutHelpPanel .layout-sub {
-    font-size: 11px;
-    color: var(--text-muted-quiet);
-}
-
-#shortcutHelpPanel #shortcutHelpClose {
+#editorHistoryPanel .editor-history-actions button,
+#shortcutHelpPanel #shortcutHelpClose,
+#editorSettingsPanel .layout-header > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: var(--control-height-md);
     padding: 6px 8px;
     border-radius: 0;
@@ -3714,12 +3734,15 @@ body[data-resize-preview="row"] {
     letter-spacing: 0.2px;
 }
 
-#shortcutHelpPanel #shortcutHelpClose:hover {
+#editorHistoryPanel .editor-history-actions button:hover,
+#shortcutHelpPanel #shortcutHelpClose:hover,
+#editorSettingsPanel .layout-header > button:hover {
     border-color: var(--btn-primary-border);
     background: var(--surface-active);
 }
 
-#shortcutHelpPanel .layout-body {
+#shortcutHelpPanel .layout-body,
+#editorSettingsPanel .layout-body {
     gap: 8px;
 }
 
@@ -3739,53 +3762,13 @@ body[data-resize-preview="row"] {
     background: var(--surface-panel);
 }
 
-#editorSettingsPanel {
-    border-radius: 0;
-    border-color: var(--border-control);
-    background: var(--menu-bg);
-    box-shadow: var(--menu-shadow);
-    padding: 10px;
-    gap: 8px;
-}
-
 #editorSettingsPanel .layout-header {
     align-items: center;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border-soft);
 }
 
-#editorSettingsPanel .layout-title {
-    font-size: 11px;
-    letter-spacing: 0.45px;
-    text-transform: uppercase;
-}
-
-#editorSettingsPanel .layout-sub {
-    font-size: 11px;
-    color: var(--text-muted-quiet);
-}
-
-#editorSettingsPanel .layout-header > button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: var(--control-height-md);
-    padding: 6px 8px;
-    border-radius: 0;
-    border: 1px solid transparent;
-    background: transparent;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-}
-
-#editorSettingsPanel .layout-header > button:hover {
-    border-color: var(--btn-primary-border);
-    background: var(--surface-active);
-}
-
 #editorSettingsPanel .layout-body {
-    gap: 8px;
     padding-right: 0;
 }
 
@@ -3858,8 +3841,8 @@ body[data-resize-preview="row"] {
 }
 
 #editorSettingsPanel .layout-row input[type="number"] {
-    appearance: textfield;
     -moz-appearance: textfield;
+    appearance: textfield;
     text-align: center;
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -4444,8 +4427,8 @@ body[data-resize-preview="row"] {
 }
 
 #layoutPanel .layout-row input[type="number"] {
-    appearance: textfield;
     -moz-appearance: textfield;
+    appearance: textfield;
     text-align: center;
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -4582,6 +4565,27 @@ body[data-resize-preview="row"] {
     min-height: var(--control-height-sm);
     padding: 6px 10px;
     font-size: 11px;
+}
+
+.tools-panel .inspect-panel,
+.tools-panel .diagnostics-panel,
+.tools-panel .problems-panel,
+.tools-panel .task-runner-panel,
+.tools-panel .debug-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--panel-section-bg);
+    border-color: var(--panel-section-border);
+    color: var(--text);
+}
+
+.tools-panel .inspect-sub,
+.tools-panel .diagnostics-sub,
+.tools-panel .problem-item-location,
+.tools-panel .task-runner-meta,
+.tools-panel .debug-watch-meta {
+    color: var(--text-muted-soft);
 }
 
 .sandbox-layout > section {
