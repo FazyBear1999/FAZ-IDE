@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Drift Arena</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="game-shell">
+      <header class="hud">
+        <div class="hud-chip">Score: <strong id="scoreValue">0</strong></div>
+        <div class="hud-chip">Best: <strong id="bestValue">0</strong></div>
+        <div class="hud-chip">Level: <strong id="levelValue">1</strong></div>
+        <div class="hud-chip">Boost: <strong id="boostValue">100%</strong></div>
+        <div class="hud-chip">Combo: <strong id="comboValue">x1.0</strong></div>
+        <div class="hud-chip">Pulse: <strong id="pulseValue">100%</strong></div>
+      </header>
+
+      <section class="arena-wrap">
+        <canvas id="gameCanvas" width="980" height="580" aria-label="Neon Drift Arena"></canvas>
+        <div id="overlay" class="overlay">
+          <h1>Neon Drift Arena</h1>
+          <p>Dodge drones, collect sparks, survive as long as possible.</p>
+          <p class="controls">Move: WASD / Arrows • Boost: Shift • Pulse Blast: Space • Mute: M • Restart: R</p>
+          <button id="startBtn" type="button">Start Run</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
