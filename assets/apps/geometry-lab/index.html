@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geometry Lab</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <h1>Geometry Lab</h1>
+    <p class="app-subtitle">Shape math with dynamic inputs and calculated outputs.</p>
+
+    <section class="geometry" aria-label="Geometry calculator">
+      <label for="shapeType">Shape</label>
+      <select id="shapeType">
+        <option value="rectangle">Rectangle</option>
+        <option value="circle">Circle</option>
+        <option value="triangle">Triangle</option>
+      </select>
+
+      <div id="shapeInputs" class="shape-inputs"></div>
+
+      <button id="calcGeometry" type="button">Calculate</button>
+
+      <div class="result-grid">
+        <p><strong>Area:</strong> <span id="areaValue">-</span></p>
+        <p><strong>Perimeter:</strong> <span id="perimeterValue">-</span></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

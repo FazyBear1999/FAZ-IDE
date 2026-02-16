@@ -15,7 +15,7 @@ Use the **Theme** button in the header to switch between Dark and Light themes.
 
 Use the `...` menu (or right-click a file) to create, duplicate, rename, pin, lock, or delete files.
 Search and sort live in the toolbar for quick filtering.
-Use the `...` menu to show/hide Filters (search/sort) and Games for a minimal layout.
+Use the `...` menu to show/hide Filters (search/sort), Games, and Apps for a minimal layout.
 
 ## Games Library
 
@@ -23,9 +23,15 @@ Define game templates in `assets/js/config.js` under `GAMES`.
 Current setup uses a simple single-file JavaScript template at `assets/games/click-counter.js`.
 Use the Files panel **Games** selector to import templates into the workspace.
 
+## Applications Library
+
+Define application templates in `assets/js/config.js` under `APPLICATIONS`.
+Starter templates live in `assets/apps/` and load multiple files (`index.html`, `styles.css`, `app.js`).
+Use the Files panel **Applications** selector to import templates into the workspace.
+
 ## Project Structure
 
-- `assets/` UI, JS modules, vendor assets, and games
+- `assets/` UI, JS modules, vendor assets, games, and applications
 - `config/` configuration (Playwright)
 - `docs/` documentation (changelog)
 - `scripts/` local dev server
@@ -47,6 +53,8 @@ fazide.deleteFile("demo.js");
 fazide.renameFile("demo.js", "demo-renamed.js");
 fazide.listGames();
 fazide.loadGame("click-counter");
+fazide.listApplications();
+fazide.loadApplication("calculator-app");
 fazide.setPanelOpen("log", true);
 fazide.setPanelOpen("sandbox", true);
 fazide.setPanelOrder("sandbox", 0);

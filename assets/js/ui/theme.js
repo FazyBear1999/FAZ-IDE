@@ -1,4 +1,4 @@
-export const THEMES = ["dark", "light", "purple"];
+export const THEMES = ["dark", "light", "purple", "retro", "temple"];
 export const DEFAULT_THEME = "dark";
 
 export function normalizeTheme(value, allowedThemes = THEMES, fallback = DEFAULT_THEME) {
@@ -27,7 +27,7 @@ export function applyThemeState(theme, {
         themeSelect.setAttribute("data-theme", nextTheme);
     }
     if (editor?.setTheme) {
-        editor.setTheme(nextTheme === "light" ? "default" : "material-darker");
+        editor.setTheme(nextTheme === "light" || nextTheme === "temple" ? "default" : "material-darker");
     }
     if (isSandboxWindowOpen()) {
         try {

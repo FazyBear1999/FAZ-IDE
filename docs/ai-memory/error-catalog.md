@@ -22,6 +22,14 @@
   - Meaning: Required file/dir missing in package output.
   - Fix: Run `npm run deploy:siteground`, then `npm run verify:siteground`, inspect missing path report.
 
+- Error: `Missing source directory: assets/apps`
+  - Meaning: `sync:dist-site` map expects `assets/apps` but source directory was missing.
+  - Fix: Restore or recreate `assets/apps` (and expected app files), then rerun `npm run sync:dist-site`.
+
+- Error: `/assets/js/app.js should be reachable` after `npm run test:frank:safety`
+  - Meaning: Workspace assets were mutated before Playwright stage, causing static asset 404s and cascading UI test failures.
+  - Fix: Restore `assets/*` from a known-good snapshot/package and run patched Franklin safety flow that preserves assets.
+
 ## When adding new errors
 - Add exact error text.
 - Add clear meaning in one line.
@@ -34,3 +42,7 @@
 - 2026-02-15: Franklin rescue generated docs/ai-memory/franklin-fix-request.md for failing script npm run test:integrity
 
 - 2026-02-15: franklin-safety-1771131011986
+
+- 2026-02-15: Guardian rollback restored snapshot 1771163555193-guardian-preflight after gate failure
+
+- 2026-02-15: Guardian failure generated docs/ai-memory/franklin-fix-request.md for npm run test

@@ -20,6 +20,8 @@ const SANDBOX_THEME_SURFACE = {
     dark: { background: "#0b0f14", foreground: "#e6edf3", colorScheme: "dark" },
     light: { background: "#f8fafc", foreground: "#0f172a", colorScheme: "light" },
     purple: { background: "#140b24", foreground: "#f3e8ff", colorScheme: "dark" },
+    retro: { background: "#10150f", foreground: "#e6f1d1", colorScheme: "dark" },
+    temple: { background: "#0f3fc6", foreground: "#fef7e6", colorScheme: "dark" },
 };
 
 function getSandboxThemeSurface() {

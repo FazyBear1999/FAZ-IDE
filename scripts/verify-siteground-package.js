@@ -17,6 +17,7 @@ const requiredFiles = [
 ];
 
 const requiredDirs = [
+  "assets/apps",
   "assets/css",
   "assets/games",
   "assets/icons",

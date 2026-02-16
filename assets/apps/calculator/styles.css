@@ -1,0 +1,77 @@
+:root {
+  font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+  color: #e6edf3;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(160deg, #0f172a, #111827);
+  display: grid;
+  place-items: center;
+}
+
+.app-shell {
+  width: min(92vw, 360px);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app-subtitle {
+  margin: 0.35rem 0 1rem;
+  color: #93c5fd;
+  font-size: 0.82rem;
+}
+
+.calculator {
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.92);
+  padding: 0.85rem;
+}
+
+.display {
+  width: 100%;
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: #f8fafc;
+  height: 2.5rem;
+  text-align: right;
+  padding: 0 0.65rem;
+  margin-bottom: 0.65rem;
+  font-size: 1.1rem;
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+button {
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: #e2e8f0;
+  min-height: 2rem;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #1e293b;
+}
+
+.key-zero {
+  grid-column: span 2;
+}
+
+.key-equals {
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #eff6ff;
+}
+
+.key-equals:hover {
+  background: #2563eb;
+}

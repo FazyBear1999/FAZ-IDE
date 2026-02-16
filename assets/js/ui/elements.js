@@ -14,18 +14,33 @@ export function getRequiredElements() {
         editor: $("#editor"),
         editorMirror: $("#editorMirror"),
         editorTabs: $("#editorTabs"),
+        footerEditorStatus: $("#footerEditorStatus"),
+        footerEditorFile: $("#footerEditorFile"),
+        footerEditorLang: $("#footerEditorLang"),
+        footerEditorDirty: $("#footerEditorDirty"),
+        footerEditorCursor: $("#footerEditorCursor"),
+        footerEditorSelection: $("#footerEditorSelection"),
+        footerEditorChars: $("#footerEditorChars"),
+        footerEditorRuntime: $("#footerEditorRuntime"),
+        footerSandbox: $("#footerSandbox"),
+        footerProblems: $("#footerProblems"),
+        footerStorage: $("#footerStorage"),
         fileList: $("#fileList"),
         fileSearch: $("#fileSearch"),
         fileSearchClear: $("#fileSearchClear"),
         fileSort: $("#fileSort"),
         filesGames: $("#filesGames"),
+        filesApps: $("#filesApps"),
         filesPanel: $("#filesPanel"),
         filesToolbar: $("#filesToolbar"),
-        gameSelect: $("#gameSelect"),
+        gamesSelectorToggle: $("#gamesSelectorToggle"),
+        gamesList: $("#gamesList"),
         gameLoad: $("#gameLoad"),
+        appsSelectorToggle: $("#appsSelectorToggle"),
+        applicationsList: $("#applicationsList"),
+        appLoad: $("#appLoad"),
         filesMenuButton: $("#filesMenuButton"),
         filesMenu: $("#filesMenu"),
-        newFileTypeSelect: $("#newFileTypeSelect"),
         fileRowMenu: $("#fileRowMenu"),
         fileFolderMenu: $("#fileFolderMenu"),
         quickOpenBackdrop: $("#quickOpenBackdrop"),
@@ -89,6 +104,7 @@ export function getRequiredElements() {
         editorTabSize: $("#editorTabSize"),
         editorFontSize: $("#editorFontSize"),
         editorFontFamilySelect: $("#editorFontFamilySelect"),
+        editorSyntaxThemeSelect: $("#editorSyntaxThemeSelect"),
         editorAutoSaveMs: $("#editorAutoSaveMs"),
         editorWrapToggle: $("#editorWrapToggle"),
         editorLintToggle: $("#editorLintToggle"),
@@ -103,9 +119,9 @@ export function getRequiredElements() {
         runner: $("#runner"),
         runnerShell: $("#runnerShell"),
         statusText: $("#statusText"),
-        healthEditor: $("#healthEditor"),
-        healthSandbox: $("#healthSandbox"),
-        healthStorage: $("#healthStorage"),
+        healthEditor: $("#healthEditor") || $("#footerEditorRuntime"),
+        healthSandbox: $("#healthSandbox") || $("#footerSandbox"),
+        healthStorage: $("#healthStorage") || $("#footerStorage"),
         splitLog: $("#splitLog"),
         splitFiles: $("#splitFiles"),
         splitSandbox: $("#splitSandbox"),
@@ -126,9 +142,6 @@ export function getRequiredElements() {
         btnToggleLog: $("#toggleLog"),
         btnToggleSandbox: $("#toggleSandbox"),
         btnToggleTools: $("#toggleTools"),
-        btnCloseLog: $("#closeLog"),
-        btnCloseSandbox: $("#closeSandbox"),
-        btnCloseTools: $("#closeTools"),
         btnCopyLog: $("#copyLog"),
         btnClearLog: $("#clearLog"),
         btnInspect: $("#inspect"),
@@ -215,8 +228,13 @@ export function getRequiredElements() {
         promptDialogConfirm: $("#promptDialogConfirm"),
     };
 
+    const optional = new Set([
+        "layoutCornerRadius",
+        "layoutCornerRadiusInput",
+    ]);
+
     for (const [k, v] of Object.entries(el)) {
-        if (!v) throw new Error(`FAZ IDE: Missing required element: ${k}. Check index.html IDs.`);
+        if (!v && !optional.has(k)) throw new Error(`FAZ IDE: Missing required element: ${k}. Check index.html IDs.`);
     }
 
     return el;

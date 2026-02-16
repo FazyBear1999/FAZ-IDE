@@ -1,0 +1,77 @@
+:root {
+  font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+  color: #f8fafc;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #0f172a, #1f2937);
+  display: grid;
+  place-items: center;
+}
+
+.app-shell {
+  width: min(92vw, 430px);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app-subtitle {
+  margin: 0.35rem 0 1rem;
+  color: #93c5fd;
+  font-size: 0.82rem;
+}
+
+.converter {
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.92);
+  padding: 0.95rem;
+}
+
+label {
+  display: block;
+  font-size: 0.78rem;
+  margin-bottom: 0.35rem;
+  color: #cbd5e1;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  min-height: 2rem;
+  border: 1px solid #475569;
+  background: #0b1220;
+  color: #f8fafc;
+}
+
+.unit-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.55rem;
+  align-items: end;
+  margin-top: 0.75rem;
+}
+
+#swapUnits {
+  width: 4.5rem;
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #eff6ff;
+}
+
+#swapUnits:hover {
+  background: #2563eb;
+}
+
+.result {
+  margin: 1rem 0 0;
+  padding: 0.65rem;
+  background: #0b1220;
+  border: 1px solid #334155;
+  min-height: 2.25rem;
+}

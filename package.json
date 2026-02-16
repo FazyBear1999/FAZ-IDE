@@ -48,7 +48,8 @@
     "frank:snapshot:restore": "node scripts/franklin.js snapshot restore latest",
     "frank:snapshot:verify": "node scripts/franklin.js snapshot verify latest",
     "frank:doctor": "node scripts/franklin.js doctor",
-    "frank:status": "node scripts/franklin.js status"
+    "frank:status": "node scripts/franklin.js status",
+    "commands": "node scripts/list-commands.js"
   },
   "build": {
     "appId": "com.fazide.desktop",

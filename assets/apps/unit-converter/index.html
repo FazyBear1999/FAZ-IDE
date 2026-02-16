@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unit Converter</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <h1>Unit Converter</h1>
+    <p class="app-subtitle">Length conversion with shared JS logic and form controls.</p>
+
+    <section class="converter" aria-label="Length converter">
+      <label for="inputValue">Value</label>
+      <input id="inputValue" type="number" step="any" value="1" />
+
+      <div class="unit-row">
+        <div>
+          <label for="fromUnit">From</label>
+          <select id="fromUnit"></select>
+        </div>
+        <button id="swapUnits" type="button" aria-label="Swap units">Swap</button>
+        <div>
+          <label for="toUnit">To</label>
+          <select id="toUnit"></select>
+        </div>
+      </div>
+
+      <p id="resultText" class="result" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

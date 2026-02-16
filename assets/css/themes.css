@@ -4,16 +4,800 @@
    - light theme overrides
    - theme toggle hooks
    - high-contrast accessibility theme
-*/
+
+   Theme contract:
+   - Override token values in :root[data-theme="..."] blocks.
+   - Keep component-level selector overrides minimal and theme-specific.
+   - Leave sizing, motion, and radius tokens in base.css unless a theme
+     explicitly needs different ergonomics.
+ */
+
+:root[data-theme="dark"] #editor,
+:root[data-theme="dark"] .CodeMirror {
+    --editor-surface: var(--bg);
+    --editor-gutter-surface: var(--bg);
+    background: var(--bg) !important;
+}
+
+:root[data-theme="dark"] .CodeMirror-scroll,
+:root[data-theme="dark"] .CodeMirror-gutters,
+:root[data-theme="dark"] .editor-panel .CodeMirror-scrollbar-filler,
+:root[data-theme="dark"] .editor-panel .CodeMirror-gutter-filler,
+:root[data-theme="dark"] #editor::-webkit-scrollbar-corner,
+:root[data-theme="dark"] .editor-panel .CodeMirror-scroll::-webkit-scrollbar-corner {
+    background: var(--bg) !important;
+}
+
+:root[data-theme="dark"] .CodeMirror-gutters {
+    border-right-color: var(--border-soft) !important;
+}
 
 :root[data-theme="purple"] {
     color-scheme: dark;
     --bg: #120a1f;
+    --surface-panel: #170f29;
+    --surface-panel-alt: #24153d;
+    --surface-panel-hover: #2b1a49;
+    --surface-menu: #201536;
+    --surface-soft: rgba(167, 139, 250, 0.2);
+    --surface-soft-hover: rgba(167, 139, 250, 0.3);
+    --surface-top-hover: rgba(167, 139, 250, 0.14);
+    --surface-top-active: rgba(167, 139, 250, 0.2);
+    --surface-active: rgba(124, 58, 237, 0.28);
+    --surface-selected: rgba(124, 58, 237, 0.36);
+    --surface-selected-soft: rgba(192, 132, 252, 0.26);
+    --surface-danger-soft: rgba(56, 17, 35, 0.85);
+    --surface-drop-target: rgba(34, 14, 56, 0.42);
     --text: #f3e8ff;
     --muted: rgba(196, 181, 253, 0.88);
+    --text-muted-soft: rgba(221, 214, 254, 0.95);
+    --text-muted-quiet: rgba(221, 214, 254, 0.78);
+    --text-top-control: rgba(243, 232, 255, 0.95);
+    --text-accent-strong: #faf5ff;
+    --text-footer: rgba(203, 189, 248, 0.82);
+    --danger-contrast-text: #ffe4e6;
     --border: rgba(167, 139, 250, 0.35);
+    --border-soft: rgba(167, 139, 250, 0.3);
+    --border-control: rgba(167, 139, 250, 0.35);
+    --border-strong: rgba(192, 132, 252, 0.5);
+    --border-focus: rgba(192, 132, 252, 0.72);
+    --border-focus-soft: rgba(192, 132, 252, 0.62);
+    --ring-focus: rgba(192, 132, 252, 0.28);
+    --ring-focus-soft: rgba(192, 132, 252, 0.22);
+    --border-top-hover: rgba(167, 139, 250, 0.24);
+    --drop-target-border: rgba(196, 181, 253, 0.45);
     --accent: #c084fc;
+    --accent-info: #c084fc;
+    --accent-warn: #fbbf24;
     --danger: #fb7185;
+    --health-ok-border: rgba(74, 222, 128, 0.48);
+    --health-ok-text: rgba(209, 250, 229, 0.98);
+    --health-warn-border: rgba(251, 191, 36, 0.56);
+    --health-warn-text: rgba(254, 240, 138, 0.98);
+    --health-error-border: rgba(251, 113, 133, 0.58);
+    --health-error-text: rgba(255, 228, 230, 0.98);
+    --btn-bg: var(--surface-panel-alt);
+    --btn-bg-hover: var(--surface-panel-hover);
+    --btn-border: var(--border-control);
+    --btn-border-hover: var(--border-strong);
+    --btn-primary-bg: rgba(128, 90, 213, 0.38);
+    --btn-primary-border: rgba(196, 181, 253, 0.55);
+    --btn-primary-shadow: rgba(196, 181, 253, 0.2);
+    --btn-active-bg: rgba(124, 58, 237, 0.24);
+    --btn-active-border: rgba(196, 181, 253, 0.55);
+    --btn-active-shadow: rgba(196, 181, 253, 0.2);
+    --btn-danger-bg: var(--surface-danger-soft);
+    --btn-danger-border: rgba(251, 113, 133, 0.5);
+    --btn-pressed-border: rgba(192, 132, 252, 0.6);
+    --btn-pressed-text: #f5ecff;
+    --btn-pressed-shadow: rgba(192, 132, 252, 0.22);
+    --select-arrow-color: rgba(221, 214, 254, 0.9);
+    --files-search-bg: #201536;
+    --files-search-border: rgba(167, 139, 250, 0.32);
+    --files-option-text: rgba(243, 232, 255, 0.88);
+    --files-option-hover-bg: rgba(192, 132, 252, 0.16);
+    --files-option-selected-bg: rgba(192, 132, 252, 0.26);
+    --files-option-selected-text: #faf5ff;
+    --files-section-bg: rgba(167, 139, 250, 0.2);
+    --files-section-bg-hover: rgba(167, 139, 250, 0.3);
+    --files-section-bg-open: rgba(124, 58, 237, 0.36);
+    --files-section-text: rgba(243, 232, 255, 0.95);
+    --files-caret-color: rgba(221, 214, 254, 0.72);
+    --files-tree-guide: rgba(221, 214, 254, 0.58);
+    --menu-bg: #201536;
+    --menu-shadow: 0 12px 28px rgba(6, 3, 12, 0.46);
+    --menu-danger-border: rgba(251, 113, 133, 0.34);
+    --menu-danger-bg: rgba(56, 17, 35, 0.22);
+    --menu-danger-border-hover: rgba(251, 113, 133, 0.52);
+    --menu-danger-bg-hover: rgba(80, 18, 45, 0.52);
+    --section-danger-hover-bg: rgba(251, 113, 133, 0.26);
+    --overlay-backdrop: rgba(6, 3, 12, 0.5);
+    --overlay-backdrop-soft: rgba(20, 10, 36, 0.34);
+    --overlay-backdrop-strong: rgba(4, 2, 9, 0.72);
+    --surface-elevated: rgba(31, 20, 52, 0.9);
+    --surface-elevated-alt: rgba(33, 20, 55, 0.84);
+    --surface-elevated-focus: rgba(36, 21, 61, 0.95);
+    --surface-command: rgba(46, 26, 79, 0.6);
+    --status-info-border: rgba(192, 132, 252, 0.56);
+    --status-info-bg: rgba(61, 28, 102, 0.52);
+    --status-info-text: rgba(243, 232, 255, 0.98);
+    --status-warn-border: rgba(251, 191, 36, 0.58);
+    --status-warn-bg: rgba(69, 39, 10, 0.56);
+    --status-warn-text: rgba(254, 240, 138, 0.98);
+    --status-danger-border: rgba(251, 113, 133, 0.6);
+    --status-danger-bg: rgba(80, 18, 45, 0.56);
+    --status-danger-text: rgba(255, 228, 230, 0.98);
+    --status-success-border: rgba(74, 222, 128, 0.56);
+    --status-success-bg: rgba(20, 83, 45, 0.5);
+    --status-success-text: rgba(209, 250, 229, 0.98);
+    --status-success-ring: rgba(74, 222, 128, 0.18);
+    --status-dot-ring: rgba(74, 222, 128, 0.24);
+    --status-dot-glow: rgba(74, 222, 128, 0.26);
+    --status-dot-ring-pulse: rgba(74, 222, 128, 0.1);
+    --status-dot-glow-pulse: rgba(74, 222, 128, 0.34);
+    --console-tab-bg: rgba(35, 20, 58, 0.68);
+    --console-tab-border: rgba(167, 139, 250, 0.28);
+    --console-tab-text: rgba(221, 214, 254, 0.9);
+    --console-tab-active-bg: rgba(20, 83, 45, 0.48);
+    --console-tab-active-border: rgba(74, 222, 128, 0.58);
+    --console-tab-active-text: rgba(209, 250, 229, 0.98);
+    --console-tab-active-glow: rgba(74, 222, 128, 0.18);
+    --log-bg: #130a23;
+    --log-text: #f3e8ff;
+    --log-border: rgba(167, 139, 250, 0.24);
+    --panel-section-bg: #170f29;
+    --panel-section-border: rgba(167, 139, 250, 0.3);
+    --panel-item-bg: #170f29;
+    --panel-item-border: rgba(167, 139, 250, 0.28);
+    --editor-focus-border: rgba(192, 132, 252, 0.72);
+    --editor-focus-ring: rgba(192, 132, 252, 0.2);
+    --diagnostic-error: rgba(251, 113, 133, 0.95);
+    --diagnostic-error-ring: rgba(251, 113, 133, 0.26);
+    --diagnostic-warn: rgba(251, 191, 36, 0.95);
+    --diagnostic-warn-ring: rgba(251, 191, 36, 0.24);
+    --diagnostic-info: rgba(192, 132, 252, 0.95);
+    --diagnostic-info-ring: rgba(192, 132, 252, 0.26);
+    --diagnostic-lens-border: rgba(167, 139, 250, 0.38);
+    --diagnostic-lens-bg: rgba(33, 20, 55, 0.82);
+    --diagnostic-lens-text: rgba(237, 233, 254, 0.96);
+    --diagnostic-lens-error-border: rgba(251, 113, 133, 0.58);
+    --diagnostic-lens-error-bg: rgba(80, 18, 45, 0.5);
+    --diagnostic-lens-error-text: rgba(255, 228, 230, 0.98);
+    --diagnostic-lens-warn-border: rgba(251, 191, 36, 0.56);
+    --diagnostic-lens-warn-bg: rgba(69, 39, 10, 0.5);
+    --diagnostic-lens-warn-text: rgba(254, 240, 138, 0.98);
+    --diagnostic-lens-info-border: rgba(192, 132, 252, 0.56);
+    --diagnostic-lens-info-bg: rgba(61, 28, 102, 0.52);
+    --diagnostic-lens-info-text: rgba(243, 232, 255, 0.98);
+    --syntax-plain: #ede9fe;
+    --syntax-keyword: #c084fc;
+    --syntax-atom: #93c5fd;
+    --syntax-number: #93c5fd;
+    --syntax-def: #d8b4fe;
+    --syntax-variable: #f5edff;
+    --syntax-variable-2: #fdba74;
+    --syntax-variable-3: #86efac;
+    --syntax-property: #93c5fd;
+    --syntax-operator: #c084fc;
+    --syntax-comment: #b8a9d9;
+    --syntax-string: #bfdbfe;
+    --syntax-string-2: #86efac;
+    --syntax-meta: #b8a9d9;
+    --syntax-tag: #a78bfa;
+    --syntax-attribute: #93c5fd;
+    --syntax-qualifier: #86efac;
+    --syntax-builtin: #fdba74;
+    --syntax-bracket: #ede9fe;
+    --syntax-selection-bg: rgba(168, 85, 247, 0.3);
+    --syntax-selection-bg-focus: rgba(168, 85, 247, 0.44);
+    --syntax-active-line-bg: rgba(139, 92, 246, 0.16);
+    --syntax-cursor: #ede9fe;
+    --syntax-line-number: rgba(184, 169, 217, 0.9);
+    --syntax-line-number-active: #ede9fe;
+    --syntax-matching-bracket-bg: rgba(168, 85, 247, 0.24);
+    --syntax-matching-bracket-border: rgba(168, 85, 247, 0.64);
+    --syntax-nonmatching-bracket-bg: rgba(251, 113, 133, 0.24);
+    --syntax-nonmatching-bracket-border: rgba(251, 113, 133, 0.64);
+    --kbd-bg: rgba(167, 139, 250, 0.16);
+    --drag-handle-bg: #1f1434;
+    --drag-handle-dot: rgba(221, 214, 254, 0.9);
+    --drag-handle-glyph: rgba(221, 214, 254, 0.92);
+    --file-icon-opacity: 0.98;
+    --file-icon-filter: saturate(1.04) brightness(1.03);
+    --folder-icon-opacity: 0.99;
+    --folder-icon-filter: saturate(1.08) brightness(1.05);
+    --prompt-cover-text: rgba(243, 232, 255, 0.97);
+    --prompt-cover-text-shadow: 0 1px 0 rgba(20, 10, 36, 0.72), 0 0 6px rgba(20, 10, 36, 0.34);
+    --prompt-cover-bg: linear-gradient(180deg, rgba(243, 232, 255, 0.16), rgba(167, 139, 250, 0.18)), linear-gradient(180deg, rgba(36, 21, 61, 0.18), rgba(36, 21, 61, 0.4));
+    --prompt-cover-border: rgba(192, 132, 252, 0.52);
+    --prompt-cover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 -1px 0 rgba(20, 10, 36, 0.22);
+    --prompt-cover-hover-border: rgba(251, 113, 133, 0.62);
+    --prompt-arm-border: rgba(251, 113, 133, 0.62);
+    --prompt-arm-bg: radial-gradient(130% 120% at 50% 15%, rgba(251, 113, 133, 0.2), rgba(127, 29, 29, 0) 58%), linear-gradient(180deg, rgba(127, 29, 29, 0.62), rgba(80, 18, 45, 0.9));
+    --prompt-arm-text: rgba(255, 228, 230, 0.98);
+    --prompt-arm-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.24), inset 0 8px 16px rgba(20, 10, 36, 0.42);
+    --prompt-badge-border: rgba(251, 191, 36, 0.72);
+    --prompt-badge-bg: linear-gradient(180deg, rgba(251, 146, 60, 0.9), rgba(194, 65, 12, 0.94));
+    --prompt-badge-text: rgba(255, 247, 237, 0.99);
+    --prompt-badge-shadow: inset 0 0 0 1px rgba(255, 237, 213, 0.22), 0 0 0 1px rgba(194, 65, 12, 0.3);
+    --prompt-armed-border: rgba(251, 146, 60, 0.86);
+    --prompt-armed-bg: radial-gradient(140% 140% at 50% 0%, rgba(253, 186, 116, 0.25), rgba(253, 186, 116, 0) 55%), linear-gradient(180deg, rgba(220, 38, 38, 0.82), rgba(127, 29, 29, 0.96));
+    --prompt-armed-text: rgba(255, 237, 213, 0.99);
+    --prompt-armed-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.34), 0 0 0 1px rgba(194, 65, 12, 0.32), 0 0 16px rgba(239, 68, 68, 0.34);
+    --prompt-armed-hover-border: rgba(253, 186, 116, 0.96);
+    --prompt-armed-pulse-start: inset 0 0 0 1px rgba(251, 146, 60, 0.34), 0 0 0 1px rgba(194, 65, 12, 0.32), 0 0 12px rgba(239, 68, 68, 0.3);
+    --prompt-armed-pulse-end: inset 0 0 0 1px rgba(251, 146, 60, 0.44), 0 0 0 1px rgba(251, 146, 60, 0.4), 0 0 20px rgba(239, 68, 68, 0.44);
+    --prompt-danger-border: rgba(251, 113, 133, 0.62);
+    --prompt-danger-bg: rgba(127, 29, 29, 0.42);
+    --prompt-danger-bg-hover: rgba(127, 29, 29, 0.58);
+    --prompt-danger-hover-border: rgba(251, 113, 133, 0.8);
+    --scrollbar-thumb: rgba(167, 139, 250, 0.28);
+    --scrollbar-thumb-hover: rgba(192, 132, 252, 0.46);
+}
+
+:root[data-theme="retro"] {
+    color-scheme: dark;
+    --bg: #0b1010;
+    --surface-panel: #121a1a;
+    --surface-panel-alt: #1a2423;
+    --surface-panel-hover: #243231;
+    --surface-menu: #16211f;
+    --surface-soft: rgba(104, 229, 201, 0.16);
+    --surface-soft-hover: rgba(104, 229, 201, 0.25);
+    --surface-top-hover: rgba(255, 179, 93, 0.15);
+    --surface-top-active: rgba(255, 179, 93, 0.24);
+    --surface-active: rgba(255, 179, 93, 0.24);
+    --surface-selected: rgba(104, 229, 201, 0.28);
+    --surface-selected-soft: rgba(104, 229, 201, 0.2);
+    --surface-danger-soft: rgba(84, 32, 26, 0.88);
+    --surface-drop-target: rgba(104, 229, 201, 0.24);
+    --text: #e6efdc;
+    --muted: rgba(194, 207, 183, 0.84);
+    --text-muted-soft: rgba(208, 222, 197, 0.93);
+    --text-muted-quiet: rgba(194, 207, 183, 0.76);
+    --text-top-control: rgba(230, 239, 220, 0.96);
+    --text-accent-strong: #ffd89b;
+    --text-footer: rgba(193, 207, 183, 0.84);
+    --danger-contrast-text: #ffe8df;
+    --border: rgba(130, 162, 144, 0.42);
+    --border-soft: rgba(130, 162, 144, 0.32);
+    --border-control: rgba(130, 162, 144, 0.42);
+    --border-strong: rgba(170, 210, 186, 0.56);
+    --border-focus: rgba(255, 179, 93, 0.8);
+    --border-focus-soft: rgba(255, 179, 93, 0.66);
+    --ring-focus: rgba(255, 179, 93, 0.28);
+    --ring-focus-soft: rgba(255, 179, 93, 0.22);
+    --border-top-hover: rgba(255, 179, 93, 0.34);
+    --drop-target-border: rgba(170, 210, 186, 0.5);
+    --accent: #ffb35d;
+    --accent-info: #68e5c9;
+    --accent-warn: #ffd27c;
+    --danger: #ff8a74;
+    --btn-bg: var(--surface-panel-alt);
+    --btn-bg-hover: var(--surface-panel-hover);
+    --btn-border: var(--border-control);
+    --btn-border-hover: var(--border-strong);
+    --btn-primary-bg: rgba(255, 179, 93, 0.32);
+    --btn-primary-border: rgba(255, 210, 124, 0.58);
+    --btn-primary-shadow: rgba(255, 210, 124, 0.22);
+    --btn-active-bg: rgba(104, 229, 201, 0.24);
+    --btn-active-border: rgba(170, 210, 186, 0.58);
+    --btn-active-shadow: rgba(170, 210, 186, 0.2);
+    --btn-danger-bg: var(--surface-danger-soft);
+    --btn-danger-border: rgba(255, 138, 116, 0.56);
+    --btn-pressed-border: rgba(255, 210, 124, 0.72);
+    --btn-pressed-text: #ffeac0;
+    --btn-pressed-shadow: rgba(255, 210, 124, 0.26);
+    --select-arrow-color: rgba(208, 222, 197, 0.9);
+    --files-search-bg: #16211f;
+    --files-search-border: rgba(130, 162, 144, 0.36);
+    --files-option-text: rgba(230, 239, 220, 0.9);
+    --files-option-hover-bg: rgba(104, 229, 201, 0.18);
+    --files-option-selected-bg: rgba(255, 179, 93, 0.24);
+    --files-option-selected-text: #ffd89b;
+    --files-section-bg: rgba(130, 162, 144, 0.2);
+    --files-section-bg-hover: rgba(130, 162, 144, 0.32);
+    --files-section-bg-open: rgba(255, 179, 93, 0.32);
+    --files-section-text: rgba(230, 239, 220, 0.96);
+    --files-caret-color: rgba(194, 207, 183, 0.78);
+    --files-tree-guide: rgba(194, 207, 183, 0.58);
+    --menu-bg: #15201e;
+    --menu-shadow: 0 16px 36px rgba(6, 11, 10, 0.6);
+    --menu-danger-border: rgba(255, 138, 116, 0.42);
+    --menu-danger-bg: rgba(84, 32, 26, 0.32);
+    --menu-danger-border-hover: rgba(255, 138, 116, 0.58);
+    --menu-danger-bg-hover: rgba(110, 43, 32, 0.56);
+    --section-danger-hover-bg: rgba(255, 138, 116, 0.26);
+    --overlay-backdrop: rgba(5, 8, 6, 0.56);
+    --overlay-backdrop-soft: rgba(11, 17, 15, 0.42);
+    --overlay-backdrop-strong: rgba(4, 6, 4, 0.76);
+    --surface-elevated: rgba(22, 33, 31, 0.92);
+    --surface-elevated-alt: rgba(23, 35, 33, 0.86);
+    --surface-elevated-focus: rgba(29, 45, 41, 0.95);
+    --surface-command: rgba(33, 48, 44, 0.64);
+    --status-info-border: rgba(255, 179, 93, 0.56);
+    --status-info-bg: rgba(96, 69, 26, 0.56);
+    --status-info-text: rgba(255, 236, 198, 0.98);
+    --status-warn-border: rgba(255, 210, 124, 0.62);
+    --status-warn-bg: rgba(101, 62, 18, 0.58);
+    --status-warn-text: rgba(255, 233, 172, 0.98);
+    --status-danger-border: rgba(255, 138, 116, 0.62);
+    --status-danger-bg: rgba(94, 33, 27, 0.64);
+    --status-danger-text: rgba(255, 232, 224, 0.98);
+    --status-success-border: rgba(104, 229, 201, 0.58);
+    --status-success-bg: rgba(20, 88, 70, 0.52);
+    --status-success-text: rgba(209, 255, 239, 0.98);
+    --status-success-ring: rgba(104, 229, 201, 0.2);
+    --status-dot-ring: rgba(104, 229, 201, 0.24);
+    --status-dot-glow: rgba(104, 229, 201, 0.3);
+    --status-dot-ring-pulse: rgba(104, 229, 201, 0.1);
+    --status-dot-glow-pulse: rgba(104, 229, 201, 0.4);
+    --console-tab-bg: rgba(24, 36, 34, 0.76);
+    --console-tab-border: rgba(130, 162, 144, 0.34);
+    --console-tab-text: rgba(208, 222, 197, 0.92);
+    --console-tab-active-bg: rgba(26, 91, 72, 0.5);
+    --console-tab-active-border: rgba(104, 229, 201, 0.62);
+    --console-tab-active-text: rgba(215, 253, 240, 0.98);
+    --console-tab-active-glow: rgba(104, 229, 201, 0.24);
+    --log-bg: #0f1716;
+    --log-text: #e6efdc;
+    --log-border: rgba(130, 162, 144, 0.28);
+    --panel-section-bg: #121a1a;
+    --panel-section-border: rgba(130, 162, 144, 0.32);
+    --panel-item-bg: #121a1a;
+    --panel-item-border: rgba(130, 162, 144, 0.3);
+    --editor-focus-border: rgba(255, 210, 124, 0.74);
+    --editor-focus-ring: rgba(255, 210, 124, 0.22);
+    --diagnostic-error: rgba(255, 138, 116, 0.94);
+    --diagnostic-error-ring: rgba(255, 138, 116, 0.24);
+    --diagnostic-warn: rgba(255, 210, 124, 0.94);
+    --diagnostic-warn-ring: rgba(255, 210, 124, 0.22);
+    --diagnostic-info: rgba(104, 229, 201, 0.94);
+    --diagnostic-info-ring: rgba(104, 229, 201, 0.22);
+    --diagnostic-lens-border: rgba(130, 162, 144, 0.42);
+    --diagnostic-lens-bg: rgba(28, 42, 39, 0.84);
+    --diagnostic-lens-text: rgba(224, 239, 212, 0.97);
+    --kbd-bg: rgba(130, 162, 144, 0.2);
+    --drag-handle-bg: #1c2826;
+    --drag-handle-dot: rgba(208, 222, 197, 0.9);
+    --drag-handle-glyph: rgba(210, 223, 200, 0.92);
+    --scrollbar-thumb: rgba(130, 162, 144, 0.36);
+    --scrollbar-thumb-hover: rgba(170, 210, 186, 0.54);
+}
+
+:root[data-theme="retro"] body {
+    background:
+        radial-gradient(1150px 700px at 112% -12%, rgba(255, 179, 93, 0.2), transparent 62%),
+        radial-gradient(940px 580px at -8% 118%, rgba(104, 229, 201, 0.14), transparent 64%),
+        repeating-linear-gradient(0deg, rgba(255, 235, 198, 0.04) 0 1px, transparent 1px 4px),
+        repeating-linear-gradient(90deg, rgba(112, 128, 120, 0.04) 0 1px, transparent 1px 7px),
+        linear-gradient(130deg, #080d0c 0%, #111917 42%, #0b1010 100%);
+    background-size: auto, auto, 100% 4px, 180px 180px, 100% 100%;
+    background-attachment: fixed, fixed, fixed, fixed, fixed;
+    animation: retro-theme-drift 30s linear infinite;
+    color: var(--text);
+}
+
+@keyframes retro-theme-drift {
+    0% {
+        background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+    }
+    100% {
+        background-position: -120px 70px, 140px -100px, 0 4px, 180px 180px, 0 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root[data-theme="retro"] body {
+        animation: none;
+    }
+}
+
+:root[data-theme="retro"] .top,
+:root[data-theme="retro"] .foot,
+:root[data-theme="retro"] .card,
+:root[data-theme="retro"] .card-hd {
+    background:
+        linear-gradient(174deg, rgba(34, 48, 45, 0.92), rgba(16, 23, 21, 0.98)),
+        repeating-linear-gradient(90deg, rgba(255, 179, 93, 0.05) 0 14px, transparent 14px 28px);
+    border-color: var(--border-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 239, 200, 0.08), inset 0 0 0 1px rgba(104, 229, 201, 0.06);
+}
+
+:root[data-theme="retro"] .files-title,
+:root[data-theme="retro"] .editor-title,
+:root[data-theme="retro"] .layout-title {
+    color: var(--text-accent-strong);
+    text-shadow: 0 0 10px rgba(255, 179, 93, 0.14);
+}
+
+:root[data-theme="retro"] .status,
+:root[data-theme="retro"] .health-pill {
+    background: linear-gradient(180deg, rgba(31, 45, 41, 0.9), rgba(19, 29, 26, 0.98));
+    border-color: rgba(130, 162, 144, 0.4);
+    color: rgba(230, 239, 220, 0.95);
+}
+
+:root[data-theme="retro"] .dot {
+    box-shadow: 0 0 0 4px rgba(104, 229, 201, 0.24);
+}
+
+:root[data-theme="retro"] button {
+    background: linear-gradient(180deg, rgba(37, 54, 50, 0.92), rgba(24, 35, 32, 0.98));
+    border-color: rgba(130, 162, 144, 0.44);
+    color: #e6efdc;
+    box-shadow: inset 0 1px 0 rgba(255, 242, 212, 0.1);
+}
+
+:root[data-theme="retro"] button:hover {
+    background: linear-gradient(180deg, rgba(46, 66, 60, 0.94), rgba(29, 44, 39, 0.99));
+    border-color: rgba(255, 210, 124, 0.6);
+}
+
+:root[data-theme="retro"] .top.strip button {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: rgba(234, 243, 217, 0.96);
+}
+
+:root[data-theme="retro"] .top.strip button:hover {
+    background: rgba(255, 179, 93, 0.14);
+    border-color: rgba(255, 210, 124, 0.28);
+}
+
+:root[data-theme="retro"] .top.strip button[data-panel-toggle="true"][data-panel-open="false"] {
+    color: rgba(188, 201, 177, 0.9);
+    text-decoration-color: rgba(188, 201, 177, 0.76);
+}
+
+:root[data-theme="retro"] .top.strip button[data-panel-toggle="true"][data-panel-open="false"]:hover {
+    color: rgba(221, 232, 205, 0.96);
+    text-decoration-color: rgba(221, 232, 205, 0.9);
+}
+
+:root[data-theme="retro"] button.primary {
+    background: linear-gradient(180deg, rgba(255, 179, 93, 0.38), rgba(164, 109, 43, 0.44));
+    border-color: rgba(255, 210, 124, 0.6);
+    color: #ffe9c0;
+}
+
+:root[data-theme="retro"] button.danger {
+    background: linear-gradient(180deg, rgba(104, 40, 31, 0.9), rgba(71, 27, 23, 0.98));
+    border-color: rgba(255, 138, 116, 0.56);
+    color: #ffe9df;
+}
+
+:root[data-theme="retro"] button:focus-visible,
+:root[data-theme="retro"] .top-theme-select:focus-visible {
+    border-color: rgba(255, 210, 124, 0.78);
+    box-shadow: 0 0 0 2px rgba(255, 210, 124, 0.24);
+}
+
+:root[data-theme="retro"] .top-theme-select {
+    background-color: rgba(22, 33, 30, 0.9);
+    color: rgba(234, 243, 217, 0.96);
+}
+
+:root[data-theme="retro"] .top-theme-select option {
+    background-color: #16211f;
+    color: #e6efdc;
+}
+
+:root[data-theme="retro"] .quick-open,
+:root[data-theme="retro"] .layout-panel {
+    background:
+        linear-gradient(180deg, rgba(27, 40, 36, 0.98), rgba(17, 26, 23, 0.99)),
+        repeating-linear-gradient(90deg, rgba(255, 179, 93, 0.04) 0 12px, transparent 12px 24px);
+    border-color: rgba(130, 162, 144, 0.36);
+    box-shadow: 0 18px 38px rgba(7, 12, 10, 0.64);
+}
+
+:root[data-theme="retro"] .quick-open-backdrop,
+:root[data-theme="retro"] .layout-backdrop {
+    background: rgba(6, 9, 6, 0.6);
+}
+
+:root[data-theme="retro"] .quick-open-sub,
+:root[data-theme="retro"] .quick-open-meta,
+:root[data-theme="retro"] .quick-open-hint,
+:root[data-theme="retro"] .quick-open-empty {
+    color: rgba(194, 207, 183, 0.82);
+}
+
+:root[data-theme="retro"] #quickOpenInput,
+:root[data-theme="retro"] #commandPaletteInput,
+:root[data-theme="retro"] #editorFindInput,
+:root[data-theme="retro"] #editorReplaceInput,
+:root[data-theme="retro"] #symbolSearchInput,
+:root[data-theme="retro"] #projectSearchInput,
+:root[data-theme="retro"] #projectReplaceInput {
+    background: #1d2a27;
+    color: #e6efdc;
+    border-color: rgba(130, 162, 144, 0.38);
+}
+
+:root[data-theme="retro"] .quick-open-item:hover {
+    background: rgba(255, 179, 93, 0.18);
+}
+
+:root[data-theme="retro"] .quick-open-item[data-active="true"] {
+    background: rgba(104, 229, 201, 0.22);
+    border-color: rgba(170, 210, 186, 0.52);
+}
+
+:root[data-theme="retro"] .file-section-toggle {
+    background: rgba(130, 162, 144, 0.2);
+    color: rgba(230, 239, 220, 0.95);
+}
+
+:root[data-theme="retro"] .file-section-action {
+    background: rgba(130, 162, 144, 0.2);
+    color: rgba(230, 239, 220, 0.95);
+}
+
+:root[data-theme="retro"] .file-section-toggle:hover,
+:root[data-theme="retro"] .file-section-action:hover {
+    background: rgba(130, 162, 144, 0.32);
+    border-color: transparent;
+}
+
+:root[data-theme="retro"] .file-section-toggle[aria-expanded="true"] {
+    background: rgba(255, 179, 93, 0.32);
+    color: #ffd89b;
+}
+
+:root[data-theme="retro"] .file-section-action[data-variant="danger"]:hover {
+    background: rgba(255, 138, 116, 0.24);
+    color: #ffe8df;
+}
+
+:root[data-theme="retro"] .file-row[data-active="true"],
+:root[data-theme="retro"] .editor-tab[data-active="true"],
+:root[data-theme="retro"] .console-tab[aria-selected="true"] {
+    box-shadow: 0 0 0 1px rgba(255, 210, 124, 0.35), 0 0 14px rgba(104, 229, 201, 0.16);
+}
+
+:root[data-theme="temple"] {
+    color-scheme: light;
+    --bg: #0f3fc6;
+    --surface-panel: #f7f0dc;
+    --surface-panel-alt: #efe5cc;
+    --surface-panel-hover: #e8dcc0;
+    --surface-menu: #fdf6e3;
+    --surface-soft: rgba(15, 63, 198, 0.12);
+    --surface-soft-hover: rgba(15, 63, 198, 0.2);
+    --surface-top-hover: rgba(15, 63, 198, 0.12);
+    --surface-top-active: rgba(15, 63, 198, 0.18);
+    --surface-active: rgba(15, 63, 198, 0.2);
+    --surface-selected: rgba(31, 79, 255, 0.18);
+    --surface-selected-soft: rgba(31, 79, 255, 0.12);
+    --surface-danger-soft: rgba(194, 74, 59, 0.16);
+    --surface-drop-target: rgba(31, 79, 255, 0.18);
+    --text: #15214a;
+    --muted: rgba(21, 33, 74, 0.74);
+    --text-muted-soft: rgba(21, 33, 74, 0.86);
+    --text-muted-quiet: rgba(21, 33, 74, 0.66);
+    --text-top-control: rgba(15, 30, 72, 0.95);
+    --text-accent-strong: #0e1d4a;
+    --text-footer: rgba(21, 33, 74, 0.8);
+    --danger-contrast-text: #fff4ef;
+    --border: rgba(21, 33, 74, 0.34);
+    --border-soft: rgba(21, 33, 74, 0.22);
+    --border-control: rgba(21, 33, 74, 0.28);
+    --border-strong: rgba(21, 33, 74, 0.45);
+    --border-focus: rgba(31, 79, 255, 0.6);
+    --border-focus-soft: rgba(31, 79, 255, 0.48);
+    --ring-focus: rgba(31, 79, 255, 0.24);
+    --ring-focus-soft: rgba(31, 79, 255, 0.18);
+    --border-top-hover: rgba(21, 33, 74, 0.32);
+    --drop-target-border: rgba(31, 79, 255, 0.42);
+    --accent: #1f4fff;
+    --accent-info: #0f8dff;
+    --accent-warn: #c88e00;
+    --danger: #c24a3b;
+    --health-ok-border: rgba(19, 142, 88, 0.4);
+    --health-ok-text: rgba(18, 99, 67, 0.95);
+    --health-warn-border: rgba(200, 142, 0, 0.46);
+    --health-warn-text: rgba(130, 84, 0, 0.96);
+    --health-error-border: rgba(194, 74, 59, 0.46);
+    --health-error-text: rgba(158, 45, 33, 0.96);
+    --btn-bg: var(--surface-panel-alt);
+    --btn-bg-hover: var(--surface-panel-hover);
+    --btn-border: var(--border-control);
+    --btn-border-hover: var(--border-strong);
+    --btn-primary-bg: rgba(31, 79, 255, 0.14);
+    --btn-primary-border: rgba(31, 79, 255, 0.4);
+    --btn-primary-shadow: rgba(31, 79, 255, 0.15);
+    --btn-active-bg: rgba(13, 107, 179, 0.14);
+    --btn-active-border: rgba(15, 141, 255, 0.45);
+    --btn-active-shadow: rgba(15, 141, 255, 0.2);
+    --btn-danger-bg: var(--surface-danger-soft);
+    --btn-danger-border: rgba(194, 74, 59, 0.42);
+    --btn-pressed-border: rgba(31, 79, 255, 0.56);
+    --btn-pressed-text: #153192;
+    --btn-pressed-shadow: rgba(31, 79, 255, 0.2);
+    --select-arrow-color: rgba(21, 33, 74, 0.85);
+    --files-search-bg: #fbf3de;
+    --files-search-border: rgba(21, 33, 74, 0.22);
+    --files-option-text: rgba(21, 33, 74, 0.9);
+    --files-option-hover-bg: rgba(31, 79, 255, 0.1);
+    --files-option-selected-bg: rgba(31, 79, 255, 0.16);
+    --files-option-selected-text: #0e1d4a;
+    --files-section-bg: rgba(31, 79, 255, 0.1);
+    --files-section-bg-hover: rgba(31, 79, 255, 0.16);
+    --files-section-bg-open: rgba(31, 79, 255, 0.2);
+    --files-section-text: rgba(21, 33, 74, 0.95);
+    --files-caret-color: rgba(21, 33, 74, 0.68);
+    --files-tree-guide: rgba(21, 33, 74, 0.46);
+    --menu-bg: #fcf4df;
+    --menu-shadow: 0 14px 34px rgba(15, 35, 94, 0.26);
+    --menu-danger-border: rgba(194, 74, 59, 0.36);
+    --menu-danger-bg: rgba(194, 74, 59, 0.12);
+    --menu-danger-border-hover: rgba(194, 74, 59, 0.5);
+    --menu-danger-bg-hover: rgba(194, 74, 59, 0.2);
+    --section-danger-hover-bg: rgba(194, 74, 59, 0.14);
+    --overlay-backdrop: rgba(7, 21, 62, 0.4);
+    --overlay-backdrop-soft: rgba(7, 21, 62, 0.3);
+    --overlay-backdrop-strong: rgba(7, 21, 62, 0.58);
+    --surface-elevated: rgba(248, 241, 224, 0.95);
+    --surface-elevated-alt: rgba(242, 233, 211, 0.92);
+    --surface-elevated-focus: rgba(252, 244, 226, 0.98);
+    --surface-command: rgba(232, 223, 200, 0.92);
+    --status-info-border: rgba(31, 79, 255, 0.45);
+    --status-info-bg: rgba(31, 79, 255, 0.12);
+    --status-info-text: rgba(18, 38, 102, 0.95);
+    --status-warn-border: rgba(200, 142, 0, 0.48);
+    --status-warn-bg: rgba(200, 142, 0, 0.14);
+    --status-warn-text: rgba(108, 73, 0, 0.96);
+    --status-danger-border: rgba(194, 74, 59, 0.5);
+    --status-danger-bg: rgba(194, 74, 59, 0.14);
+    --status-danger-text: rgba(135, 42, 31, 0.96);
+    --status-success-border: rgba(19, 142, 88, 0.46);
+    --status-success-bg: rgba(19, 142, 88, 0.14);
+    --status-success-text: rgba(16, 96, 62, 0.96);
+    --status-success-ring: rgba(19, 142, 88, 0.14);
+    --status-dot-ring: rgba(19, 142, 88, 0.2);
+    --status-dot-glow: rgba(19, 142, 88, 0.26);
+    --status-dot-ring-pulse: rgba(19, 142, 88, 0.08);
+    --status-dot-glow-pulse: rgba(19, 142, 88, 0.32);
+    --console-tab-bg: rgba(237, 228, 206, 0.9);
+    --console-tab-border: rgba(21, 33, 74, 0.24);
+    --console-tab-text: rgba(21, 33, 74, 0.9);
+    --console-tab-active-bg: rgba(31, 79, 255, 0.14);
+    --console-tab-active-border: rgba(31, 79, 255, 0.45);
+    --console-tab-active-text: rgba(15, 39, 112, 0.96);
+    --console-tab-active-glow: rgba(31, 79, 255, 0.16);
+    --log-bg: #f4ecd6;
+    --log-text: #15214a;
+    --log-border: rgba(21, 33, 74, 0.2);
+    --panel-section-bg: #f7f0dc;
+    --panel-section-border: rgba(21, 33, 74, 0.22);
+    --panel-item-bg: #f7f0dc;
+    --panel-item-border: rgba(21, 33, 74, 0.2);
+    --editor-focus-border: rgba(31, 79, 255, 0.56);
+    --editor-focus-ring: rgba(31, 79, 255, 0.18);
+    --diagnostic-error: rgba(194, 74, 59, 0.95);
+    --diagnostic-error-ring: rgba(194, 74, 59, 0.22);
+    --diagnostic-warn: rgba(200, 142, 0, 0.94);
+    --diagnostic-warn-ring: rgba(200, 142, 0, 0.2);
+    --diagnostic-info: rgba(31, 79, 255, 0.94);
+    --diagnostic-info-ring: rgba(31, 79, 255, 0.2);
+    --diagnostic-lens-border: rgba(21, 33, 74, 0.28);
+    --diagnostic-lens-bg: rgba(248, 241, 224, 0.95);
+    --diagnostic-lens-text: rgba(20, 33, 76, 0.96);
+    --syntax-plain: #172a62;
+    --syntax-keyword: #1f4fff;
+    --syntax-atom: #008dcf;
+    --syntax-number: #b67d00;
+    --syntax-def: #2f53da;
+    --syntax-variable: #172a62;
+    --syntax-variable-2: #b3342d;
+    --syntax-variable-3: #0f8954;
+    --syntax-property: #1f4fff;
+    --syntax-operator: #1f4fff;
+    --syntax-comment: #6777a0;
+    --syntax-string: #6a5410;
+    --syntax-string-2: #0f8954;
+    --syntax-meta: #6777a0;
+    --syntax-tag: #1f4fff;
+    --syntax-attribute: #2f53da;
+    --syntax-qualifier: #0f8954;
+    --syntax-builtin: #b67d00;
+    --syntax-bracket: #172a62;
+    --syntax-selection-bg: rgba(31, 79, 255, 0.18);
+    --syntax-selection-bg-focus: rgba(31, 79, 255, 0.28);
+    --syntax-active-line-bg: rgba(31, 79, 255, 0.1);
+    --syntax-cursor: #172a62;
+    --syntax-line-number: rgba(103, 119, 160, 0.95);
+    --syntax-line-number-active: #172a62;
+    --syntax-matching-bracket-bg: rgba(31, 79, 255, 0.16);
+    --syntax-matching-bracket-border: rgba(31, 79, 255, 0.44);
+    --syntax-nonmatching-bracket-bg: rgba(194, 74, 59, 0.16);
+    --syntax-nonmatching-bracket-border: rgba(194, 74, 59, 0.44);
+    --kbd-bg: rgba(31, 79, 255, 0.12);
+    --drag-handle-bg: #e6dac0;
+    --drag-handle-dot: rgba(21, 33, 74, 0.9);
+    --drag-handle-glyph: rgba(21, 33, 74, 0.9);
+    --scrollbar-thumb: rgba(21, 33, 74, 0.28);
+    --scrollbar-thumb-hover: rgba(21, 33, 74, 0.44);
+}
+
+:root[data-theme="temple"] body {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 42%),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 4px),
+        linear-gradient(132deg, #0b33ae 0%, #1447d1 55%, #0a2f9f 100%);
+    color: var(--text);
+}
+
+:root[data-theme="temple"] .top,
+:root[data-theme="temple"] .foot,
+:root[data-theme="temple"] .card,
+:root[data-theme="temple"] .card-hd {
+    background: linear-gradient(180deg, rgba(249, 243, 227, 0.96), rgba(241, 232, 209, 0.96));
+    border-color: rgba(21, 33, 74, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66);
+}
+
+:root[data-theme="temple"] .top.strip button {
+    color: rgba(17, 31, 74, 0.95);
+}
+
+:root[data-theme="temple"] .top.strip button[data-panel-toggle="true"][data-panel-open="false"] {
+    color: rgba(21, 33, 74, 0.68);
+    text-decoration-color: rgba(21, 33, 74, 0.68);
+}
+
+:root[data-theme="temple"] .top-theme-select {
+    background-color: rgba(247, 240, 220, 0.95);
+    color: rgba(17, 31, 74, 0.96);
+}
+
+:root[data-theme="temple"] .top-theme-select option {
+    background-color: #f7f0dc;
+    color: #15214a;
+}
+
+:root[data-theme="temple"] .quick-open,
+:root[data-theme="temple"] .layout-panel {
+    background: linear-gradient(180deg, rgba(251, 245, 230, 0.98), rgba(243, 235, 214, 0.98));
+    border-color: rgba(21, 33, 74, 0.24);
+    box-shadow: 0 16px 34px rgba(10, 31, 94, 0.26);
+}
+
+:root[data-theme="temple"] .file-section-toggle {
+    background: rgba(31, 79, 255, 0.1);
+    color: rgba(21, 33, 74, 0.95);
+}
+
+:root[data-theme="temple"] .file-section-toggle:hover {
+    background: rgba(31, 79, 255, 0.16);
+}
+
+:root[data-theme="temple"] .file-section-toggle[aria-expanded="true"] {
+    background: rgba(31, 79, 255, 0.22);
+    color: #0d1f52;
+}
+
+:root[data-theme="temple"] #editor,
+:root[data-theme="temple"] .CodeMirror {
+    --editor-surface: #fdf6e3;
+    --editor-gutter-surface: #f3e8cf;
+    background: var(--editor-surface) !important;
+}
+
+:root[data-theme="temple"] .runner,
+:root[data-theme="temple"] .log {
+    background: #f4ecd6;
+    color: #15214a;
+    border-color: rgba(21, 33, 74, 0.2);
+}
+
+:root[data-theme="temple"] .file-row[data-active="true"],
+:root[data-theme="temple"] .editor-tab[data-active="true"],
+:root[data-theme="temple"] .console-tab[aria-selected="true"] {
+    box-shadow: 0 0 0 1px rgba(31, 79, 255, 0.36), 0 0 10px rgba(31, 79, 255, 0.2);
 }
 
 :root[data-theme="purple"] body {
@@ -92,25 +876,10 @@
     box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.28);
 }
 
-:root[data-theme="purple"] .top-theme-select {
-    background-color: #24153d;
-    border-color: rgba(167, 139, 250, 0.35);
-    color: #f3e8ff;
-    background-image:
-        linear-gradient(45deg, transparent 50%, rgba(221, 214, 254, 0.9) 50%),
-        linear-gradient(135deg, rgba(221, 214, 254, 0.9) 50%, transparent 50%);
-}
-
-:root[data-theme="purple"] .top-theme-select:hover {
-    background-color: #2b1a49;
-    border-color: rgba(192, 132, 252, 0.5);
-}
-
 :root[data-theme="purple"] .files-search,
 :root[data-theme="purple"] #fileSearch,
 :root[data-theme="purple"] #fileSearchClear,
-:root[data-theme="purple"] .files-sort select,
-:root[data-theme="purple"] #gameSelect {
+:root[data-theme="purple"] .files-sort select {
     background: #201536;
     color: #f3e8ff;
 }
@@ -125,16 +894,59 @@
     border-color: rgba(192, 132, 252, 0.5);
 }
 
-:root[data-theme="purple"] .files-games {
-    border-top-color: rgba(167, 139, 250, 0.24);
-}
-
-:root[data-theme="purple"] .files-games-label,
 :root[data-theme="purple"] .files-sub,
 :root[data-theme="purple"] .files-menu-label,
 :root[data-theme="purple"] .file-info,
 :root[data-theme="purple"] .file-section {
     color: rgba(221, 214, 254, 0.78);
+}
+
+:root[data-theme="purple"] .file-section-toggle {
+    background: rgba(167, 139, 250, 0.2);
+    color: rgba(243, 232, 255, 0.95);
+}
+
+:root[data-theme="purple"] .file-section-action {
+    background: rgba(167, 139, 250, 0.2);
+    color: rgba(243, 232, 255, 0.95);
+}
+
+:root[data-theme="purple"] .file-section-toggle:hover {
+    background: rgba(167, 139, 250, 0.3);
+    border-color: transparent;
+}
+
+:root[data-theme="purple"] .file-section-action:hover {
+    background: rgba(167, 139, 250, 0.3);
+    border-color: transparent;
+}
+
+:root[data-theme="purple"] .file-section-toggle[aria-expanded="true"] {
+    background: rgba(124, 58, 237, 0.36);
+    color: #faf5ff;
+}
+
+:root[data-theme="purple"] .file-section-action[data-variant="danger"]:hover {
+    background: rgba(251, 113, 133, 0.26);
+    color: #ffe4e6;
+}
+
+:root[data-theme="purple"] .files-games-option {
+    color: rgba(243, 232, 255, 0.88);
+}
+
+:root[data-theme="purple"] .files-games-option:hover {
+    background: rgba(192, 132, 252, 0.16);
+}
+
+:root[data-theme="purple"] .files-games-option[data-selected="true"] {
+    background: rgba(192, 132, 252, 0.26);
+    color: #faf5ff;
+}
+
+:root[data-theme="purple"] .files-games-option:focus-visible {
+    border-color: rgba(192, 132, 252, 0.62);
+    box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.2);
 }
 
 :root[data-theme="purple"] .files-menu {
@@ -280,7 +1092,13 @@
 }
 
 :root[data-theme="purple"] #editor,
-:root[data-theme="purple"] .CodeMirror,
+:root[data-theme="purple"] .CodeMirror {
+    --editor-surface: var(--bg);
+    --editor-gutter-surface: var(--bg);
+    background: var(--bg);
+    color: #f3e8ff;
+}
+
 :root[data-theme="purple"] .runner,
 :root[data-theme="purple"] .log {
     background: #130a23;
@@ -292,14 +1110,14 @@
 }
 
 :root[data-theme="purple"] .CodeMirror-gutters {
-    background: #130a23;
+    background: var(--bg);
     border-right-color: rgba(167, 139, 250, 0.28);
 }
 
 :root[data-theme="purple"] .editor-panel .CodeMirror-scrollbar-filler,
 :root[data-theme="purple"] #editor::-webkit-scrollbar-corner,
 :root[data-theme="purple"] .editor-panel .CodeMirror-scroll::-webkit-scrollbar-corner {
-    background: #130a23;
+    background: var(--bg);
 }
 
 :root[data-theme="purple"] .editor-shortcut-help-btn {
@@ -307,13 +1125,236 @@
     color: rgba(243, 232, 255, 0.95);
 }
 
+:root[data-theme="retro"] #editor,
+:root[data-theme="retro"] .CodeMirror {
+    --editor-surface: var(--bg);
+    --editor-gutter-surface: var(--bg);
+    background: var(--bg);
+    color: var(--text);
+}
+
+:root[data-theme="retro"] .runner,
+:root[data-theme="retro"] .log {
+    background: #0f1716;
+    color: var(--text);
+}
+
+:root[data-theme="retro"] .runner {
+    background: transparent;
+}
+
+:root[data-theme="retro"] .CodeMirror-gutters {
+    background: var(--bg);
+    border-right-color: rgba(130, 162, 144, 0.34);
+}
+
+:root[data-theme="retro"] .editor-panel .CodeMirror-scrollbar-filler,
+:root[data-theme="retro"] #editor::-webkit-scrollbar-corner,
+:root[data-theme="retro"] .editor-panel .CodeMirror-scroll::-webkit-scrollbar-corner {
+    background: var(--bg);
+}
+
 :root[data-theme="light"] {
+    color-scheme: light;
     --bg: #f6f7fb;
+    --surface-panel: #ffffff;
+    --surface-panel-alt: #ffffff;
+    --surface-panel-hover: #f1f5f9;
+    --surface-menu: #ffffff;
+    --surface-soft: #e2e8f0;
+    --surface-soft-hover: #cbd5e1;
+    --surface-top-hover: rgba(148, 163, 184, 0.18);
+    --surface-top-active: rgba(148, 163, 184, 0.24);
+    --surface-active: #e0f2fe;
+    --surface-selected: #dbeafe;
+    --surface-selected-soft: #e0f2fe;
+    --surface-danger-soft: #ffe4e6;
+    --surface-drop-target: #e0f2fe;
     --text: #0f172a;
     --muted: rgba(71, 85, 105, 0.9);
+    --text-muted-soft: rgba(71, 85, 105, 0.95);
+    --text-muted-quiet: rgba(71, 85, 105, 0.82);
+    --text-top-control: #0f172a;
+    --text-accent-strong: #0c4a6e;
+    --text-footer: rgba(71, 85, 105, 0.8);
+    --danger-contrast-text: #991b1b;
     --border: rgba(148, 163, 184, 0.45);
+    --border-soft: rgba(148, 163, 184, 0.35);
+    --border-control: rgba(148, 163, 184, 0.45);
+    --border-strong: rgba(148, 163, 184, 0.6);
+    --border-focus: rgba(14, 165, 233, 0.65);
+    --border-focus-soft: rgba(14, 165, 233, 0.58);
+    --ring-focus: rgba(14, 165, 233, 0.22);
+    --ring-focus-soft: rgba(14, 165, 233, 0.18);
+    --border-top-hover: rgba(148, 163, 184, 0.36);
+    --drop-target-border: rgba(14, 165, 233, 0.45);
     --accent: #0ea5e9;
+    --accent-info: #0ea5e9;
+    --accent-warn: #d97706;
     --danger: #e11d48;
+    --health-ok-border: rgba(22, 163, 74, 0.44);
+    --health-ok-text: rgba(21, 128, 61, 0.96);
+    --health-warn-border: rgba(217, 119, 6, 0.46);
+    --health-warn-text: rgba(146, 64, 14, 0.96);
+    --health-error-border: rgba(225, 29, 72, 0.46);
+    --health-error-text: rgba(159, 18, 57, 0.96);
+    --btn-bg: #ffffff;
+    --btn-bg-hover: #f1f5f9;
+    --btn-border: rgba(148, 163, 184, 0.45);
+    --btn-border-hover: rgba(148, 163, 184, 0.6);
+    --btn-primary-bg: #e0f2fe;
+    --btn-primary-border: rgba(14, 165, 233, 0.6);
+    --btn-primary-shadow: rgba(14, 165, 233, 0.18);
+    --btn-active-bg: #dbeafe;
+    --btn-active-border: rgba(14, 165, 233, 0.45);
+    --btn-active-shadow: rgba(14, 165, 233, 0.18);
+    --btn-danger-bg: #ffe4e6;
+    --btn-danger-border: rgba(244, 63, 94, 0.55);
+    --btn-pressed-border: rgba(14, 165, 233, 0.55);
+    --btn-pressed-text: #0c4a6e;
+    --btn-pressed-shadow: rgba(14, 165, 233, 0.16);
+    --select-arrow-color: rgba(71, 85, 105, 0.88);
+    --files-search-bg: #ffffff;
+    --files-search-border: rgba(148, 163, 184, 0.35);
+    --files-option-text: #0f172a;
+    --files-option-hover-bg: #f1f5f9;
+    --files-option-selected-bg: #dbeafe;
+    --files-option-selected-text: #0c4a6e;
+    --files-section-bg: #e2e8f0;
+    --files-section-bg-hover: #cbd5e1;
+    --files-section-bg-open: #dbeafe;
+    --files-section-text: rgba(51, 65, 85, 0.9);
+    --files-caret-color: rgba(71, 85, 105, 0.7);
+    --files-tree-guide: rgba(71, 85, 105, 0.42);
+    --menu-bg: #ffffff;
+    --menu-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+    --menu-danger-border: rgba(244, 63, 94, 0.38);
+    --menu-danger-bg: #ffe4e6;
+    --menu-danger-border-hover: rgba(225, 29, 72, 0.5);
+    --menu-danger-bg-hover: #fecdd3;
+    --section-danger-hover-bg: #fee2e2;
+    --overlay-backdrop: rgba(15, 23, 42, 0.28);
+    --overlay-backdrop-soft: rgba(15, 23, 42, 0.2);
+    --overlay-backdrop-strong: rgba(15, 23, 42, 0.4);
+    --surface-elevated: #ffffff;
+    --surface-elevated-alt: #f8fafc;
+    --surface-elevated-focus: #f1f5f9;
+    --surface-command: #f8fafc;
+    --status-info-border: rgba(14, 165, 233, 0.5);
+    --status-info-bg: rgba(224, 242, 254, 0.9);
+    --status-info-text: rgba(12, 74, 110, 0.96);
+    --status-warn-border: rgba(217, 119, 6, 0.48);
+    --status-warn-bg: rgba(254, 243, 199, 0.92);
+    --status-warn-text: rgba(120, 53, 15, 0.96);
+    --status-danger-border: rgba(225, 29, 72, 0.5);
+    --status-danger-bg: rgba(254, 226, 226, 0.92);
+    --status-danger-text: rgba(136, 19, 55, 0.97);
+    --status-success-border: rgba(22, 163, 74, 0.48);
+    --status-success-bg: rgba(220, 252, 231, 0.92);
+    --status-success-text: rgba(22, 101, 52, 0.96);
+    --status-success-ring: rgba(22, 163, 74, 0.14);
+    --status-dot-ring: rgba(22, 163, 74, 0.22);
+    --status-dot-glow: rgba(22, 163, 74, 0.22);
+    --status-dot-ring-pulse: rgba(22, 163, 74, 0.08);
+    --status-dot-glow-pulse: rgba(22, 163, 74, 0.3);
+    --console-tab-bg: #f8fafc;
+    --console-tab-border: rgba(148, 163, 184, 0.35);
+    --console-tab-text: rgba(71, 85, 105, 0.95);
+    --console-tab-active-bg: rgba(220, 252, 231, 0.95);
+    --console-tab-active-border: rgba(22, 163, 74, 0.46);
+    --console-tab-active-text: rgba(22, 101, 52, 0.95);
+    --console-tab-active-glow: rgba(34, 197, 94, 0.14);
+    --log-bg: #ffffff;
+    --log-text: #0f172a;
+    --log-border: rgba(148, 163, 184, 0.35);
+    --panel-section-bg: #ffffff;
+    --panel-section-border: rgba(148, 163, 184, 0.35);
+    --panel-item-bg: #ffffff;
+    --panel-item-border: rgba(148, 163, 184, 0.35);
+    --editor-focus-border: rgba(14, 165, 233, 0.65);
+    --editor-focus-ring: rgba(14, 165, 233, 0.16);
+    --diagnostic-error: rgba(225, 29, 72, 0.95);
+    --diagnostic-error-ring: rgba(225, 29, 72, 0.22);
+    --diagnostic-warn: rgba(217, 119, 6, 0.95);
+    --diagnostic-warn-ring: rgba(217, 119, 6, 0.22);
+    --diagnostic-info: rgba(14, 165, 233, 0.95);
+    --diagnostic-info-ring: rgba(14, 165, 233, 0.22);
+    --diagnostic-lens-border: rgba(148, 163, 184, 0.45);
+    --diagnostic-lens-bg: rgba(248, 250, 252, 0.98);
+    --diagnostic-lens-text: rgba(15, 23, 42, 0.95);
+    --diagnostic-lens-error-border: rgba(225, 29, 72, 0.45);
+    --diagnostic-lens-error-bg: rgba(254, 226, 226, 0.85);
+    --diagnostic-lens-error-text: rgba(136, 19, 55, 0.96);
+    --diagnostic-lens-warn-border: rgba(217, 119, 6, 0.45);
+    --diagnostic-lens-warn-bg: rgba(254, 243, 199, 0.85);
+    --diagnostic-lens-warn-text: rgba(120, 53, 15, 0.96);
+    --diagnostic-lens-info-border: rgba(14, 165, 233, 0.45);
+    --diagnostic-lens-info-bg: rgba(224, 242, 254, 0.9);
+    --diagnostic-lens-info-text: rgba(12, 74, 110, 0.96);
+    --syntax-plain: #1f2328;
+    --syntax-keyword: #cf222e;
+    --syntax-atom: #0550ae;
+    --syntax-number: #0550ae;
+    --syntax-def: #8250df;
+    --syntax-variable: #1f2328;
+    --syntax-variable-2: #953800;
+    --syntax-variable-3: #116329;
+    --syntax-property: #0550ae;
+    --syntax-operator: #cf222e;
+    --syntax-comment: #6e7781;
+    --syntax-string: #0a3069;
+    --syntax-string-2: #116329;
+    --syntax-meta: #6e7781;
+    --syntax-tag: #116329;
+    --syntax-attribute: #0a3069;
+    --syntax-qualifier: #0550ae;
+    --syntax-builtin: #8250df;
+    --syntax-bracket: #1f2328;
+    --syntax-selection-bg: rgba(9, 105, 218, 0.2);
+    --syntax-selection-bg-focus: rgba(9, 105, 218, 0.32);
+    --syntax-active-line-bg: rgba(208, 215, 222, 0.24);
+    --syntax-cursor: #1f2328;
+    --syntax-line-number: rgba(101, 109, 118, 0.95);
+    --syntax-line-number-active: #1f2328;
+    --syntax-matching-bracket-bg: rgba(9, 105, 218, 0.18);
+    --syntax-matching-bracket-border: rgba(9, 105, 218, 0.55);
+    --syntax-nonmatching-bracket-bg: rgba(207, 34, 46, 0.16);
+    --syntax-nonmatching-bracket-border: rgba(207, 34, 46, 0.52);
+    --kbd-bg: #f1f5f9;
+    --drag-handle-bg: #e2e8f0;
+    --drag-handle-dot: rgba(71, 85, 105, 0.9);
+    --drag-handle-glyph: rgba(51, 65, 85, 0.9);
+    --file-icon-opacity: 0.93;
+    --file-icon-filter: saturate(0.9) contrast(1.05);
+    --folder-icon-opacity: 0.95;
+    --folder-icon-filter: saturate(0.92) contrast(1.02);
+    --prompt-cover-text: rgba(15, 23, 42, 0.94);
+    --prompt-cover-text-shadow: 0 1px 0 rgba(255, 255, 255, 0.86), 0 0 4px rgba(148, 163, 184, 0.2);
+    --prompt-cover-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(226, 232, 240, 0.8)), linear-gradient(180deg, rgba(226, 232, 240, 0.36), rgba(226, 232, 240, 0.5));
+    --prompt-cover-border: rgba(148, 163, 184, 0.55);
+    --prompt-cover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), inset 0 -1px 0 rgba(148, 163, 184, 0.2);
+    --prompt-cover-hover-border: rgba(225, 29, 72, 0.52);
+    --prompt-arm-border: rgba(225, 29, 72, 0.58);
+    --prompt-arm-bg: radial-gradient(130% 120% at 50% 15%, rgba(251, 113, 133, 0.2), rgba(251, 113, 133, 0) 60%), linear-gradient(180deg, rgba(254, 226, 226, 0.92), rgba(254, 205, 211, 0.92));
+    --prompt-arm-text: rgba(136, 19, 55, 0.96);
+    --prompt-arm-shadow: inset 0 0 0 1px rgba(225, 29, 72, 0.18), inset 0 8px 14px rgba(248, 113, 113, 0.12);
+    --prompt-badge-border: rgba(234, 88, 12, 0.62);
+    --prompt-badge-bg: linear-gradient(180deg, rgba(251, 146, 60, 0.9), rgba(234, 88, 12, 0.92));
+    --prompt-badge-text: rgba(255, 247, 237, 0.99);
+    --prompt-badge-shadow: inset 0 0 0 1px rgba(255, 237, 213, 0.26), 0 0 0 1px rgba(194, 65, 12, 0.18);
+    --prompt-armed-border: rgba(194, 65, 12, 0.72);
+    --prompt-armed-bg: radial-gradient(140% 140% at 50% 0%, rgba(253, 186, 116, 0.34), rgba(253, 186, 116, 0) 55%), linear-gradient(180deg, rgba(251, 146, 60, 0.88), rgba(220, 38, 38, 0.78));
+    --prompt-armed-text: rgba(120, 53, 15, 0.98);
+    --prompt-armed-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.28), 0 0 0 1px rgba(194, 65, 12, 0.22), 0 0 14px rgba(251, 146, 60, 0.26);
+    --prompt-armed-hover-border: rgba(234, 88, 12, 0.88);
+    --prompt-armed-pulse-start: inset 0 0 0 1px rgba(234, 88, 12, 0.28), 0 0 0 1px rgba(194, 65, 12, 0.22), 0 0 12px rgba(251, 146, 60, 0.22);
+    --prompt-armed-pulse-end: inset 0 0 0 1px rgba(234, 88, 12, 0.38), 0 0 0 1px rgba(234, 88, 12, 0.3), 0 0 18px rgba(251, 146, 60, 0.34);
+    --prompt-danger-border: rgba(225, 29, 72, 0.55);
+    --prompt-danger-bg: rgba(254, 226, 226, 0.82);
+    --prompt-danger-bg-hover: rgba(254, 205, 211, 0.9);
+    --prompt-danger-hover-border: rgba(225, 29, 72, 0.68);
+    --scrollbar-thumb: rgba(148, 163, 184, 0.4);
+    --scrollbar-thumb-hover: rgba(100, 116, 139, 0.55);
 }
 
 :root[data-theme="light"] body {
@@ -374,20 +1415,6 @@
     border-color: transparent;
 }
 
-:root[data-theme="light"] .top-theme-select {
-    background-color: #ffffff;
-    border-color: rgba(148, 163, 184, 0.45);
-    color: #0f172a;
-    background-image:
-        linear-gradient(45deg, transparent 50%, rgba(71, 85, 105, 0.88) 50%),
-        linear-gradient(135deg, rgba(71, 85, 105, 0.88) 50%, transparent 50%);
-}
-
-:root[data-theme="light"] .top-theme-select:hover {
-    background-color: #f1f5f9;
-    border-color: rgba(148, 163, 184, 0.6);
-}
-
 :root[data-theme="light"] button.primary {
     background: #e0f2fe;
     border-color: rgba(14, 165, 233, 0.6);
@@ -403,8 +1430,7 @@
 :root[data-theme="light"] .files-search,
 :root[data-theme="light"] #fileSearch,
 :root[data-theme="light"] #fileSearchClear,
-:root[data-theme="light"] .files-sort select,
-:root[data-theme="light"] #gameSelect {
+:root[data-theme="light"] .files-sort select {
     background: #ffffff;
     color: #0f172a;
 }
@@ -413,12 +1439,22 @@
     border-color: rgba(148, 163, 184, 0.35);
 }
 
-:root[data-theme="light"] .files-games {
-    border-top-color: rgba(148, 163, 184, 0.25);
+:root[data-theme="light"] .files-games-option {
+    color: #0f172a;
 }
 
-:root[data-theme="light"] .files-games-label {
-    color: rgba(71, 85, 105, 0.7);
+:root[data-theme="light"] .files-games-option:hover {
+    background: #f1f5f9;
+}
+
+:root[data-theme="light"] .files-games-option[data-selected="true"] {
+    background: #dbeafe;
+    color: #0c4a6e;
+}
+
+:root[data-theme="light"] .files-games-option:focus-visible {
+    border-color: rgba(14, 165, 233, 0.55);
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.18);
 }
 
 :root[data-theme="light"] .files-sub {
@@ -457,7 +1493,6 @@
     border-top-color: rgba(148, 163, 184, 0.3);
 }
 
-:root[data-theme="light"] .files-menu-btn,
 :root[data-theme="light"] .files-menu-btn {
     background: #ffffff;
     border-color: rgba(148, 163, 184, 0.35);
@@ -568,12 +1603,33 @@
 }
 
 :root[data-theme="light"] .file-section-toggle {
-    color: rgba(71, 85, 105, 0.85);
+    background: #e2e8f0;
+    color: rgba(51, 65, 85, 0.9);
+}
+
+:root[data-theme="light"] .file-section-action {
+    background: #e2e8f0;
+    color: rgba(51, 65, 85, 0.9);
 }
 
 :root[data-theme="light"] .file-section-toggle:hover {
-    background: rgba(148, 163, 184, 0.2);
-    border-color: rgba(148, 163, 184, 0.4);
+    background: #cbd5e1;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .file-section-action:hover {
+    background: #cbd5e1;
+    border-color: transparent;
+}
+
+:root[data-theme="light"] .file-section-toggle[aria-expanded="true"] {
+    background: #dbeafe;
+    color: #0c4a6e;
+}
+
+:root[data-theme="light"] .file-section-action[data-variant="danger"]:hover {
+    background: #fee2e2;
+    color: #991b1b;
 }
 
 :root[data-theme="light"] .file-section-caret {
@@ -830,15 +1886,7 @@
 }
 
 :root[data-theme="light"] .drag-handle {
-    background: #e2e8f0;
-}
-
-:root[data-theme="light"] .drag-handle::before {
-    background:
-        radial-gradient(circle at 2px 2px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px),
-        radial-gradient(circle at 2px 10px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px),
-        radial-gradient(circle at 10px 2px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px),
-        radial-gradient(circle at 10px 10px, rgba(71, 85, 105, 0.9) 1.4px, transparent 1.5px);
+    background: var(--drag-handle-bg);
 }
 
 :root[data-theme="light"] .editor-shortcut-help-btn {
@@ -884,15 +1932,24 @@
     color: #0f172a;
 }
 
+:root[data-theme="light"] .shortcut-help-list {
+    background: transparent;
+    border-color: transparent;
+}
+
 :root[data-theme="light"] .shortcut-help-list li {
     background: #f8fafc;
-    border-color: rgba(148, 163, 184, 0.35);
+    border-color: transparent;
     color: #0f172a;
+}
+
+:root[data-theme="light"] .shortcut-help-list li:hover {
+    background: #eef2ff;
 }
 
 :root[data-theme="light"] .shortcut-help-list kbd {
     background: #ffffff;
-    border-color: rgba(148, 163, 184, 0.45);
+    border-color: transparent;
     color: #0f172a;
 }
 
@@ -914,11 +1971,6 @@
     background: #f8fafc;
     border-color: rgba(148, 163, 184, 0.35);
     color: #0f172a;
-}
-
-:root[data-theme="light"] .editor-settings-panel .layout-toggle {
-    background: #f8fafc;
-    border-color: rgba(148, 163, 184, 0.35);
 }
 
 :root[data-theme="light"] .symbol-row-kind {

@@ -32,121 +32,29 @@ export const STORAGE = {
     EDITOR_SETTINGS: "fazide.editor-settings.v1",
     EDITOR_HISTORY: "fazide.editor-history.v1",
     SNIPPETS: "fazide.snippets.v1",
+    DEV_TERMINAL_SECRET_HASH: "fazide.dev-terminal-secret-hash.v1",
 };
 
 // Optional local games library that can be loaded into the IDE.
-// Templates can be one or many files. This project currently keeps it simple:
-// single-file JavaScript starter games.
-export const GAMES = [
-    {
-        id: "click-counter",
-        name: "Click Counter",
-        folder: "",
-        entryFile: "click-counter.js",
-        files: [
-            { path: "click-counter.js", src: "./assets/games/click-counter.js" },
-        ],
-    },
-    {
-        id: "reaction-timer",
-        name: "Reaction Timer",
-        folder: "",
-        entryFile: "reaction-timer.js",
-        files: [
-            { path: "reaction-timer.js", src: "./assets/games/reaction-timer.js" },
-        ],
-    },
-    {
-        id: "guess-number",
-        name: "Number Guess",
-        folder: "",
-        entryFile: "guess-number.js",
-        files: [
-            { path: "guess-number.js", src: "./assets/games/guess-number.js" },
-        ],
-    },
-    {
-        id: "balloon-pop",
-        name: "Balloon Pop",
-        folder: "",
-        entryFile: "balloon-pop.js",
-        files: [
-            { path: "balloon-pop.js", src: "./assets/games/balloon-pop.js" },
-        ],
-    },
-    {
-        id: "rock-paper-scissors",
-        name: "Rock Paper Scissors",
-        folder: "",
-        entryFile: "rock-paper-scissors.js",
-        files: [
-            { path: "rock-paper-scissors.js", src: "./assets/games/rock-paper-scissors.js" },
-        ],
-    },
-    {
-        id: "coin-flip",
-        name: "Coin Flip Guess",
-        folder: "",
-        entryFile: "coin-flip.js",
-        files: [
-            { path: "coin-flip.js", src: "./assets/games/coin-flip.js" },
-        ],
-    },
-    {
-        id: "dice-race",
-        name: "Dice Race",
-        folder: "",
-        entryFile: "dice-race.js",
-        files: [
-            { path: "dice-race.js", src: "./assets/games/dice-race.js" },
-        ],
-    },
-    {
-        id: "target-tap",
-        name: "Target Tap",
-        folder: "",
-        entryFile: "target-tap.js",
-        files: [
-            { path: "target-tap.js", src: "./assets/games/target-tap.js" },
-        ],
-    },
-    {
-        id: "high-low",
-        name: "High Low",
-        folder: "",
-        entryFile: "high-low.js",
-        files: [
-            { path: "high-low.js", src: "./assets/games/high-low.js" },
-        ],
-    },
-    {
-        id: "quick-math",
-        name: "Quick Math",
-        folder: "",
-        entryFile: "quick-math.js",
-        files: [
-            { path: "quick-math.js", src: "./assets/games/quick-math.js" },
-        ],
-    },
-];
+// Templates can be one or many files.
+const GAME_ICON_COLOR = "%2388f9d0";
+const GAME_ICON_SIZE = "16";
+
+function buildIconifyGameIcon(prefix, name) {
+    return `https://api.iconify.design/${prefix}/${name}.svg?width=${GAME_ICON_SIZE}&height=${GAME_ICON_SIZE}&color=${GAME_ICON_COLOR}`;
+}
+
+function buildDiceBearGameIcon(seed) {
+    return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}&size=64&backgroundColor=0b1220,111827`;
+}
+
+export const GAMES = [];
+
+// Optional local applications library for multi-file templates
+// that showcase HTML + CSS + JavaScript working together.
+export const APPLICATIONS = [];
 
 // Default editor contents shown on first load (or when storage is empty/reset).
-// Notes:
-// - This is a template literal so we can inject APP metadata into the header.
-// - The backticks allow multi-line content exactly as it should appear into the header.
-// - Keep the sample small and focused: quick log, optional error, optional async.
-export const DEFAULT_CODE = `// ${APP.NAME} (${APP.VERSION})
-// Built by ${APP.AUTHOR} 
-// 
-// Notes:
-// - console.* is captured into the Output panel
-// - runtime errors + unhandled promise rejections are captured
-
-console.log("hello from FAZ IDE sandbox");
-
-// Try an error:
-// throw new Error("boom");
- 
-// Try async:
-// Promise.reject("nope");
+export const DEFAULT_CODE = `/* Welcome to FAZ IDE My first big personal project */
+console.log("Hello from FazyBear!");
 `;

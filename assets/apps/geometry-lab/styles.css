@@ -1,0 +1,83 @@
+:root {
+  font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+  color: #f8fafc;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(200deg, #0f172a, #1e1b4b);
+  display: grid;
+  place-items: center;
+}
+
+.app-shell {
+  width: min(92vw, 430px);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app-subtitle {
+  margin: 0.35rem 0 1rem;
+  color: #bfdbfe;
+  font-size: 0.82rem;
+}
+
+.geometry {
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.92);
+  padding: 0.95rem;
+}
+
+label {
+  display: block;
+  font-size: 0.78rem;
+  margin-bottom: 0.35rem;
+  color: #cbd5e1;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  min-height: 2rem;
+  border: 1px solid #475569;
+  background: #0b1220;
+  color: #f8fafc;
+}
+
+.shape-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.shape-inputs label {
+  margin-bottom: 0.25rem;
+}
+
+#calcGeometry {
+  margin-top: 0.75rem;
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #eff6ff;
+}
+
+#calcGeometry:hover {
+  background: #2563eb;
+}
+
+.result-grid {
+  margin-top: 0.9rem;
+  border: 1px solid #334155;
+  background: #0b1220;
+  padding: 0.6rem;
+}
+
+.result-grid p {
+  margin: 0.25rem 0;
+}

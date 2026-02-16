@@ -368,6 +368,12 @@ function copyPathToSnapshot(relativePath, payloadRoot, summary) {
     if (!isRecoverableFsError(error, { allowDiskCapacity: true })) {
       throw error;
     }
+    // Avoid keeping a partial payload copy for this target.
+    try {
+      fs.rmSync(targetAbs, { recursive: true, force: true, maxRetries: 6, retryDelay: 80 });
+    } catch {
+      // Best-effort cleanup only.
+    }
     summary.skipped.push(relativePath);
   }
 }
@@ -539,13 +545,30 @@ function restoreGuardianSnapshot(selectorRaw, { strict = false } = {}) {
   }
 
   const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+  const normalizeSnapshotTarget = (targetRaw) => String(targetRaw || "").trim().replace(/\\/g, "/");
+  const includedTargets = Array.isArray(metadata?.included)
+    ? new Set(metadata.included.map((target) => normalizeSnapshotTarget(target)).filter(Boolean))
+    : null;
+  const skippedTargets = Array.isArray(metadata?.skipped)
+    ? new Set(metadata.skipped.map((target) => normalizeSnapshotTarget(target)).filter(Boolean))
+    : new Set();
   const restored = [];
   const skipped = [];
 
   for (const target of guardianSnapshotTargets) {
+    const normalizedTarget = normalizeSnapshotTarget(target);
+    if (includedTargets && !includedTargets.has(normalizedTarget)) continue;
+    if (skippedTargets.has(normalizedTarget)) {
+      skipped.push(target);
+      continue;
+    }
+
     const normalizedRel = String(target).split("/").join(path.sep);
     const sourceAbs = path.join(payloadRoot, normalizedRel);
-    if (!fs.existsSync(sourceAbs)) continue;
+    if (!fs.existsSync(sourceAbs)) {
+      skipped.push(target);
+      continue;
+    }
     const targetAbs = path.join(root, normalizedRel);
 
     try {

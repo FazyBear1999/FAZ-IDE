@@ -1,4 +1,5 @@
-﻿const fs = require("node:fs");
+const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
@@ -65,6 +66,40 @@ function listSnapshotDirs() {
     .map((entry) => entry.name);
 }
 
+function toFsRelativePath(relativePath) {
+  return String(relativePath || "").split("/").join(path.sep);
+}
+
+function snapshotWorkspaceTarget(relativePath, backupRoot) {
+  const normalizedRel = toFsRelativePath(relativePath);
+  const sourceAbs = path.join(root, normalizedRel);
+  const backupAbs = path.join(backupRoot, normalizedRel);
+  const exists = fs.existsSync(sourceAbs);
+  if (!exists) {
+    return { relativePath, exists: false };
+  }
+  fs.mkdirSync(path.dirname(backupAbs), { recursive: true });
+  fs.cpSync(sourceAbs, backupAbs, { recursive: true, force: true });
+  return { relativePath, exists: true };
+}
+
+function restoreWorkspaceTarget(snapshot, backupRoot) {
+  const normalizedRel = toFsRelativePath(snapshot?.relativePath);
+  if (!normalizedRel) return;
+  const targetAbs = path.join(root, normalizedRel);
+  try {
+    fs.rmSync(targetAbs, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
+  } catch (error) {
+    if (!error || (error.code !== "EPERM" && error.code !== "EBUSY")) {
+      throw error;
+    }
+  }
+  if (!snapshot?.exists) return;
+  const backupAbs = path.join(backupRoot, normalizedRel);
+  fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
+  fs.cpSync(backupAbs, targetAbs, { recursive: true, force: true });
+}
+
 function main() {
   const decisionsPath = memoryPaths.decisions;
   const errorsPath = memoryPaths.errors;
@@ -93,6 +128,10 @@ function main() {
     ? fs.readFileSync(guardianPaths.index, "utf8")
     : null;
   const originalSnapshotIds = new Set(listSnapshotDirs());
+  const workspaceBackupRoot = fs.mkdtempSync(path.join(os.tmpdir(), "franklin-safety-"));
+  const workspaceSnapshots = [
+    snapshotWorkspaceTarget("assets", workspaceBackupRoot),
+  ];
 
   try {
     const helpResult = runFrank(["help"]);
@@ -309,6 +348,16 @@ function main() {
       fail("path boundary protection: expected write outside docs/ai-memory to be blocked.");
     }
   } finally {
+    for (const snapshot of workspaceSnapshots) {
+      restoreWorkspaceTarget(snapshot, workspaceBackupRoot);
+    }
+    try {
+      fs.rmSync(workspaceBackupRoot, { recursive: true, force: true, maxRetries: 6, retryDelay: 80 });
+    } catch (error) {
+      if (!error || (error.code !== "EPERM" && error.code !== "EBUSY")) {
+        throw error;
+      }
+    }
     fs.writeFileSync(decisionsPath, originalDecisions, "utf8");
     fs.writeFileSync(errorsPath, originalErrors, "utf8");
     fs.writeFileSync(fixRequestPath, originalFixRequest, "utf8");

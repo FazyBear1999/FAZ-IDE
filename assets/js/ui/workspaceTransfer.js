@@ -38,12 +38,20 @@ export function triggerWorkspaceExportDownload({ payload, fileName } = {}) {
     return link.download;
 }
 
-export function parseWorkspaceImportText(text, { normalizeImportedWorkspace } = {}) {
+export function parseWorkspaceImportText(text, { normalizeImportedWorkspace, maxInputChars = 0 } = {}) {
     if (typeof text !== "string") {
         return { ok: false, error: "invalid-text" };
     }
     if (typeof normalizeImportedWorkspace !== "function") {
         return { ok: false, error: "missing-normalizer" };
+    }
+    const limit = Math.max(0, Number(maxInputChars) || 0);
+    if (limit > 0 && text.length > limit) {
+        return {
+            ok: false,
+            error: "input-too-large",
+            message: `Workspace import is too large (${text.length} chars). Max ${limit}.`,
+        };
     }
 
     let parsed = null;

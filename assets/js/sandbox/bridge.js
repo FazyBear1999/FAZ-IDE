@@ -26,10 +26,100 @@ export function bridgeScript(token) {
     return `
     <script>
         const TOKEN = ${JSON.stringify(token)};
+        const MAX_CONSOLE_ARGS = 120;
+        const MAX_CONSOLE_PART_CHARS = 1600;
+        const MAX_CONSOLE_DEPTH = 2;
         const send = (type, payload) => {
             // Post a structured message to the parent window.
             // Parent should validate: source === "fazide" AND token matches.
-            parent.postMessage({ source: "fazide", token: TOKEN, type, payload }, "*");
+            try {
+                parent.postMessage({ source: "fazide", token: TOKEN, type, payload }, "*");
+            } catch (err) {
+                if (type === "bridge_error") return;
+                try {
+                    parent.postMessage({
+                        source: "fazide",
+                        token: TOKEN,
+                        type: "bridge_error",
+                        payload: { message: String(err && err.message ? err.message : err) }
+                    }, "*");
+                } catch (_bridgeErr) {}
+            }
+        };
+
+        const trimText = (value, maxChars = MAX_CONSOLE_PART_CHARS) => {
+            const source = String(value ?? "");
+            const limit = Math.max(64, Number(maxChars) || MAX_CONSOLE_PART_CHARS);
+            if (source.length <= limit) return source;
+            return source.slice(0, limit - 15) + " ... [truncated]";
+        };
+
+        const describeElement = (value) => {
+            if (typeof Element === "undefined" || !(value instanceof Element)) return "";
+            const tag = String(value.tagName || "element").toLowerCase();
+            const idPart = value.id ? "#" + value.id : "";
+            const classPart = value.classList && value.classList.length
+                ? "." + Array.from(value.classList).slice(0, 2).join(".")
+                : "";
+            return "<" + tag + idPart + classPart + ">";
+        };
+
+        const toConsoleString = (value, depth = 0, seen = null) => {
+            if (value === null || value === undefined) return String(value);
+            if (typeof value === "string") return value;
+            if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+            if (typeof value === "symbol") return String(value);
+            if (typeof value === "function") return value.name ? "[Function " + value.name + "]" : "[Function]";
+            if (value instanceof Error) return value.stack || value.message || String(value);
+
+            const elementLabel = describeElement(value);
+            if (elementLabel) return elementLabel;
+
+            if (depth >= MAX_CONSOLE_DEPTH) return "[Object]";
+            const nextSeen = seen || (typeof WeakSet !== "undefined" ? new WeakSet() : null);
+            if (nextSeen && typeof value === "object") {
+                if (nextSeen.has(value)) return "[Circular]";
+                nextSeen.add(value);
+            }
+
+            if (Array.isArray(value)) {
+                const preview = value.slice(0, 20).map((entry) => trimText(toConsoleString(entry, depth + 1, nextSeen), 180));
+                const suffix = value.length > 20 ? ", ..." : "";
+                return "[" + preview.join(", ") + suffix + "]";
+            }
+
+            if (typeof value === "object") {
+                const allKeys = Object.keys(value);
+                const keys = allKeys.slice(0, 20);
+                const preview = keys.map((key) => {
+                    let child;
+                    try {
+                        child = value[key];
+                    } catch (err) {
+                        child = "[Thrown: " + String(err && err.message ? err.message : err) + "]";
+                    }
+                    return key + ": " + trimText(toConsoleString(child, depth + 1, nextSeen), 180);
+                });
+                const suffix = allKeys.length > keys.length ? ", ..." : "";
+                return "{ " + preview.join(", ") + suffix + " }";
+            }
+
+            try {
+                return String(value);
+            } catch {
+                return "[Unserializable]";
+            }
+        };
+
+        const sanitizeConsoleArgs = (args) => {
+            const list = Array.isArray(args) ? args : [args];
+            const limited = list
+                .slice(0, MAX_CONSOLE_ARGS)
+                .map((entry) => trimText(toConsoleString(entry), MAX_CONSOLE_PART_CHARS));
+            if (list.length > MAX_CONSOLE_ARGS) {
+                limited.push("... [" + String(list.length - MAX_CONSOLE_ARGS) + " argument(s) skipped in sandbox bridge]");
+            }
+            return limited;
         };
 
         // Patch console.* to forward logs to parent
@@ -40,7 +130,8 @@ export function bridgeScript(token) {
             // Replace console method: call original, then forward args to parent
             console[m] = (...args) => {
                 orig(...args);
-                send("console", { level: m, args });
+                const safeArgs = sanitizeConsoleArgs(args);
+                send("console", { level: m, args: safeArgs });
             };
         });
 
@@ -69,10 +160,13 @@ export function bridgeScript(token) {
         let clickHandler = null;
         let rafId = null;
         let pendingNode = null;
+        let lastInspectSignature = "";
         const THEME_SURFACE = {
             dark: { background: "#0b0f14", foreground: "#e6edf3", colorScheme: "dark" },
             light: { background: "#f8fafc", foreground: "#0f172a", colorScheme: "light" },
-            purple: { background: "#140b24", foreground: "#f3e8ff", colorScheme: "dark" }
+            purple: { background: "#140b24", foreground: "#f3e8ff", colorScheme: "dark" },
+            retro: { background: "#10150f", foreground: "#e6f1d1", colorScheme: "dark" },
+            temple: { background: "#0f3fc6", foreground: "#fef7e6", colorScheme: "dark" }
         };
 
         const normalizeTheme = (value) => {
@@ -186,7 +280,17 @@ export function bridgeScript(token) {
             box.style.top = rect.top + "px";
             box.style.width = rect.width + "px";
             box.style.height = rect.height + "px";
-            send("inspect_update", describeNode(node));
+            const details = describeNode(node);
+            const signature = [
+                details.selector || details.tagName || "",
+                Math.round(rect.x || 0),
+                Math.round(rect.y || 0),
+                Math.round(rect.width || 0),
+                Math.round(rect.height || 0),
+            ].join("|");
+            if (signature === lastInspectSignature) return;
+            lastInspectSignature = signature;
+            send("inspect_update", details);
         };
 
         const enableInspect = () => {
@@ -194,7 +298,7 @@ export function bridgeScript(token) {
             inspectActive = true;
             hoverHandler = (event) => {
                 const target = event.target;
-                if (!target || target === highlightEl) return;
+                if (!target || target === highlightEl || target.nodeType !== 1) return;
                 pendingNode = target;
                 if (rafId) return;
                 rafId = requestAnimationFrame(() => {
@@ -220,6 +324,7 @@ export function bridgeScript(token) {
             hoverHandler = null;
             clickHandler = null;
             pendingNode = null;
+            lastInspectSignature = "";
             if (rafId) {
                 cancelAnimationFrame(rafId);
                 rafId = null;
@@ -256,6 +361,8 @@ export function bridgeScript(token) {
                 send("debug_watch", { values });
             }
         });
+
+        send("bridge_ready", { at: Date.now() });
     <\/script>
     `;
 }

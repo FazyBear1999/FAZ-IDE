@@ -1,4 +1,4 @@
-<!-- index.html
+ï»¿<!-- index.html
     FAZ IDE (v0)
     Author: Faz (FazyBear)
     
@@ -59,7 +59,16 @@
                         </div>
 
                         <div class="strip-right">
-                            <div class="strip-group" aria-label="Shortcut help">
+                            <div class="strip-group" aria-label="Panel toggles">
+                                <button id="toggleLog" type="button" data-panel-toggle="true" aria-controls="logPanel" aria-expanded="true">Console</button>
+                                <button id="toggleEditor" type="button" data-panel-toggle="true" aria-controls="editorPanel" aria-expanded="true">Editor</button>
+                                <button id="toggleFiles" type="button" data-panel-toggle="true" aria-controls="side" aria-expanded="true">Files</button>
+                                <button id="toggleSandbox" type="button" data-panel-toggle="true" aria-controls="sandboxPanel" aria-expanded="true">Sandbox</button>
+                                <button id="toggleTools" type="button" data-panel-toggle="true" aria-controls="toolsPanel" aria-expanded="false">Tools</button>
+                            </div>
+                            <div class="strip-group" aria-label="Workspace actions">
+                                <button id="layoutToggle" type="button" aria-expanded="false">Layout</button>
+                                <button id="toggleHeader" type="button" data-panel-toggle="true">Header</button>
                                 <button
                                     id="editorShortcutHelpBtn"
                                     class="editor-shortcut-help-btn top-shortcut-help-btn"
@@ -70,27 +79,15 @@
                                     ?
                                 </button>
                             </div>
-                            <div class="strip-group" aria-label="Panel toggles">
-                                <button id="toggleLog" type="button" data-panel-toggle="true" aria-controls="logPanel" aria-expanded="true">Console</button>
-                                <button id="toggleEditor" type="button" data-panel-toggle="true" aria-controls="editorPanel" aria-expanded="true">Editor</button>
-                                <button id="toggleFiles" type="button" data-panel-toggle="true" aria-controls="side" aria-expanded="true">Files</button>
-                                <button id="toggleSandbox" type="button" data-panel-toggle="true" aria-controls="sandboxPanel" aria-expanded="true">Sandbox</button>
-                                <button id="toggleTools" type="button" data-panel-toggle="true" aria-controls="toolsPanel" aria-expanded="false">Tools</button>
-                            </div>
-                            <div class="strip-group" aria-label="Workspace actions">
+                            <div id="themeMenuGroup" class="strip-group strip-theme-group" aria-label="Theme">
                                 <label class="sr-only" for="themeSelect">Theme</label>
                                 <select id="themeSelect" class="top-theme-select" aria-label="Theme selector">
-                                    <option value="dark">Theme: Dark</option>
-                                    <option value="light">Theme: Light</option>
-                                    <option value="purple">Theme: Purple</option>
+                                    <option value="dark">Dark</option>
+                                    <option value="light">Light</option>
+                                    <option value="purple">Purple</option>
+                                    <option value="retro">Retro</option>
+                                    <option value="temple">Temple</option>
                                 </select>
-                                <button id="layoutToggle" type="button" aria-expanded="false">Layout</button>
-                                <button id="toggleHeader" type="button" data-panel-toggle="true">Header</button>
-                            </div>
-                            <div class="health" aria-label="System health">
-                                <span id="healthEditor" class="health-pill" data-state="ok">Editor: Ready</span>
-                                <span id="healthSandbox" class="health-pill" data-state="idle">Sandbox: Idle</span>
-                                <span id="healthStorage" class="health-pill" data-state="ok">Storage: OK</span>
                             </div>
                         </div>
                     </header>
@@ -127,10 +124,40 @@
                                 </div>
                                 <div id="filesGames" class="files-games" aria-label="Games library">
                                     <div class="files-games-row">
-                                        <span class="files-games-label">Games</span>
-                                        <label class="sr-only" for="gameSelect">Select game</label>
-                                        <select id="gameSelect"></select>
-                                        <button id="gameLoad" type="button" title="Load selected game into editor">Load ></button>
+                                        <button
+                                            id="gamesSelectorToggle"
+                                            type="button"
+                                            class="file-section-toggle files-games-toggle"
+                                            data-caret-side="left"
+                                            data-files-section-id="games"
+                                            draggable="true"
+                                            aria-expanded="false"
+                                            aria-controls="gamesList"
+                                        >
+                                            <span class="file-section-caret" aria-hidden="true"></span>
+                                            <span class="file-section-label">Games</span>
+                                        </button>
+                                        <ul id="gamesList" class="files-games-list" role="listbox" aria-label="Available games" aria-hidden="true"></ul>
+                                        <button id="gameLoad" type="button" title="Load selected game into editor" hidden>LOAD</button>
+                                    </div>
+                                </div>
+                                <div id="filesApps" class="files-games files-apps" aria-label="Applications library">
+                                    <div class="files-games-row files-apps-row">
+                                        <button
+                                            id="appsSelectorToggle"
+                                            type="button"
+                                            class="file-section-toggle files-games-toggle files-apps-toggle"
+                                            data-caret-side="left"
+                                            data-files-section-id="applications"
+                                            draggable="true"
+                                            aria-expanded="false"
+                                            aria-controls="applicationsList"
+                                        >
+                                            <span class="file-section-caret" aria-hidden="true"></span>
+                                            <span class="file-section-label">Applications</span>
+                                        </button>
+                                        <ul id="applicationsList" class="files-games-list files-apps-list" role="listbox" aria-label="Available applications" aria-hidden="true"></ul>
+                                        <button id="appLoad" type="button" title="Load selected application into editor" hidden>LOAD</button>
                                     </div>
                                 </div>
                                 <ul id="fileList" class="file-list" role="listbox" aria-label="Saved files"></ul>
@@ -138,14 +165,7 @@
                                     <section class="files-menu-group" aria-label="File actions">
                                         <p class="files-menu-label">Files</p>
                                         <div class="files-menu-grid files-menu-grid-2">
-                                            <label class="sr-only" for="newFileTypeSelect">New file type</label>
-                                            <select id="newFileTypeSelect" class="files-menu-item files-menu-select" aria-label="New file type">
-                                                <option value="auto">Type: Auto</option>
-                                                <option value="js">Type: JavaScript</option>
-                                                <option value="html">Type: HTML</option>
-                                                <option value="css">Type: CSS</option>
-                                            </select>
-                                            <button type="button" class="files-menu-item" data-files-menu="new">Create</button>
+                                                                                        <button type="button" class="files-menu-item" data-files-menu="new">Create</button>
                                             <button type="button" class="files-menu-item" data-files-menu="new-folder">New Folder</button>
                                             <button type="button" class="files-menu-item" data-files-menu="duplicate">Duplicate</button>
                                             <button type="button" class="files-menu-item" data-files-menu="rename">Rename</button>
@@ -172,6 +192,7 @@
                                             <button type="button" class="files-menu-item" data-files-menu="clear-selection">Clear</button>
                                             <button type="button" class="files-menu-item" data-files-menu="trash-selected" data-variant="danger">Trash</button>
                                             <button type="button" class="files-menu-item" data-files-menu="move-selected">Move</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="duplicate-selected">Duplicate</button>
                                             <button type="button" class="files-menu-item" data-files-menu="pin-selected">Pin</button>
                                             <button type="button" class="files-menu-item" data-files-menu="unpin-selected">Unpin</button>
                                             <button type="button" class="files-menu-item" data-files-menu="lock-selected">Lock</button>
@@ -194,6 +215,7 @@
                                         <div class="files-menu-grid files-menu-grid-3">
                                             <button type="button" class="files-menu-item" data-files-toggle="filters" aria-pressed="false">Filters</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="games" aria-pressed="false">Games</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="applications" aria-pressed="false">Apps</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="open-editors" aria-pressed="true">Editors</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="files" aria-pressed="true">Files</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="trash" aria-pressed="false">Trash</button>
@@ -228,9 +250,9 @@
                                     <button class="drag-handle" type="button" data-panel="editor" aria-label="Drag Editor panel">::</button>
                                     <h2 class="editor-title">Editor</h2>
                                     <div class="editor-buttons" aria-label="Editor buttons">
-                                        <button class="primary" id="run" type="button">Run</button>
-                                        <button class="danger" id="clear" type="button">Clear</button>
-                                        <button id="format" type="button">Format</button>
+                                        <button class="primary" id="run" type="button" title="Run code in sandbox">Run</button>
+                                        <button class="danger" id="clear" type="button" title="Clear editor contents">Clear</button>
+                                        <button id="format" type="button" title="Format active file">Format</button>
                                     </div>
                                     <div class="editor-pro-buttons" aria-label="Editor tools">
                                         <button id="editorFindBtn" type="button" title="Find and replace">Find</button>
@@ -264,9 +286,6 @@
                                             <button class="drag-handle" type="button" data-panel="sandbox" aria-label="Drag Sandbox panel">::</button>
                                             <h2>Sandbox</h2>
                                         </div>
-                                    </div>
-                                    <div class="row" aria-label="Sandbox actions">
-                                        <button id="closeSandbox" type="button">Close</button>
                                     </div>
                                 </div>
 
@@ -302,10 +321,6 @@
                                             <button class="drag-handle" type="button" data-panel="tools" aria-label="Drag Tools panel">::</button>
                                             <h2>Tools</h2>
                                         </div>
-                                        <p>Diagnostics and inspect</p>
-                                    </div>
-                                    <div class="row" aria-label="Tools actions">
-                                        <button id="closeTools" type="button">Close</button>
                                     </div>
                                 </div>
                                 <div class="card-bd">
@@ -413,9 +428,8 @@
                                 </div>
 
                                 <div class="row" aria-label="Console actions">
-                                    <button id="copyLog" type="button">Copy</button>
-                                    <button id="clearLog" type="button">Clear</button>
-                                    <button id="closeLog" type="button">Close</button>
+                                    <button id="copyLog" type="button" class="console-tab">Copy</button>
+                                    <button id="clearLog" type="button" class="console-tab">Clear</button>
                                 </div>
                             </div>
                             <div class="card-bd" aria-label="Console output">
@@ -428,8 +442,22 @@
                     </main>
 
                     <footer class="foot" aria-label="Footer">
-                        <span>FAZ IDE v0.2.0 - local-only</span>
-                        <span>Storage: localStorage</span>
+                        <span id="footerBrand">FAZ IDE v0.2.0</span>
+                        <span id="footerPrivacy" title="Workspace data stays in your browser only">Privacy: Local only</span>
+                        <span id="footerEditorStatus" class="foot-editor-status" aria-label="Editor footer status">
+                            <span id="footerEditorFile">File Name: -</span>
+                            <span id="footerEditorLang">Lang: Text</span>
+                            <span id="footerEditorDirty" data-dirty="false">Saved</span>
+                            <span id="footerEditorCursor">Ln 1, Col 1</span>
+                            <span id="footerEditorSelection">Sel 0</span>
+                            <span id="footerEditorChars">Chars 0</span>
+                        </span>
+                        <span id="footerRuntimeStatus" class="foot-runtime-status" aria-label="Runtime footer status">
+                            <span id="footerEditorRuntime">Editor: Ready</span>
+                            <span id="footerSandbox">Sandbox: Idle</span>
+                            <span id="footerProblems">Problems: 0</span>
+                            <span id="footerStorage">Storage: OK</span>
+                        </span>
                     </footer>
                 </div>
             </div>
@@ -448,7 +476,7 @@
                 <label class="sr-only" for="quickOpenInput">Search files</label>
                 <input id="quickOpenInput" type="text" placeholder="Search files..." autocomplete="off" spellcheck="false" />
                 <ul id="quickOpenList" class="quick-open-list" role="listbox" aria-label="Quick open results"></ul>
-                <p id="quickOpenHint" class="quick-open-hint">Enter to open • Esc to close</p>
+                <p id="quickOpenHint" class="quick-open-hint">Enter to open â€¢ Esc to close</p>
             </section>
 
             <div id="commandPaletteBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
@@ -460,7 +488,7 @@
                 <label class="sr-only" for="commandPaletteInput">Search commands</label>
                 <input id="commandPaletteInput" type="text" placeholder="Type a command..." autocomplete="off" spellcheck="false" />
                 <ul id="commandPaletteList" class="quick-open-list" role="listbox" aria-label="Command results"></ul>
-                <p id="commandPaletteHint" class="quick-open-hint">Enter to run • Esc to close</p>
+                <p id="commandPaletteHint" class="quick-open-hint">Enter to run â€¢ Esc to close</p>
             </section>
 
             <div id="editorSearchBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
@@ -505,7 +533,7 @@
                     <button id="symbolFindRefs" type="button">Find Refs</button>
                 </div>
                 <ul id="symbolRefsList" class="quick-open-list symbol-refs-list" role="listbox" aria-label="Symbol references"></ul>
-                <p id="symbolHint" class="quick-open-hint">Enter to jump • Ctrl/Cmd+G for line</p>
+                <p id="symbolHint" class="quick-open-hint">Enter to jump â€¢ Ctrl/Cmd+G for line</p>
             </section>
 
             <div id="projectSearchBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
@@ -579,11 +607,11 @@
                             <option value="basic">Basic formatter only</option>
                         </select>
                     </div>
-                    <div class="layout-row">
+                    <div class="layout-group editor-settings-number-group">
                         <label class="layout-label" for="editorTabSize">Tab size</label>
                         <input id="editorTabSize" type="number" min="2" max="8" step="1" />
                     </div>
-                    <div class="layout-row">
+                    <div class="layout-group editor-settings-number-group">
                         <label class="layout-label" for="editorFontSize">Font size</label>
                         <input id="editorFontSize" type="number" min="11" max="22" step="1" />
                     </div>
@@ -601,7 +629,34 @@
                             <option value="cascadia-mono">Cascadia Mono</option>
                         </select>
                     </div>
-                    <div class="layout-row">
+                    <div class="layout-group">
+                        <label class="layout-label" for="editorSyntaxThemeSelect">Syntax colors</label>
+                        <select id="editorSyntaxThemeSelect" class="layout-select">
+                            <option value="volcanic">Volcanic Core (Orange + Dark Purple)</option>
+                            <option value="twilight">Twilight Pulse</option>
+                            <option value="aurora">Aurora Mint</option>
+                            <option value="solarflare">Solar Flare</option>
+                            <option value="deepsea">Deep Sea</option>
+                            <option value="nebula">Nebula Bloom</option>
+                            <option value="forge">Forge Ember</option>
+                            <option value="lotus">Lotus Night</option>
+                            <option value="embermint">Ember Mint</option>
+                            <option value="arctic">Arctic Signal</option>
+                            <option value="obsidian">Obsidian Glow</option>
+                            <option value="sunset">Sunset Copper</option>
+                            <option value="verdant">Verdant Code</option>
+                            <option value="royal">Royal Indigo</option>
+                            <option value="candy">Candy Neon</option>
+                            <option value="magma">Magma Core</option>
+                            <option value="glacier">Glacier Blue</option>
+                            <option value="storm">Storm Circuit</option>
+                            <option value="orchid">Orchid Mist</option>
+                            <option value="graphene">Graphene Mono</option>
+                            <option value="retro">Retro</option>
+                            <option value="temple">Temple</option>
+                        </select>
+                    </div>
+                    <div class="layout-group editor-settings-number-group">
                         <label class="layout-label" for="editorAutoSaveMs">Autosave delay (ms)</label>
                         <input id="editorAutoSaveMs" type="number" min="100" max="5000" step="100" />
                     </div>
@@ -664,12 +719,14 @@
                     <div class="layout-group">
                         <p class="files-menu-label">Core</p>
                         <ul class="shortcut-help-list" role="list">
+                            <li><span>Open this panel</span><kbd>F1</kbd></li>
+                            <li><span>Close open panel/modal</span><kbd>Esc</kbd></li>
                             <li><span>Run code</span><kbd>Ctrl/Cmd + Enter</kbd></li>
                             <li><span>Save file</span><kbd>Ctrl/Cmd + S</kbd></li>
                             <li><span>Save all</span><kbd>Ctrl/Cmd + Shift + S</kbd></li>
+                            <li><span>New file</span><kbd>Ctrl/Cmd + N</kbd></li>
                             <li><span>Quick open files</span><kbd>Ctrl/Cmd + P</kbd></li>
                             <li><span>Command palette</span><kbd>Ctrl/Cmd + Shift + P</kbd></li>
-                            <li><span>New file</span><kbd>Ctrl/Cmd + N</kbd></li>
                         </ul>
                     </div>
                     <div class="layout-group">
@@ -680,9 +737,10 @@
                             <li><span>Project search</span><kbd>Ctrl/Cmd + Shift + F</kbd></li>
                             <li><span>Go to line</span><kbd>Ctrl/Cmd + G</kbd></li>
                             <li><span>Symbols</span><kbd>Ctrl/Cmd + Shift + O</kbd></li>
-                            <li><span>Add cursor down/up</span><kbd>Ctrl/Cmd + Alt + Arrow</kbd></li>
+                            <li><span>Add cursor down</span><kbd>Ctrl/Cmd + Alt + ArrowDown</kbd></li>
+                            <li><span>Add cursor up</span><kbd>Ctrl/Cmd + Alt + ArrowUp</kbd></li>
+                            <li><span>Clear console (editor focus)</span><kbd>Ctrl/Cmd + L</kbd></li>
                             <li><span>Expand snippet</span><kbd>Tab</kbd></li>
-                            <li><span>Split compare view</span><kbd>Header: Split</kbd></li>
                         </ul>
                     </div>
                     <div class="layout-group">
@@ -691,9 +749,11 @@
                             <li><span>Undo file action</span><kbd>Ctrl/Cmd + Z</kbd></li>
                             <li><span>Redo file action</span><kbd>Ctrl/Cmd + Shift + Z</kbd></li>
                             <li><span>Redo (alt)</span><kbd>Ctrl/Cmd + Y</kbd></li>
-                            <li><span>Duplicate selected</span><kbd>Ctrl/Cmd + D</kbd></li>
-                            <li><span>Select all files</span><kbd>Ctrl/Cmd + A</kbd></li>
-                            <li><span>Open this panel</span><kbd>F1</kbd></li>
+                            <li><span>Select all files (Files panel focus)</span><kbd>Ctrl/Cmd + A</kbd></li>
+                            <li><span>Duplicate file/selection (Files panel focus)</span><kbd>Ctrl/Cmd + D</kbd></li>
+                            <li><span>Rename file (Files panel focus)</span><kbd>F2</kbd></li>
+                            <li><span>Trash file/selection (Files panel focus)</span><kbd>Delete</kbd></li>
+                            <li><span>Open file menu (Files panel focus)</span><kbd>Shift + F10</kbd></li>
                         </ul>
                     </div>
                 </div>
@@ -739,11 +799,15 @@
                     <div class="layout-group">
                         <label class="layout-label" for="layoutPreset">Presets</label>
                         <select id="layoutPreset" class="layout-select">
-                            <option value="">Choose a preset…</option>
+                            <option value="">Choose a presetâ€¦</option>
                             <option value="studio">Studio (default)</option>
                             <option value="focus">Focus (zen)</option>
                             <option value="review">Review (wide console)</option>
                             <option value="wide">Wide panels</option>
+                            <option value="debug">Debug (all panels)</option>
+                            <option value="zen">Zen (editor only)</option>
+                            <option value="sandbox">Sandbox Lab (large preview)</option>
+                            <option value="diagnostics">Diagnostics (tools + console)</option>
                         </select>
                     </div>
 
@@ -790,32 +854,32 @@
                     <div class="layout-group">
                         <label class="layout-label" for="layoutLogWidth">Console width (px)</label>
                         <div class="layout-row">
-                            <input id="layoutLogWidth" type="range" min="160" max="620" step="1" />
-                            <input id="layoutLogWidthInput" type="number" min="160" max="620" step="1" />
+                            <input id="layoutLogWidth" type="range" min="180" max="620" step="1" />
+                            <input id="layoutLogWidthInput" type="number" min="180" max="620" step="1" />
                         </div>
                     </div>
 
                     <div class="layout-group">
                         <label class="layout-label" for="layoutSidebarWidth">Files width (px)</label>
                         <div class="layout-row">
-                            <input id="layoutSidebarWidth" type="range" min="140" max="520" step="1" />
-                            <input id="layoutSidebarWidthInput" type="number" min="140" max="520" step="1" />
+                            <input id="layoutSidebarWidth" type="range" min="180" max="520" step="1" />
+                            <input id="layoutSidebarWidthInput" type="number" min="180" max="520" step="1" />
                         </div>
                     </div>
 
                     <div class="layout-group">
                         <label class="layout-label" for="layoutSandboxWidth">Sandbox width (px)</label>
                         <div class="layout-row">
-                            <input id="layoutSandboxWidth" type="range" min="240" max="760" step="1" />
-                            <input id="layoutSandboxWidthInput" type="number" min="240" max="760" step="1" />
+                            <input id="layoutSandboxWidth" type="range" min="180" max="760" step="1" />
+                            <input id="layoutSandboxWidthInput" type="number" min="180" max="760" step="1" />
                         </div>
                     </div>
 
                     <div class="layout-group">
                         <label class="layout-label" for="layoutToolsWidth">Tools width (px)</label>
                         <div class="layout-row">
-                            <input id="layoutToolsWidth" type="range" min="200" max="760" step="1" />
-                            <input id="layoutToolsWidthInput" type="number" min="200" max="760" step="1" />
+                            <input id="layoutToolsWidth" type="range" min="180" max="760" step="1" />
+                            <input id="layoutToolsWidthInput" type="number" min="180" max="760" step="1" />
                         </div>
                     </div>
 
@@ -824,14 +888,6 @@
                         <div class="layout-row">
                             <input id="layoutPanelGap" type="range" min="0" max="24" step="1" />
                             <input id="layoutPanelGapInput" type="number" min="0" max="24" step="1" />
-                        </div>
-                    </div>
-
-                    <div class="layout-group">
-                        <label class="layout-label" for="layoutCornerRadius">Corner radius (px)</label>
-                        <div class="layout-row">
-                            <input id="layoutCornerRadius" type="range" min="0" max="16" step="1" />
-                            <input id="layoutCornerRadiusInput" type="number" min="0" max="16" step="1" />
                         </div>
                     </div>
 
@@ -877,3 +933,6 @@
             </div>
         </body>
     </html>
+
+
+

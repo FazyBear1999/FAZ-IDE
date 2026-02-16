@@ -16,7 +16,7 @@
 // - Any execution behavior must stay in sandbox/* (isolated + testable).
 // - Keeping IDs centralized + fail-fast checks makes HTML refactors safe.
 
-import { APP, STORAGE, DEFAULT_CODE, GAMES } from "./config.js";
+import { APP, STORAGE, DEFAULT_CODE, GAMES, APPLICATIONS } from "./config.js";
 import { getRequiredElements } from "./ui/elements.js";
 import { load, save } from "./ui/store.js";
 import { makeLogger } from "./ui/logger.js";
@@ -24,7 +24,7 @@ import { makeStatus } from "./ui/status.js";
 import { makeDiagnostics } from "./ui/diagnostics.js";
 import { normalizeTheme, applyThemeState, DEFAULT_THEME } from "./ui/theme.js";
 import { buildExportWorkspaceData, buildWorkspaceExportFilename, triggerWorkspaceExportDownload, normalizeImportedWorkspacePayload, parseWorkspaceImportText, buildImportWorkspaceConfirmMessage } from "./ui/workspaceTransfer.js";
-import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, cloneLayoutState } from "./ui/layoutState.js";
+import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, normalizeFilesSectionOrder, cloneLayoutState } from "./ui/layoutState.js";
 import { runInSandbox } from "./sandbox/runner.js";
 import { makeTextareaEditor } from "./editors/textarea.js";
 import { makeCodeMirrorEditor } from "./editors/codemirror5.js";
@@ -82,9 +82,61 @@ const health = {
 };
 
 function setHealth(node, state, text) {
-    if (!node) return;
-    node.dataset.state = state;
-    node.textContent = text;
+    if (node) {
+        node.dataset.state = state;
+        node.textContent = text;
+    }
+    syncFooterRuntimeStatus();
+}
+
+function getHealthLabelSuffix(value = "", fallback = "") {
+    const text = String(value || "").trim();
+    if (!text) return String(fallback || "").trim();
+    const idx = text.indexOf(":");
+    if (idx === -1) return text;
+    const suffix = text.slice(idx + 1).trim();
+    return suffix || String(fallback || "").trim();
+}
+
+function syncFooterRuntimeStatus() {
+    if (el.footerEditorRuntime) {
+        const editorState = el.healthEditor?.dataset?.state || el.footerEditorRuntime.dataset?.state || "ok";
+        const editorSource = el.healthEditor?.textContent || el.footerEditorRuntime.textContent || "Editor: Ready";
+        const editorLabel = getHealthLabelSuffix(editorSource, "Ready");
+        el.footerEditorRuntime.dataset.state = editorState;
+        el.footerEditorRuntime.textContent = `Editor: ${editorLabel}`;
+        el.footerEditorRuntime.title = `Editor status: ${editorLabel}`;
+    }
+
+    if (el.footerSandbox) {
+        const sandboxState = el.healthSandbox?.dataset?.state || el.footerSandbox.dataset?.state || "idle";
+        const sandboxSource = el.healthSandbox?.textContent || el.footerSandbox.textContent || "Sandbox: Idle";
+        const sandboxLabel = getHealthLabelSuffix(sandboxSource, "Idle");
+        el.footerSandbox.dataset.state = sandboxState;
+        el.footerSandbox.textContent = `Sandbox: ${sandboxLabel}`;
+        el.footerSandbox.title = `Sandbox status: ${sandboxLabel}`;
+    }
+
+    if (el.footerStorage) {
+        const storageState = el.healthStorage?.dataset?.state || el.footerStorage.dataset?.state || "ok";
+        const fallback = storageState === "error" ? "Blocked" : "OK";
+        const storageSource = el.healthStorage?.textContent || el.footerStorage.textContent || `Storage: ${fallback}`;
+        const storageLabel = getHealthLabelSuffix(storageSource, fallback);
+        el.footerStorage.dataset.state = storageState;
+        el.footerStorage.textContent = `Storage: ${storageLabel}`;
+        el.footerStorage.title = `Storage status: ${storageLabel}`;
+    }
+
+    if (el.footerProblems) {
+        const list = el.problemsList;
+        const total = list ? list.querySelectorAll("[data-problem-id]").length : 0;
+        const hasError = Boolean(list?.querySelector('[data-problem-id][data-level="error"]'));
+        const hasWarn = Boolean(list?.querySelector('[data-problem-id][data-level="warn"]'));
+        const state = hasError ? "error" : (hasWarn || total > 0 ? "warn" : "ok");
+        el.footerProblems.dataset.state = state;
+        el.footerProblems.textContent = `Problems: ${total}`;
+        el.footerProblems.title = total > 0 ? `${total} active problem${total === 1 ? "" : "s"}` : "No active problems";
+    }
 }
 
 let diagnosticsVerbose = false;
@@ -100,6 +152,24 @@ function setDiagnosticsVerbose(next) {
 function pushDiag(level, message) {
     if (level === "info" && !diagnosticsVerbose) return;
     diagnostics.push(level, message);
+}
+
+function truncateText(value = "", maxChars = 0, { suffix = " ... [truncated]" } = {}) {
+    const source = String(value ?? "");
+    const limit = Math.max(0, Number(maxChars) || 0);
+    if (!limit || source.length <= limit) return source;
+    const ending = String(suffix || "");
+    const bodyLimit = Math.max(0, limit - ending.length);
+    if (bodyLimit <= 0) return source.slice(0, limit);
+    return `${source.slice(0, bodyLimit)}${ending}`;
+}
+
+function scheduleFrame(task) {
+    const run = typeof task === "function" ? task : () => {};
+    if (typeof requestAnimationFrame === "function") {
+        return requestAnimationFrame(run);
+    }
+    return setTimeout(run, 16);
 }
 
 function ensureSandboxOpen(reason) {
@@ -152,6 +222,8 @@ let fileFilter = "";
 let fileSort = "manual";
 const FILE_ROW_SELECTOR = ".file-row[data-file-id]";
 const FILE_FOLDER_ROW_SELECTOR = ".file-folder-row[data-folder-toggle]";
+const FILES_REORDERABLE_SECTIONS = new Set(["games", "applications", "open-editors", "files"]);
+const HORIZONTAL_HEADER_SCROLL_SELECTOR = ".top, .card-hd, .files-header, .layout-header, .editor-header";
 let fileMenuTargetId = null;
 let openTabIds = [];
 let selectedFileIds = new Set();
@@ -172,8 +244,31 @@ const EDITOR_AUTOSAVE_DEFAULT_MS = 650;
 const PROBLEM_ENTRY_LIMIT = 260;
 const RUNTIME_PROBLEM_LIMIT = 80;
 const TASK_RUNNER_OUTPUT_LIMIT = 180;
+const DEV_TERMINAL_OUTPUT_LIMIT = 200;
+const DEV_TERMINAL_HISTORY_LIMIT = 120;
+const TASK_RUNNER_MESSAGE_MAX_CHARS = 1400;
+const DEV_TERMINAL_MESSAGE_MAX_CHARS = 1400;
+const SANDBOX_CONSOLE_MAX_ARGS = 24;
+const SANDBOX_CONSOLE_ARG_MAX_CHARS = 1000;
+const SANDBOX_RUNTIME_MESSAGE_MAX_CHARS = 1400;
+const SANDBOX_PROMISE_REASON_MAX_CHARS = 1400;
+const SANDBOX_CONSOLE_QUEUE_LIMIT = 180;
+const SANDBOX_READY_FALLBACK_MS = 1200;
 const FILE_FILTER_RENDER_DEBOUNCE_MS = 90;
 const PROJECT_SEARCH_SCAN_DEBOUNCE_MS = 140;
+const WORKSPACE_IMPORT_MAX_INPUT_CHARS = 2_000_000;
+const WORKSPACE_MAX_FILES = 320;
+const WORKSPACE_MAX_TRASH = 320;
+const WORKSPACE_MAX_FOLDERS = 800;
+const WORKSPACE_MAX_OPEN_TABS = 120;
+const WORKSPACE_MAX_PATH_CHARS = 260;
+const WORKSPACE_MAX_FILE_CODE_CHARS = 160_000;
+const WORKSPACE_MAX_TOTAL_CODE_CHARS = 2_000_000;
+const WORKSPACE_MAX_TRASH_CODE_CHARS = 900_000;
+const LOCAL_FOLDER_MAX_FILE_BYTES = 700_000;
+const LOCAL_FOLDER_MAX_TOTAL_BYTES = 10_000_000;
+const TEMPLATE_ICON_SOURCE_LIMIT = 6;
+const EDITOR_HISTORY_REASON_MAX_CHARS = 72;
 const LOCAL_FOLDER_IMPORT_EXTENSIONS = new Set([
     "js",
     "mjs",
@@ -209,6 +304,7 @@ const EDITOR_PROFILES = {
         tabSize: 2,
         fontSize: 13,
         fontFamily: "default",
+        syntaxTheme: "volcanic",
         lineWrapping: true,
         lintEnabled: true,
         errorLensEnabled: true,
@@ -220,6 +316,7 @@ const EDITOR_PROFILES = {
         tabSize: 2,
         fontSize: 14,
         fontFamily: "default",
+        syntaxTheme: "volcanic",
         lineWrapping: false,
         lintEnabled: true,
         errorLensEnabled: true,
@@ -231,6 +328,7 @@ const EDITOR_PROFILES = {
         tabSize: 2,
         fontSize: 16,
         fontFamily: "default",
+        syntaxTheme: "volcanic",
         lineWrapping: true,
         lintEnabled: false,
         errorLensEnabled: false,
@@ -241,7 +339,7 @@ const EDITOR_PROFILES = {
 };
 
 const EDITOR_FONT_FAMILY_OPTIONS = {
-    default: 'ui-monospace, "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, Monaco, monospace',
+    default: '"JetBrains Mono", "Cascadia Mono", "Consolas", monospace',
     "jetbrains-mono": '"JetBrains Mono", "Cascadia Mono", "Consolas", monospace',
     "fira-code": '"Fira Code", "Cascadia Mono", "Consolas", monospace',
     "source-code-pro": '"Source Code Pro", "Cascadia Mono", "Consolas", monospace',
@@ -252,6 +350,1205 @@ const EDITOR_FONT_FAMILY_OPTIONS = {
     "cascadia-mono": '"Cascadia Mono", "Consolas", monospace',
 };
 
+const DEFAULT_EDITOR_SYNTAX_THEME = "volcanic";
+const EDITOR_SYNTAX_THEME_NAMES = Object.freeze([
+    "volcanic",
+    "twilight",
+    "aurora",
+    "solarflare",
+    "deepsea",
+    "nebula",
+    "forge",
+    "lotus",
+    "embermint",
+    "arctic",
+    "obsidian",
+    "sunset",
+    "verdant",
+    "royal",
+    "candy",
+    "magma",
+    "glacier",
+    "storm",
+    "orchid",
+    "graphene",
+    "retro",
+    "temple",
+]);
+const EDITOR_SYNTAX_THEME_METADATA = Object.freeze({
+    volcanic: Object.freeze({
+        label: "Volcanic Core",
+        colors: Object.freeze(["Lava Orange", "Electric Violet", "Signal Gold", "Neon Cyan", "Slate Gray"]),
+    }),
+    twilight: Object.freeze({
+        label: "Twilight Pulse",
+        colors: Object.freeze(["Indigo Blue", "Laser Cyan", "Rose Red", "Lime Green", "Steel Gray"]),
+    }),
+    aurora: Object.freeze({
+        label: "Aurora Mint",
+        colors: Object.freeze(["Emerald Green", "Sky Blue", "Amber Yellow", "Orchid Magenta", "Stone Gray"]),
+    }),
+    solarflare: Object.freeze({
+        label: "Solar Flare",
+        colors: Object.freeze(["Solar Orange", "Reactor Red", "Core Gold", "Teal Green", "Ash Gray"]),
+    }),
+    deepsea: Object.freeze({
+        label: "Deep Sea",
+        colors: Object.freeze(["Ocean Blue", "Reef Teal", "Voltage Purple", "Beacon Amber", "Harbor Gray"]),
+    }),
+    nebula: Object.freeze({
+        label: "Nebula Bloom",
+        colors: Object.freeze(["Cosmic Purple", "Neon Pink", "Plasma Cyan", "Acid Lime", "Moon Gray"]),
+    }),
+    forge: Object.freeze({
+        label: "Forge Ember",
+        colors: Object.freeze(["Forge Red", "Molten Orange", "Alloy Yellow", "Tempered Blue", "Iron Gray"]),
+    }),
+    lotus: Object.freeze({
+        label: "Lotus Night",
+        colors: Object.freeze(["Lotus Magenta", "Crystal Cyan", "Leaf Lime", "Tangerine", "Mist Gray"]),
+    }),
+    embermint: Object.freeze({
+        label: "Ember Mint",
+        colors: Object.freeze(["Coral Ember", "Mint Green", "Sun Yellow", "Indigo Blue", "Cool Gray"]),
+    }),
+    arctic: Object.freeze({
+        label: "Arctic Signal",
+        colors: Object.freeze(["Arctic Cyan", "Polar Blue", "Frost Purple", "Aurora Yellow", "Ice Gray"]),
+    }),
+    obsidian: Object.freeze({
+        label: "Obsidian Glow",
+        colors: Object.freeze(["Silver White", "Amethyst Purple", "Amber Gold", "Electric Cyan", "Graphite Gray"]),
+    }),
+    sunset: Object.freeze({
+        label: "Sunset Copper",
+        colors: Object.freeze(["Sunset Orange", "Flame Rose", "Solar Yellow", "Palm Green", "Dusk Gray"]),
+    }),
+    verdant: Object.freeze({
+        label: "Verdant Code",
+        colors: Object.freeze(["Forest Green", "Spring Lime", "Harvest Amber", "Stream Cyan", "Moss Gray"]),
+    }),
+    royal: Object.freeze({
+        label: "Royal Indigo",
+        colors: Object.freeze(["Royal Purple", "Sapphire Blue", "Crown Gold", "Emerald Green", "Velvet Gray"]),
+    }),
+    candy: Object.freeze({
+        label: "Candy Neon",
+        colors: Object.freeze(["Candy Pink", "Bubble Violet", "Aqua Cyan", "Lemon Yellow", "Soft Gray"]),
+    }),
+    magma: Object.freeze({
+        label: "Magma Core",
+        colors: Object.freeze(["Magma Red", "Lava Orange", "Ember Yellow", "Plasma Purple", "Basalt Gray"]),
+    }),
+    glacier: Object.freeze({
+        label: "Glacier Blue",
+        colors: Object.freeze(["Glacier Blue", "Ice Indigo", "Mint Green", "Amber Glow", "Cloud Gray"]),
+    }),
+    storm: Object.freeze({
+        label: "Storm Circuit",
+        colors: Object.freeze(["Storm Slate", "Lightning Blue", "Ion Cyan", "Warning Amber", "Silver Gray"]),
+    }),
+    orchid: Object.freeze({
+        label: "Orchid Mist",
+        colors: Object.freeze(["Orchid Purple", "Lavender Blue", "Bright Cyan", "Honey Amber", "Haze Gray"]),
+    }),
+    graphene: Object.freeze({
+        label: "Graphene Mono",
+        colors: Object.freeze(["Graphene Silver", "Cobalt Blue", "Amber Gold", "Circuit Green", "Carbon Gray"]),
+    }),
+    retro: Object.freeze({
+        label: "Retro",
+        colors: Object.freeze(["Arcade Red", "Arcade Blue", "Arcade Yellow", "Arcade Green", "Tube White"]),
+    }),
+    temple: Object.freeze({
+        label: "Temple",
+        colors: Object.freeze(["Cobalt Blue", "Temple Gold", "Ivory White", "Signal Red", "Sky Cyan"]),
+    }),
+});
+const EDITOR_SYNTAX_THEME_ROLE_COLORS = Object.freeze({
+    volcanic: Object.freeze({ primary: "#ff6b00", secondary: "#8b5cf6", accent: "#ffd60a", support: "#00d4ff", neutral: "#94a3b8" }),
+    twilight: Object.freeze({ primary: "#6366f1", secondary: "#06b6d4", accent: "#f43f5e", support: "#84cc16", neutral: "#a3a3a3" }),
+    aurora: Object.freeze({ primary: "#10b981", secondary: "#0ea5e9", accent: "#f59e0b", support: "#d946ef", neutral: "#9ca3af" }),
+    solarflare: Object.freeze({ primary: "#f97316", secondary: "#ef4444", accent: "#eab308", support: "#14b8a6", neutral: "#94a3b8" }),
+    deepsea: Object.freeze({ primary: "#3b82f6", secondary: "#14b8a6", accent: "#a855f7", support: "#f59e0b", neutral: "#94a3b8" }),
+    nebula: Object.freeze({ primary: "#a855f7", secondary: "#ec4899", accent: "#22d3ee", support: "#a3e635", neutral: "#9ca3af" }),
+    forge: Object.freeze({ primary: "#ef4444", secondary: "#f97316", accent: "#facc15", support: "#3b82f6", neutral: "#a1a1aa" }),
+    lotus: Object.freeze({ primary: "#d946ef", secondary: "#06b6d4", accent: "#84cc16", support: "#fb923c", neutral: "#9ca3af" }),
+    embermint: Object.freeze({ primary: "#fb7185", secondary: "#10b981", accent: "#facc15", support: "#6366f1", neutral: "#94a3b8" }),
+    arctic: Object.freeze({ primary: "#22d3ee", secondary: "#60a5fa", accent: "#a855f7", support: "#facc15", neutral: "#9ca3af" }),
+    obsidian: Object.freeze({ primary: "#e5e7eb", secondary: "#8b5cf6", accent: "#f59e0b", support: "#22d3ee", neutral: "#71717a" }),
+    sunset: Object.freeze({ primary: "#fb923c", secondary: "#f43f5e", accent: "#facc15", support: "#22c55e", neutral: "#94a3b8" }),
+    verdant: Object.freeze({ primary: "#22c55e", secondary: "#84cc16", accent: "#f59e0b", support: "#06b6d4", neutral: "#94a3b8" }),
+    royal: Object.freeze({ primary: "#7c3aed", secondary: "#3b82f6", accent: "#f59e0b", support: "#10b981", neutral: "#a1a1aa" }),
+    candy: Object.freeze({ primary: "#f43f5e", secondary: "#e879f9", accent: "#22d3ee", support: "#facc15", neutral: "#94a3b8" }),
+    magma: Object.freeze({ primary: "#ef4444", secondary: "#f97316", accent: "#facc15", support: "#a855f7", neutral: "#a3a3a3" }),
+    glacier: Object.freeze({ primary: "#38bdf8", secondary: "#60a5fa", accent: "#34d399", support: "#f59e0b", neutral: "#94a3b8" }),
+    storm: Object.freeze({ primary: "#64748b", secondary: "#3b82f6", accent: "#06b6d4", support: "#f59e0b", neutral: "#cbd5e1" }),
+    orchid: Object.freeze({ primary: "#c026d3", secondary: "#8b5cf6", accent: "#22d3ee", support: "#f59e0b", neutral: "#94a3b8" }),
+    graphene: Object.freeze({ primary: "#9ca3af", secondary: "#60a5fa", accent: "#f59e0b", support: "#22c55e", neutral: "#e5e7eb" }),
+    retro: Object.freeze({ primary: "#d90429", secondary: "#0051ba", accent: "#ffd500", support: "#009b48", neutral: "#d8dee4" }),
+    temple: Object.freeze({ primary: "#1f4fff", secondary: "#00a9ff", accent: "#d9a100", support: "#fff6db", neutral: "#7d8eb2" }),
+});
+const SYNTAX_ROLE_KEYS = Object.freeze(["primary", "secondary", "accent", "support", "neutral"]);
+const SYNTAX_SURFACE_MIX_RULES = Object.freeze({
+    dark: Object.freeze({ mix: "#000000", chroma: 0, neutral: 0 }),
+    light: Object.freeze({ mix: "#0f172a", chroma: 0.42, neutral: 0.52 }),
+    purple: Object.freeze({ mix: "#f8f1ff", chroma: 0.16, neutral: 0.28 }),
+});
+const SYNTAX_THEME_MIX_OVERRIDES = Object.freeze({
+    retro: Object.freeze({
+        dark: Object.freeze({ mix: "#000000", chroma: 0, neutral: 0 }),
+        light: Object.freeze({ mix: "#0f172a", chroma: 0.38, neutral: 0.48 }),
+        purple: Object.freeze({ mix: "#ffffff", chroma: 0.03, neutral: 0.1 }),
+    }),
+    temple: Object.freeze({
+        dark: Object.freeze({ mix: "#000000", chroma: 0.02, neutral: 0.08 }),
+        light: Object.freeze({ mix: "#0b1b52", chroma: 0.5, neutral: 0.6 }),
+        purple: Object.freeze({ mix: "#ffffff", chroma: 0.1, neutral: 0.18 }),
+    }),
+});
+const EDITOR_SYNTAX_THEME_ALIASES = Object.freeze({
+    ember: "volcanic",
+    midnight: "twilight",
+    citrus: "solarflare",
+    ocean: "deepsea",
+    graphite: "aurora",
+    rubik: "retro",
+    rubiks: "retro",
+    cube: "retro",
+    templeos: "temple",
+    holy: "temple",
+});
+const EDITOR_SYNTAX_VAR_KEYS = Object.freeze([
+    "plain",
+    "keyword",
+    "atom",
+    "number",
+    "def",
+    "variable",
+    "variable-2",
+    "variable-3",
+    "property",
+    "operator",
+    "comment",
+    "string",
+    "string-2",
+    "meta",
+    "tag",
+    "attribute",
+    "qualifier",
+    "builtin",
+    "bracket",
+]);
+
+const EDITOR_SYNTAX_THEME_PALETTES = Object.freeze({
+    volcanic: Object.freeze({
+        dark: Object.freeze({
+            plain: "#f8f4ff",
+            keyword: "#ff9f43",
+            atom: "#9b5de5",
+            number: "#ff7a00",
+            def: "#c77dff",
+            variable: "#f8f4ff",
+            "variable-2": "#b388ff",
+            "variable-3": "#ffd166",
+            property: "#d0a2ff",
+            operator: "#ff9f43",
+            comment: "#b3a0c8",
+            string: "#ffb86b",
+            "string-2": "#ff9f43",
+            meta: "#c77dff",
+            tag: "#9b5de5",
+            attribute: "#d0a2ff",
+            qualifier: "#ffd166",
+            builtin: "#ff7a00",
+            bracket: "#efe7ff",
+        }),
+        light: Object.freeze({
+            plain: "#2b1a38",
+            keyword: "#c2410c",
+            atom: "#6d28d9",
+            number: "#ea580c",
+            def: "#7c3aed",
+            variable: "#2b1a38",
+            "variable-2": "#8b5cf6",
+            "variable-3": "#a16207",
+            property: "#7c3aed",
+            operator: "#c2410c",
+            comment: "#7f6b93",
+            string: "#b45309",
+            "string-2": "#9a3412",
+            meta: "#8b5cf6",
+            tag: "#6d28d9",
+            attribute: "#7c3aed",
+            qualifier: "#a16207",
+            builtin: "#ea580c",
+            bracket: "#3a2b4a",
+        }),
+        purple: Object.freeze({
+            plain: "#fbf4ff",
+            keyword: "#fb923c",
+            atom: "#c084fc",
+            number: "#f97316",
+            def: "#e9d5ff",
+            variable: "#fbf4ff",
+            "variable-2": "#d8b4fe",
+            "variable-3": "#fbbf24",
+            property: "#e2c8ff",
+            operator: "#fb923c",
+            comment: "#bea6d5",
+            string: "#fdba74",
+            "string-2": "#fb923c",
+            meta: "#d8b4fe",
+            tag: "#c084fc",
+            attribute: "#e9d5ff",
+            qualifier: "#fbbf24",
+            builtin: "#f97316",
+            bracket: "#f3e8ff",
+        }),
+    }),
+    twilight: Object.freeze({
+        dark: Object.freeze({
+            plain: "#f3ecff",
+            keyword: "#c084fc",
+            atom: "#a855f7",
+            number: "#fdba74",
+            def: "#e9d5ff",
+            variable: "#f3ecff",
+            "variable-2": "#c4b5fd",
+            "variable-3": "#fde047",
+            property: "#d8b4fe",
+            operator: "#e9d5ff",
+            comment: "#9f92bf",
+            string: "#fcd34d",
+            "string-2": "#f59e0b",
+            meta: "#c084fc",
+            tag: "#a78bfa",
+            attribute: "#e9d5ff",
+            qualifier: "#fde047",
+            builtin: "#f97316",
+            bracket: "#efe2ff",
+        }),
+        light: Object.freeze({
+            plain: "#2a1f3d",
+            keyword: "#7e22ce",
+            atom: "#6d28d9",
+            number: "#c2410c",
+            def: "#5b21b6",
+            variable: "#2a1f3d",
+            "variable-2": "#7c3aed",
+            "variable-3": "#a16207",
+            property: "#6d28d9",
+            operator: "#9333ea",
+            comment: "#7f6fa0",
+            string: "#b45309",
+            "string-2": "#92400e",
+            meta: "#7c3aed",
+            tag: "#6d28d9",
+            attribute: "#5b21b6",
+            qualifier: "#a16207",
+            builtin: "#c2410c",
+            bracket: "#3e3154",
+        }),
+        purple: Object.freeze({
+            plain: "#f7efff",
+            keyword: "#d8b4fe",
+            atom: "#c4b5fd",
+            number: "#fda65a",
+            def: "#f0abfc",
+            variable: "#f7efff",
+            "variable-2": "#e9d5ff",
+            "variable-3": "#fbbf24",
+            property: "#ddd6fe",
+            operator: "#f0ddff",
+            comment: "#bba7d7",
+            string: "#fde68a",
+            "string-2": "#f59e0b",
+            meta: "#d8b4fe",
+            tag: "#c4b5fd",
+            attribute: "#f1e7ff",
+            qualifier: "#fbbf24",
+            builtin: "#fb923c",
+            bracket: "#f5edff",
+        }),
+    }),
+    aurora: Object.freeze({
+        dark: Object.freeze({
+            plain: "#ecfff7",
+            keyword: "#34d399",
+            atom: "#22d3ee",
+            number: "#f59e0b",
+            def: "#5eead4",
+            variable: "#ecfff7",
+            "variable-2": "#2dd4bf",
+            "variable-3": "#facc15",
+            property: "#67e8f9",
+            operator: "#10b981",
+            comment: "#8db9b0",
+            string: "#86efac",
+            "string-2": "#34d399",
+            meta: "#22d3ee",
+            tag: "#2dd4bf",
+            attribute: "#67e8f9",
+            qualifier: "#86efac",
+            builtin: "#f59e0b",
+            bracket: "#dcfce7",
+        }),
+        light: Object.freeze({
+            plain: "#13292a",
+            keyword: "#047857",
+            atom: "#0e7490",
+            number: "#b45309",
+            def: "#0f766e",
+            variable: "#13292a",
+            "variable-2": "#0f766e",
+            "variable-3": "#a16207",
+            property: "#0891b2",
+            operator: "#059669",
+            comment: "#5f8781",
+            string: "#15803d",
+            "string-2": "#166534",
+            meta: "#0e7490",
+            tag: "#0f766e",
+            attribute: "#0891b2",
+            qualifier: "#15803d",
+            builtin: "#b45309",
+            bracket: "#1f3c3d",
+        }),
+        purple: Object.freeze({
+            plain: "#eefff8",
+            keyword: "#5eead4",
+            atom: "#67e8f9",
+            number: "#fbbf24",
+            def: "#99f6e4",
+            variable: "#eefff8",
+            "variable-2": "#6ee7b7",
+            "variable-3": "#fde047",
+            property: "#a5f3fc",
+            operator: "#34d399",
+            comment: "#a3c1b8",
+            string: "#86efac",
+            "string-2": "#4ade80",
+            meta: "#67e8f9",
+            tag: "#5eead4",
+            attribute: "#a5f3fc",
+            qualifier: "#86efac",
+            builtin: "#f59e0b",
+            bracket: "#d9fbea",
+        }),
+    }),
+    solarflare: Object.freeze({
+        dark: Object.freeze({
+            plain: "#fff4ea",
+            keyword: "#f97316",
+            atom: "#ef4444",
+            number: "#f59e0b",
+            def: "#fb7185",
+            variable: "#fff4ea",
+            "variable-2": "#fb923c",
+            "variable-3": "#fde047",
+            property: "#fda4af",
+            operator: "#f97316",
+            comment: "#c3a490",
+            string: "#fdba74",
+            "string-2": "#fb923c",
+            meta: "#ef4444",
+            tag: "#f97316",
+            attribute: "#fda4af",
+            qualifier: "#fde047",
+            builtin: "#dc2626",
+            bracket: "#ffe8d4",
+        }),
+        light: Object.freeze({
+            plain: "#3a2416",
+            keyword: "#c2410c",
+            atom: "#b91c1c",
+            number: "#b45309",
+            def: "#be123c",
+            variable: "#3a2416",
+            "variable-2": "#ea580c",
+            "variable-3": "#a16207",
+            property: "#be123c",
+            operator: "#c2410c",
+            comment: "#9a7b66",
+            string: "#b45309",
+            "string-2": "#9a3412",
+            meta: "#b91c1c",
+            tag: "#c2410c",
+            attribute: "#be123c",
+            qualifier: "#a16207",
+            builtin: "#991b1b",
+            bracket: "#4a2d1c",
+        }),
+        purple: Object.freeze({
+            plain: "#fff1ea",
+            keyword: "#fb923c",
+            atom: "#fb7185",
+            number: "#f59e0b",
+            def: "#fda4af",
+            variable: "#fff1ea",
+            "variable-2": "#fdba74",
+            "variable-3": "#fde047",
+            property: "#fbcfe8",
+            operator: "#fb923c",
+            comment: "#c7a394",
+            string: "#fdba74",
+            "string-2": "#fb923c",
+            meta: "#fb7185",
+            tag: "#fb923c",
+            attribute: "#fda4af",
+            qualifier: "#fde047",
+            builtin: "#ef4444",
+            bracket: "#ffe4d6",
+        }),
+    }),
+    deepsea: Object.freeze({
+        dark: Object.freeze({
+            plain: "#e8f8ff",
+            keyword: "#38bdf8",
+            atom: "#60a5fa",
+            number: "#22d3ee",
+            def: "#93c5fd",
+            variable: "#e8f8ff",
+            "variable-2": "#2dd4bf",
+            "variable-3": "#7dd3fc",
+            property: "#7dd3fc",
+            operator: "#0ea5e9",
+            comment: "#88a8b7",
+            string: "#67e8f9",
+            "string-2": "#22d3ee",
+            meta: "#60a5fa",
+            tag: "#38bdf8",
+            attribute: "#7dd3fc",
+            qualifier: "#2dd4bf",
+            builtin: "#0284c7",
+            bracket: "#d6ecff",
+        }),
+        light: Object.freeze({
+            plain: "#132a3b",
+            keyword: "#0369a1",
+            atom: "#1d4ed8",
+            number: "#0e7490",
+            def: "#2563eb",
+            variable: "#132a3b",
+            "variable-2": "#0f766e",
+            "variable-3": "#155e75",
+            property: "#0ea5e9",
+            operator: "#0284c7",
+            comment: "#607e8e",
+            string: "#0f766e",
+            "string-2": "#0e7490",
+            meta: "#2563eb",
+            tag: "#0369a1",
+            attribute: "#0ea5e9",
+            qualifier: "#0f766e",
+            builtin: "#1d4ed8",
+            bracket: "#224458",
+        }),
+        purple: Object.freeze({
+            plain: "#eaf7ff",
+            keyword: "#67e8f9",
+            atom: "#93c5fd",
+            number: "#22d3ee",
+            def: "#bfdbfe",
+            variable: "#eaf7ff",
+            "variable-2": "#5eead4",
+            "variable-3": "#a5f3fc",
+            property: "#bae6fd",
+            operator: "#38bdf8",
+            comment: "#9bb7c6",
+            string: "#a5f3fc",
+            "string-2": "#67e8f9",
+            meta: "#93c5fd",
+            tag: "#7dd3fc",
+            attribute: "#bae6fd",
+            qualifier: "#5eead4",
+            builtin: "#38bdf8",
+            bracket: "#d8ecff",
+        }),
+    }),
+    nebula: Object.freeze({
+        dark: Object.freeze({
+            plain: "#f2ecff",
+            keyword: "#c084fc",
+            atom: "#60a5fa",
+            number: "#fda4af",
+            def: "#a78bfa",
+            variable: "#f2ecff",
+            "variable-2": "#818cf8",
+            "variable-3": "#fbbf24",
+            property: "#c4b5fd",
+            operator: "#d8b4fe",
+            comment: "#a798c2",
+            string: "#93c5fd",
+            "string-2": "#60a5fa",
+            meta: "#c084fc",
+            tag: "#a78bfa",
+            attribute: "#93c5fd",
+            qualifier: "#fbbf24",
+            builtin: "#fb923c",
+            bracket: "#efe5ff",
+        }),
+        light: Object.freeze({
+            plain: "#2b2140",
+            keyword: "#7e22ce",
+            atom: "#2563eb",
+            number: "#dc2626",
+            def: "#6d28d9",
+            variable: "#2b2140",
+            "variable-2": "#4f46e5",
+            "variable-3": "#a16207",
+            property: "#5b21b6",
+            operator: "#8b5cf6",
+            comment: "#7e6f9d",
+            string: "#1d4ed8",
+            "string-2": "#2563eb",
+            meta: "#7c3aed",
+            tag: "#6d28d9",
+            attribute: "#1d4ed8",
+            qualifier: "#a16207",
+            builtin: "#c2410c",
+            bracket: "#3b2f52",
+        }),
+        purple: Object.freeze({
+            plain: "#f6efff",
+            keyword: "#d8b4fe",
+            atom: "#93c5fd",
+            number: "#fda4af",
+            def: "#c4b5fd",
+            variable: "#f6efff",
+            "variable-2": "#a5b4fc",
+            "variable-3": "#fbbf24",
+            property: "#ddd6fe",
+            operator: "#e9d5ff",
+            comment: "#b6a4d3",
+            string: "#bfdbfe",
+            "string-2": "#93c5fd",
+            meta: "#d8b4fe",
+            tag: "#c4b5fd",
+            attribute: "#bfdbfe",
+            qualifier: "#fbbf24",
+            builtin: "#fb923c",
+            bracket: "#f2e8ff",
+        }),
+    }),
+    forge: Object.freeze({
+        dark: Object.freeze({
+            plain: "#fff5eb",
+            keyword: "#fb923c",
+            atom: "#f59e0b",
+            number: "#ef4444",
+            def: "#fdba74",
+            variable: "#fff5eb",
+            "variable-2": "#f97316",
+            "variable-3": "#fde047",
+            property: "#fdba74",
+            operator: "#fb923c",
+            comment: "#c0a792",
+            string: "#fbbf24",
+            "string-2": "#f59e0b",
+            meta: "#ef4444",
+            tag: "#fb923c",
+            attribute: "#fdba74",
+            qualifier: "#fde047",
+            builtin: "#dc2626",
+            bracket: "#ffe7d1",
+        }),
+        light: Object.freeze({
+            plain: "#3d2618",
+            keyword: "#c2410c",
+            atom: "#b45309",
+            number: "#b91c1c",
+            def: "#d97706",
+            variable: "#3d2618",
+            "variable-2": "#ea580c",
+            "variable-3": "#a16207",
+            property: "#d97706",
+            operator: "#c2410c",
+            comment: "#9a7b66",
+            string: "#b45309",
+            "string-2": "#92400e",
+            meta: "#b91c1c",
+            tag: "#c2410c",
+            attribute: "#d97706",
+            qualifier: "#a16207",
+            builtin: "#991b1b",
+            bracket: "#4c3020",
+        }),
+        purple: Object.freeze({
+            plain: "#fff2e9",
+            keyword: "#fb923c",
+            atom: "#f59e0b",
+            number: "#fb7185",
+            def: "#fdba74",
+            variable: "#fff2e9",
+            "variable-2": "#fb923c",
+            "variable-3": "#fde047",
+            property: "#fdba74",
+            operator: "#fb923c",
+            comment: "#c4a08f",
+            string: "#fbbf24",
+            "string-2": "#f59e0b",
+            meta: "#fb7185",
+            tag: "#fb923c",
+            attribute: "#fdba74",
+            qualifier: "#fde047",
+            builtin: "#ef4444",
+            bracket: "#ffe2d0",
+        }),
+    }),
+    lotus: Object.freeze({
+        dark: Object.freeze({
+            plain: "#f6ecff",
+            keyword: "#e879f9",
+            atom: "#22d3ee",
+            number: "#fb7185",
+            def: "#c084fc",
+            variable: "#f6ecff",
+            "variable-2": "#a78bfa",
+            "variable-3": "#fde047",
+            property: "#d8b4fe",
+            operator: "#f0abfc",
+            comment: "#ae97c7",
+            string: "#67e8f9",
+            "string-2": "#22d3ee",
+            meta: "#c084fc",
+            tag: "#a78bfa",
+            attribute: "#67e8f9",
+            qualifier: "#fde047",
+            builtin: "#fb923c",
+            bracket: "#efe0ff",
+        }),
+        light: Object.freeze({
+            plain: "#311f3b",
+            keyword: "#a21caf",
+            atom: "#0e7490",
+            number: "#be123c",
+            def: "#7e22ce",
+            variable: "#311f3b",
+            "variable-2": "#6d28d9",
+            "variable-3": "#a16207",
+            property: "#9333ea",
+            operator: "#a855f7",
+            comment: "#8a7399",
+            string: "#0f766e",
+            "string-2": "#0e7490",
+            meta: "#7e22ce",
+            tag: "#6d28d9",
+            attribute: "#0f766e",
+            qualifier: "#a16207",
+            builtin: "#c2410c",
+            bracket: "#43314e",
+        }),
+        purple: Object.freeze({
+            plain: "#f8edff",
+            keyword: "#f0abfc",
+            atom: "#67e8f9",
+            number: "#fb7185",
+            def: "#d8b4fe",
+            variable: "#f8edff",
+            "variable-2": "#c4b5fd",
+            "variable-3": "#fde047",
+            property: "#e9d5ff",
+            operator: "#f0abfc",
+            comment: "#bda5d1",
+            string: "#a5f3fc",
+            "string-2": "#67e8f9",
+            meta: "#d8b4fe",
+            tag: "#c4b5fd",
+            attribute: "#a5f3fc",
+            qualifier: "#fde047",
+            builtin: "#fb923c",
+            bracket: "#f3e6ff",
+        }),
+    }),
+    embermint: Object.freeze({
+        dark: Object.freeze({
+            plain: "#f0fff7",
+            keyword: "#fb923c",
+            atom: "#34d399",
+            number: "#f59e0b",
+            def: "#6ee7b7",
+            variable: "#f0fff7",
+            "variable-2": "#2dd4bf",
+            "variable-3": "#fde047",
+            property: "#99f6e4",
+            operator: "#f97316",
+            comment: "#9cb9ad",
+            string: "#86efac",
+            "string-2": "#4ade80",
+            meta: "#2dd4bf",
+            tag: "#34d399",
+            attribute: "#99f6e4",
+            qualifier: "#fde047",
+            builtin: "#fb923c",
+            bracket: "#dcfcef",
+        }),
+        light: Object.freeze({
+            plain: "#1f3329",
+            keyword: "#c2410c",
+            atom: "#047857",
+            number: "#b45309",
+            def: "#059669",
+            variable: "#1f3329",
+            "variable-2": "#0f766e",
+            "variable-3": "#a16207",
+            property: "#10b981",
+            operator: "#ea580c",
+            comment: "#6f8b7d",
+            string: "#15803d",
+            "string-2": "#166534",
+            meta: "#0f766e",
+            tag: "#047857",
+            attribute: "#10b981",
+            qualifier: "#a16207",
+            builtin: "#c2410c",
+            bracket: "#2c463a",
+        }),
+        purple: Object.freeze({
+            plain: "#f2fff7",
+            keyword: "#fdba74",
+            atom: "#5eead4",
+            number: "#f59e0b",
+            def: "#99f6e4",
+            variable: "#f2fff7",
+            "variable-2": "#6ee7b7",
+            "variable-3": "#fde047",
+            property: "#a7f3d0",
+            operator: "#fb923c",
+            comment: "#a5c0b2",
+            string: "#bbf7d0",
+            "string-2": "#86efac",
+            meta: "#5eead4",
+            tag: "#6ee7b7",
+            attribute: "#a7f3d0",
+            qualifier: "#fde047",
+            builtin: "#fb923c",
+            bracket: "#d9fbe8",
+        }),
+    }),
+    arctic: Object.freeze({
+        dark: Object.freeze({
+            plain: "#eaf6ff",
+            keyword: "#7dd3fc",
+            atom: "#93c5fd",
+            number: "#67e8f9",
+            def: "#bfdbfe",
+            variable: "#eaf6ff",
+            "variable-2": "#5eead4",
+            "variable-3": "#a5f3fc",
+            property: "#bae6fd",
+            operator: "#38bdf8",
+            comment: "#95acbc",
+            string: "#a5f3fc",
+            "string-2": "#67e8f9",
+            meta: "#93c5fd",
+            tag: "#7dd3fc",
+            attribute: "#bae6fd",
+            qualifier: "#5eead4",
+            builtin: "#60a5fa",
+            bracket: "#dceeff",
+        }),
+        light: Object.freeze({
+            plain: "#1a2f40",
+            keyword: "#0369a1",
+            atom: "#2563eb",
+            number: "#0e7490",
+            def: "#1d4ed8",
+            variable: "#1a2f40",
+            "variable-2": "#0f766e",
+            "variable-3": "#155e75",
+            property: "#0284c7",
+            operator: "#0891b2",
+            comment: "#6a8292",
+            string: "#0f766e",
+            "string-2": "#0e7490",
+            meta: "#2563eb",
+            tag: "#0369a1",
+            attribute: "#0284c7",
+            qualifier: "#0f766e",
+            builtin: "#1d4ed8",
+            bracket: "#26495e",
+        }),
+        purple: Object.freeze({
+            plain: "#edf7ff",
+            keyword: "#a5f3fc",
+            atom: "#bfdbfe",
+            number: "#67e8f9",
+            def: "#dbeafe",
+            variable: "#edf7ff",
+            "variable-2": "#99f6e4",
+            "variable-3": "#bae6fd",
+            property: "#dbeafe",
+            operator: "#7dd3fc",
+            comment: "#a6bccb",
+            string: "#cffafe",
+            "string-2": "#a5f3fc",
+            meta: "#bfdbfe",
+            tag: "#bae6fd",
+            attribute: "#dbeafe",
+            qualifier: "#99f6e4",
+            builtin: "#93c5fd",
+            bracket: "#e0eeff",
+        }),
+    }),
+});
+
+function buildSyntaxPaletteVariant(basePalette, overrides = {}) {
+    const buildSurface = (surface) => Object.freeze({
+        ...(basePalette?.[surface] || {}),
+        ...(overrides?.[surface] || {}),
+    });
+    return Object.freeze({
+        dark: buildSurface("dark"),
+        light: buildSurface("light"),
+        purple: buildSurface("purple"),
+    });
+}
+
+const SYNTAX_THEME_SURFACES = Object.freeze(["dark", "light", "purple"]);
+
+function clampUnit(value, min, max) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return min;
+    return Math.min(max, Math.max(min, numeric));
+}
+
+function parseHexColor(value = "") {
+    const raw = String(value || "").trim().replace(/^#/, "");
+    if (!/^[0-9a-fA-F]{6}$/.test(raw)) return null;
+    return {
+        r: Number.parseInt(raw.slice(0, 2), 16),
+        g: Number.parseInt(raw.slice(2, 4), 16),
+        b: Number.parseInt(raw.slice(4, 6), 16),
+    };
+}
+
+function rgbToHex(color = {}) {
+    const toHex = (channel) => Math.round(clampUnit(channel, 0, 255)).toString(16).padStart(2, "0");
+    return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`;
+}
+
+function mixHexColors(baseHex = "#000000", mixHex = "#000000", amount = 0) {
+    const base = parseHexColor(baseHex);
+    const mix = parseHexColor(mixHex);
+    if (!base || !mix) return baseHex;
+    const weight = clampUnit(amount, 0, 1);
+    return rgbToHex({
+        r: base.r + (mix.r - base.r) * weight,
+        g: base.g + (mix.g - base.g) * weight,
+        b: base.b + (mix.b - base.b) * weight,
+    });
+}
+
+function rgbToHsl(color = {}) {
+    const r = clampUnit(color.r, 0, 255) / 255;
+    const g = clampUnit(color.g, 0, 255) / 255;
+    const b = clampUnit(color.b, 0, 255) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const delta = max - min;
+    let h = 0;
+    let s = 0;
+    const l = (max + min) / 2;
+    if (delta > 0) {
+        s = delta / (1 - Math.abs(2 * l - 1));
+        if (max === r) h = ((g - b) / delta) % 6;
+        else if (max === g) h = (b - r) / delta + 2;
+        else h = (r - g) / delta + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+    }
+    return { h, s: s * 100, l: l * 100 };
+}
+
+function hslToRgb(color = {}) {
+    const h = ((Number(color.h) % 360) + 360) % 360;
+    const s = clampUnit(color.s, 0, 100) / 100;
+    const l = clampUnit(color.l, 0, 100) / 100;
+    const chroma = (1 - Math.abs(2 * l - 1)) * s;
+    const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - chroma / 2;
+    let rPrime = 0;
+    let gPrime = 0;
+    let bPrime = 0;
+    if (h < 60) {
+        rPrime = chroma;
+        gPrime = x;
+    } else if (h < 120) {
+        rPrime = x;
+        gPrime = chroma;
+    } else if (h < 180) {
+        gPrime = chroma;
+        bPrime = x;
+    } else if (h < 240) {
+        gPrime = x;
+        bPrime = chroma;
+    } else if (h < 300) {
+        rPrime = x;
+        bPrime = chroma;
+    } else {
+        rPrime = chroma;
+        bPrime = x;
+    }
+    return {
+        r: (rPrime + m) * 255,
+        g: (gPrime + m) * 255,
+        b: (bPrime + m) * 255,
+    };
+}
+
+function nudgeHexColor(hex = "#ffffff", attempt = 0) {
+    const rgb = parseHexColor(hex);
+    if (!rgb) return hex;
+    const hsl = rgbToHsl(rgb);
+    const shift = 26 + attempt * 14;
+    const next = {
+        h: hsl.h + shift,
+        s: hsl.s + (attempt % 2 === 0 ? 7 : -5),
+        l: hsl.l + (attempt % 2 === 0 ? 8 : -8),
+    };
+    return rgbToHex(hslToRgb(next));
+}
+
+function colorDistance(hexA = "", hexB = "") {
+    const a = parseHexColor(hexA);
+    const b = parseHexColor(hexB);
+    if (!a || !b) return 0;
+    const dr = a.r - b.r;
+    const dg = a.g - b.g;
+    const db = a.b - b.b;
+    return Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+}
+
+function ensureDistinctRoleColors(input = {}) {
+    const next = { ...input };
+    const threshold = 72;
+    SYNTAX_ROLE_KEYS.forEach((role, index) => {
+        let color = next[role];
+        if (!parseHexColor(color)) return;
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            let minDistance = Number.POSITIVE_INFINITY;
+            for (let i = 0; i < index; i += 1) {
+                const previous = next[SYNTAX_ROLE_KEYS[i]];
+                if (!parseHexColor(previous)) continue;
+                minDistance = Math.min(minDistance, colorDistance(color, previous));
+            }
+            if (minDistance >= threshold) break;
+            color = nudgeHexColor(color, attempt);
+        }
+        next[role] = color;
+    });
+    return next;
+}
+
+function buildConfiguredSyntaxThemeIdentity(themeName = "", palette = {}) {
+    const normalizedTheme = String(themeName || "").trim().toLowerCase();
+    const baseRoles = EDITOR_SYNTAX_THEME_ROLE_COLORS[normalizedTheme];
+    if (!baseRoles) return deriveSyntaxThemeIdentity(palette);
+    const identity = {};
+    const mixRules = SYNTAX_THEME_MIX_OVERRIDES[normalizedTheme] || SYNTAX_SURFACE_MIX_RULES;
+    SYNTAX_THEME_SURFACES.forEach((surface) => {
+        const mixRule = mixRules[surface] || mixRules.dark || SYNTAX_SURFACE_MIX_RULES.dark;
+        const surfaceRoles = {
+            primary: mixHexColors(baseRoles.primary, mixRule.mix, mixRule.chroma),
+            secondary: mixHexColors(baseRoles.secondary, mixRule.mix, mixRule.chroma),
+            accent: mixHexColors(baseRoles.accent, mixRule.mix, mixRule.chroma),
+            support: mixHexColors(baseRoles.support, mixRule.mix, mixRule.chroma),
+            neutral: mixHexColors(baseRoles.neutral, mixRule.mix, mixRule.neutral),
+        };
+        identity[surface] = ensureDistinctRoleColors(surfaceRoles);
+    });
+    return identity;
+}
+
+function pickSyntaxColor(surfacePalette = {}, keys = [], fallback = "#c9d1d9") {
+    for (const key of keys) {
+        const value = surfacePalette?.[key];
+        if (typeof value === "string" && value.trim()) {
+            return value;
+        }
+    }
+    return fallback;
+}
+
+function deriveSyntaxThemeIdentity(palette = {}) {
+    const identity = {};
+    SYNTAX_THEME_SURFACES.forEach((surface) => {
+        const surfacePalette = palette?.[surface] || {};
+        const primary = pickSyntaxColor(surfacePalette, ["keyword", "operator", "tag"]);
+        const secondary = pickSyntaxColor(surfacePalette, ["atom", "def", "property", "attribute"], primary);
+        const accent = pickSyntaxColor(surfacePalette, ["number", "builtin"], secondary || primary);
+        const support = pickSyntaxColor(surfacePalette, ["string", "string-2", "qualifier", "variable-3"], accent || secondary || primary);
+        const neutral = pickSyntaxColor(surfacePalette, ["comment", "meta"], primary);
+        identity[surface] = { primary, secondary, accent, support, neutral };
+    });
+    return identity;
+}
+
+function normalizeSyntaxThemePalette(palette = {}, identity = deriveSyntaxThemeIdentity(palette)) {
+    const buildSurface = (surface) => {
+        const base = { ...(palette?.[surface] || {}) };
+        const tokens = identity?.[surface] || {};
+        const primary = tokens.primary || base.keyword || base.operator || base.tag || "#79c0ff";
+        const secondary = tokens.secondary || base.atom || base.def || base.property || base.attribute || primary;
+        const accent = tokens.accent || base.number || base.builtin || secondary;
+        const support = tokens.support || base.string || base["string-2"] || base.qualifier || base["variable-3"] || accent;
+        const neutral = tokens.neutral || base.comment || base.meta || primary;
+        return Object.freeze({
+            ...base,
+            keyword: primary,
+            operator: primary,
+            tag: primary,
+            atom: secondary,
+            def: secondary,
+            property: secondary,
+            attribute: secondary,
+            number: accent,
+            builtin: accent,
+            string: support,
+            "string-2": support,
+            qualifier: support,
+            "variable-3": support,
+            comment: neutral,
+            meta: neutral,
+        });
+    };
+    return Object.freeze({
+        dark: buildSurface("dark"),
+        light: buildSurface("light"),
+        purple: buildSurface("purple"),
+    });
+}
+
+const EDITOR_SYNTAX_THEME_ADDITIONS = Object.freeze({
+    obsidian: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.arctic, {
+        dark: { keyword: "#a1a1aa", atom: "#a78bfa", operator: "#e5e7eb", comment: "#71717a", string: "#d4d4d8" },
+        light: { keyword: "#52525b", atom: "#6d28d9", operator: "#334155", comment: "#6b7280", string: "#475569" },
+        purple: { keyword: "#d4d4d8", atom: "#c4b5fd", operator: "#e4e4e7", comment: "#9ca3af", string: "#ddd6fe" },
+    }),
+    sunset: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.solarflare, {
+        dark: { keyword: "#fb923c", atom: "#f97316", number: "#f59e0b", operator: "#fdba74", string: "#fed7aa" },
+        light: { keyword: "#c2410c", atom: "#ea580c", number: "#b45309", operator: "#d97706", string: "#f59e0b" },
+        purple: { keyword: "#fdba74", atom: "#fb923c", number: "#f59e0b", operator: "#fed7aa", string: "#fde68a" },
+    }),
+    verdant: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.aurora, {
+        dark: { keyword: "#4ade80", atom: "#22c55e", operator: "#34d399", comment: "#7ca58d", string: "#bbf7d0" },
+        light: { keyword: "#15803d", atom: "#166534", operator: "#16a34a", comment: "#5f846f", string: "#15803d" },
+        purple: { keyword: "#86efac", atom: "#4ade80", operator: "#6ee7b7", comment: "#8fb39f", string: "#d9f99d" },
+    }),
+    royal: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.twilight, {
+        dark: { keyword: "#a78bfa", atom: "#818cf8", operator: "#c4b5fd", comment: "#9588b8", string: "#c7d2fe" },
+        light: { keyword: "#5b21b6", atom: "#4338ca", operator: "#6d28d9", comment: "#7a6ca0", string: "#4f46e5" },
+        purple: { keyword: "#ddd6fe", atom: "#c4b5fd", operator: "#ede9fe", comment: "#b0a0d2", string: "#c7d2fe" },
+    }),
+    candy: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.lotus, {
+        dark: { keyword: "#f472b6", atom: "#22d3ee", operator: "#f0abfc", number: "#fb7185", string: "#a5f3fc" },
+        light: { keyword: "#db2777", atom: "#0e7490", operator: "#c026d3", number: "#be123c", string: "#0891b2" },
+        purple: { keyword: "#f9a8d4", atom: "#67e8f9", operator: "#f5d0fe", number: "#fb7185", string: "#bae6fd" },
+    }),
+    magma: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.forge, {
+        dark: { keyword: "#f97316", atom: "#ef4444", operator: "#fb923c", number: "#dc2626", string: "#fdba74" },
+        light: { keyword: "#c2410c", atom: "#b91c1c", operator: "#ea580c", number: "#991b1b", string: "#b45309" },
+        purple: { keyword: "#fb923c", atom: "#fb7185", operator: "#fdba74", number: "#ef4444", string: "#fde68a" },
+    }),
+    glacier: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.arctic, {
+        dark: { keyword: "#a5f3fc", atom: "#bfdbfe", operator: "#7dd3fc", comment: "#8fa8b7", string: "#cffafe" },
+        light: { keyword: "#0891b2", atom: "#1d4ed8", operator: "#0284c7", comment: "#6a8291", string: "#0e7490" },
+        purple: { keyword: "#bae6fd", atom: "#dbeafe", operator: "#93c5fd", comment: "#a5bccb", string: "#e0f2fe" },
+    }),
+    storm: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.deepsea, {
+        dark: { keyword: "#93c5fd", atom: "#60a5fa", operator: "#94a3b8", comment: "#7b8793", string: "#bfdbfe" },
+        light: { keyword: "#1d4ed8", atom: "#2563eb", operator: "#475569", comment: "#6b7280", string: "#334155" },
+        purple: { keyword: "#bfdbfe", atom: "#93c5fd", operator: "#cbd5e1", comment: "#97a4b3", string: "#dbeafe" },
+    }),
+    orchid: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.nebula, {
+        dark: { keyword: "#e879f9", atom: "#c084fc", operator: "#f0abfc", comment: "#a88fc0", string: "#c4b5fd" },
+        light: { keyword: "#a21caf", atom: "#7e22ce", operator: "#c026d3", comment: "#8b739f", string: "#8b5cf6" },
+        purple: { keyword: "#f0abfc", atom: "#ddd6fe", operator: "#f5d0fe", comment: "#b7a0cf", string: "#e9d5ff" },
+    }),
+    graphene: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.obsidian, {
+        dark: { keyword: "#d4d4d8", atom: "#a1a1aa", operator: "#e4e4e7", comment: "#71717a", string: "#cbd5e1", number: "#f59e0b" },
+        light: { keyword: "#52525b", atom: "#4b5563", operator: "#64748b", comment: "#6b7280", string: "#475569", number: "#b45309" },
+        purple: { keyword: "#e4e4e7", atom: "#c4b5fd", operator: "#f1f5f9", comment: "#9ca3af", string: "#ddd6fe", number: "#fbbf24" },
+    }),
+    retro: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.arctic, {
+        dark: {
+            keyword: "#d90429",
+            atom: "#0051ba",
+            number: "#ffd500",
+            string: "#009b48",
+            comment: "#d8dee4",
+            "variable-2": "#0051ba",
+            bracket: "#e5e7eb",
+        },
+        light: {
+            keyword: "#b00020",
+            atom: "#003f8a",
+            number: "#c9a500",
+            string: "#00753a",
+            comment: "#77808a",
+            "variable-2": "#003f8a",
+            bracket: "#5b6470",
+        },
+        purple: {
+            keyword: "#e22145",
+            atom: "#2b6ed6",
+            number: "#ffd93a",
+            string: "#1dac5f",
+            comment: "#9ea8b4",
+            "variable-2": "#2b6ed6",
+            bracket: "#c7ced8",
+        },
+    }),
+    temple: buildSyntaxPaletteVariant(EDITOR_SYNTAX_THEME_PALETTES.arctic, {
+        dark: {
+            keyword: "#1f4fff",
+            atom: "#00a9ff",
+            number: "#d9a100",
+            string: "#fff6db",
+            comment: "#7d8eb2",
+            operator: "#3f66ff",
+            "variable-2": "#2f53da",
+            bracket: "#e9edff",
+        },
+        light: {
+            keyword: "#1b3ec2",
+            atom: "#006fae",
+            number: "#9b6f00",
+            string: "#6d5310",
+            comment: "#6b7897",
+            operator: "#2c50d1",
+            "variable-2": "#1f3ec2",
+            bracket: "#1f2d5a",
+        },
+        purple: {
+            keyword: "#4d79ff",
+            atom: "#38c3ff",
+            number: "#f2bf32",
+            string: "#fff1c2",
+            comment: "#9caccc",
+            operator: "#7091ff",
+            "variable-2": "#5e7cff",
+            bracket: "#dde6ff",
+        },
+    }),
+});
+
+const EDITOR_RAW_SYNTAX_THEME_PALETTES = Object.freeze({
+    ...EDITOR_SYNTAX_THEME_PALETTES,
+    ...EDITOR_SYNTAX_THEME_ADDITIONS,
+});
+
+const EDITOR_ALL_SYNTAX_THEME_PALETTES = Object.freeze({
+    ...Object.fromEntries(
+        Object.entries(EDITOR_RAW_SYNTAX_THEME_PALETTES).map(([themeName, palette]) => {
+            const identity = buildConfiguredSyntaxThemeIdentity(themeName, palette);
+            return [themeName, normalizeSyntaxThemePalette(palette, identity)];
+        })
+    ),
+});
+
 let pendingDeleteUndo = null;
 let pendingDeleteUndoTimer = null;
 let quickOpenOpen = false;
@@ -260,6 +1557,8 @@ let quickOpenResults = [];
 let quickOpenIndex = 0;
 let promptDialogOpen = false;
 let promptDialogState = null;
+let promptDialogSecondaryButton = null;
+let promptDialogSecondaryDisarmTimer = null;
 let commandPaletteOpen = false;
 let commandPaletteQuery = "";
 let commandPaletteResults = [];
@@ -276,6 +1575,18 @@ let symbolIndex = 0;
 let symbolRequestId = 0;
 let symbolReferenceResults = [];
 let symbolReferenceRequestId = 0;
+let symbolSourceCacheKey = "";
+let symbolSourceCache = [];
+let symbolSourceCachePromise = null;
+let editorMirrorLastOpen = false;
+let editorMirrorLastFileId = "";
+let editorMirrorLastSavedCode = null;
+let editorMirrorLastCurrentCode = null;
+let editorSplitScrollHost = null;
+let editorSplitScrollSyncLock = false;
+let editorSplitMirrorScrollHandler = null;
+let editorSplitHostScrollHandler = null;
+let editorSplitScrollSyncFrame = 0;
 let lastInspectInfo = null;
 let projectSearchResults = [];
 let projectSearchSelectedIds = new Set();
@@ -293,8 +1604,24 @@ let runtimeProblems = [];
 let problemsById = new Map();
 let problemsRefreshRequestId = 0;
 let problemsRenderFrame = null;
+let filesGutterSyncFrame = null;
+let filesGutterLastWidth = -1;
+let filesGutterLastClientWidth = -1;
+let filesGutterLastValue = -1;
+let layoutResizeSyncFrame = null;
+let lastRenderedActiveDescendantId = "";
+let lastRenderedEditorTabsMarkup = null;
+let lastRenderedFileListMarkup = null;
+let sandboxConsoleFlushFrame = null;
+let sandboxConsoleQueue = [];
+let sandboxRunReadyTimer = null;
 let taskRunnerEntries = [];
 let taskRunnerBusy = false;
+let devTerminalUI = null;
+let devTerminalBusy = false;
+let devTerminalHistory = [];
+let devTerminalHistoryIndex = -1;
+let consoleViewMode = "console";
 let editorAutosaveTimer = null;
 let snippetSession = null;
 let snippetRegistry = [...DEFAULT_SNIPPETS];
@@ -305,6 +1632,11 @@ let fileHistory = [];
 let fileHistoryIndex = -1;
 let historyDepth = 0;
 const games = normalizeGames(GAMES);
+const applications = normalizeApplications(APPLICATIONS);
+let selectedGameId = games[0]?.id ?? "";
+let gamesSelectorOpen = false;
+let selectedApplicationId = applications[0]?.id ?? "";
+let applicationsSelectorOpen = false;
 let openFileMenu = null;
 let folderMenuTargetPath = null;
 let dragFileId = null;
@@ -312,6 +1644,9 @@ let dragFolderPath = null;
 let dragFolderHoverPath = null;
 let dragFileIds = [];
 let dragFolderPaths = [];
+let dragFilesSectionId = null;
+let dragFilesSectionDropId = null;
+let dragFilesSectionDropAfter = false;
 let newFileTypePreference = "auto";
 let currentTheme = DEFAULT_THEME;
 let layoutState = cloneLayoutState(DEFAULT_LAYOUT_STATE);
@@ -323,12 +1658,117 @@ const debouncedProjectSearchScan = createDebouncedTask(() => {
     runProjectSearchScan();
 }, PROJECT_SEARCH_SCAN_DEBOUNCE_MS);
 
-const EDGE_RESIZE_GRAB = 12;
-const EDITOR_SOFT_MIN_WIDTH = 260;
-const FILES_PANEL_MIN_WIDTH = 120;
+const EDGE_RESIZE_GRAB = 16;
+const RESIZE_SNAP_STEP = 8;
+const PANEL_REFLOW_ANIMATION_MS = 180;
+const PANEL_REFLOW_ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+const PANEL_REFLOW_CLEANUP_BUFFER_MS = 96;
+const WORKSPACE_ROW_MIN_HEIGHT = 72;
+const PANEL_REDUCED_MOTION_QUERY = typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)")
+    : null;
+const EDITOR_SOFT_MIN_WIDTH = 96;
+const LOG_PANEL_MIN_WIDTH = 180;
+const FILES_PANEL_MIN_WIDTH = 180;
+const SANDBOX_PANEL_MIN_WIDTH = 180;
+const TOOLS_PANEL_MIN_WIDTH = 180;
 const RESIZE_GUIDE_COLOR = "var(--resize-guide-color)";
+const FILE_ICON_BASE_PATH = "assets/icons/file-types";
+const FILE_ICON_PATHS = Object.freeze({
+    defaultFile: `${FILE_ICON_BASE_PATH}/file-default.svg`,
+    folderClosed: `${FILE_ICON_BASE_PATH}/folder-closed.svg`,
+    folderOpen: `${FILE_ICON_BASE_PATH}/folder-open.svg`,
+    js: `${FILE_ICON_BASE_PATH}/js.svg`,
+    ts: `${FILE_ICON_BASE_PATH}/ts.svg`,
+    jsx: `${FILE_ICON_BASE_PATH}/jsx.svg`,
+    tsx: `${FILE_ICON_BASE_PATH}/tsx.svg`,
+    html: `${FILE_ICON_BASE_PATH}/html.svg`,
+    css: `${FILE_ICON_BASE_PATH}/css.svg`,
+    json: `${FILE_ICON_BASE_PATH}/json.svg`,
+    markdown: `${FILE_ICON_BASE_PATH}/markdown.svg`,
+    yaml: `${FILE_ICON_BASE_PATH}/yaml.svg`,
+    xml: `${FILE_ICON_BASE_PATH}/xml.svg`,
+    image: `${FILE_ICON_BASE_PATH}/image.svg`,
+    shell: `${FILE_ICON_BASE_PATH}/shell.svg`,
+    python: `${FILE_ICON_BASE_PATH}/python.svg`,
+    java: `${FILE_ICON_BASE_PATH}/java.svg`,
+    node: `${FILE_ICON_BASE_PATH}/node.svg`,
+    sql: `${FILE_ICON_BASE_PATH}/sql.svg`,
+    git: `${FILE_ICON_BASE_PATH}/git.svg`,
+    docker: `${FILE_ICON_BASE_PATH}/docker.svg`,
+    rust: `${FILE_ICON_BASE_PATH}/rust.svg`,
+    go: `${FILE_ICON_BASE_PATH}/go.svg`,
+    php: `${FILE_ICON_BASE_PATH}/php.svg`,
+    cpp: `${FILE_ICON_BASE_PATH}/cpp.svg`,
+    csharp: `${FILE_ICON_BASE_PATH}/csharp.svg`,
+});
+const FILE_EXTENSION_ICON_MAP = Object.freeze({
+    js: FILE_ICON_PATHS.js,
+    mjs: FILE_ICON_PATHS.js,
+    cjs: FILE_ICON_PATHS.js,
+    ts: FILE_ICON_PATHS.ts,
+    mts: FILE_ICON_PATHS.ts,
+    cts: FILE_ICON_PATHS.ts,
+    jsx: FILE_ICON_PATHS.jsx,
+    tsx: FILE_ICON_PATHS.tsx,
+    html: FILE_ICON_PATHS.html,
+    htm: FILE_ICON_PATHS.html,
+    xhtml: FILE_ICON_PATHS.html,
+    css: FILE_ICON_PATHS.css,
+    scss: FILE_ICON_PATHS.css,
+    sass: FILE_ICON_PATHS.css,
+    less: FILE_ICON_PATHS.css,
+    styl: FILE_ICON_PATHS.css,
+    json: FILE_ICON_PATHS.json,
+    json5: FILE_ICON_PATHS.json,
+    jsonc: FILE_ICON_PATHS.json,
+    md: FILE_ICON_PATHS.markdown,
+    markdown: FILE_ICON_PATHS.markdown,
+    mdx: FILE_ICON_PATHS.markdown,
+    yaml: FILE_ICON_PATHS.yaml,
+    yml: FILE_ICON_PATHS.yaml,
+    xml: FILE_ICON_PATHS.xml,
+    sh: FILE_ICON_PATHS.shell,
+    bash: FILE_ICON_PATHS.shell,
+    zsh: FILE_ICON_PATHS.shell,
+    fish: FILE_ICON_PATHS.shell,
+    ps1: FILE_ICON_PATHS.shell,
+    bat: FILE_ICON_PATHS.shell,
+    cmd: FILE_ICON_PATHS.shell,
+    py: FILE_ICON_PATHS.python,
+    java: FILE_ICON_PATHS.java,
+    sql: FILE_ICON_PATHS.sql,
+    rs: FILE_ICON_PATHS.rust,
+    go: FILE_ICON_PATHS.go,
+    php: FILE_ICON_PATHS.php,
+    phtml: FILE_ICON_PATHS.php,
+    c: FILE_ICON_PATHS.cpp,
+    cc: FILE_ICON_PATHS.cpp,
+    cpp: FILE_ICON_PATHS.cpp,
+    cxx: FILE_ICON_PATHS.cpp,
+    h: FILE_ICON_PATHS.cpp,
+    hh: FILE_ICON_PATHS.cpp,
+    hpp: FILE_ICON_PATHS.cpp,
+    hxx: FILE_ICON_PATHS.cpp,
+    cs: FILE_ICON_PATHS.csharp,
+});
+const IMAGE_FILE_EXTENSIONS = new Set([
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "avif",
+    "bmp",
+    "ico",
+    "svg",
+    "tif",
+    "tiff",
+]);
 let rowGuide = null;
 let colGuide = null;
+let panelReflowFrame = null;
+const panelReflowCleanupMap = new WeakMap();
 
 function makeToken() {
     // Simple unique-enough token for a local sandbox run.
@@ -337,14 +1777,14 @@ function makeToken() {
 };
 
 function loadLayout(raw = load(STORAGE.LAYOUT)) {
-    if (!raw) return { ...layoutState };
+    if (!raw) return sanitizeLayoutState(layoutState);
 
     try {
         const parsed = JSON.parse(raw);
         return sanitizeLayoutState(parsed);
     } catch (err) {
         console.warn("FAZ IDE: invalid layout store", err);
-        return { ...layoutState };
+        return sanitizeLayoutState(layoutState);
     }
 }
 
@@ -446,8 +1886,10 @@ function applyPanelOrder() {
     }
 }
 
-function applyLayout() {
+function applyLayout({ animatePanels = false } = {}) {
     // Single place to update DOM based on layout state.
+    const enablePanelAnimation = animatePanels && shouldAnimatePanelReflow();
+    const previousRects = enablePanelAnimation ? capturePanelRectsForReflow() : null;
     normalizeLayoutWidths();
     if (el.appShell) {
         el.appShell.setAttribute("data-log", layoutState.logOpen ? "open" : "closed");
@@ -491,6 +1933,9 @@ function applyLayout() {
     }
     applyFilesLayout();
     applyPanelOrder();
+    if (enablePanelAnimation) {
+        animatePanelReflow(previousRects);
+    }
     syncPanelToggles();
     syncQuickBar();
     syncLayoutControls();
@@ -498,6 +1943,20 @@ function applyLayout() {
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+}
+
+function snapDimension(value, min, max, { enabled = true, step = RESIZE_SNAP_STEP } = {}) {
+    const clamped = clamp(value, min, max);
+    if (!enabled) return clamped;
+    const safeStep = Math.max(1, Number(step) || RESIZE_SNAP_STEP);
+    const snapped = Math.round(clamped / safeStep) * safeStep;
+    return clamp(snapped, min, max);
+}
+
+function shouldAnimatePanelReflow() {
+    if (document.body?.hasAttribute("data-resize")) return false;
+    if (PANEL_REDUCED_MOTION_QUERY?.matches) return false;
+    return true;
 }
 
 function setSidebarWidth(next) {
@@ -549,6 +2008,8 @@ function applyTheme(theme, { persist = true } = {}) {
             console.warn("FAZ IDE: failed to sync sandbox theme", err);
         },
     });
+    applyEditorSyntaxTheme();
+    editor.refresh?.();
     syncSandboxTheme();
 }
 
@@ -556,6 +2017,7 @@ function applyFilesLayout() {
     if (el.filesPanel) {
         el.filesPanel.setAttribute("data-filters", layoutState.filesFiltersOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-games", layoutState.filesGamesOpen ? "open" : "closed");
+        el.filesPanel.setAttribute("data-apps", layoutState.filesAppsOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-open-editors", layoutState.filesOpenEditorsOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-files-list", layoutState.filesListOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-trash", layoutState.filesTrashOpen ? "open" : "closed");
@@ -564,6 +2026,8 @@ function applyFilesLayout() {
         el.filesToolbar.setAttribute("aria-hidden", layoutState.filesFiltersOpen ? "false" : "true");
     }
     syncGamesUI();
+    syncApplicationsUI();
+    queueFilesColumnGutterSync();
 }
 
 function setFilesFiltersOpen(open) {
@@ -572,10 +2036,50 @@ function setFilesFiltersOpen(open) {
     persistLayout();
 }
 
+function getFilesSectionOrder() {
+    return normalizeFilesSectionOrder(layoutState.filesSectionOrder);
+}
+
+function setFilesSectionOrder(order, { persist = true, render = true } = {}) {
+    const nextOrder = normalizeFilesSectionOrder(order);
+    const currentOrder = getFilesSectionOrder();
+    const changed = nextOrder.length !== currentOrder.length
+        || nextOrder.some((name, index) => name !== currentOrder[index]);
+    if (!changed) return false;
+    layoutState.filesSectionOrder = nextOrder;
+    if (persist) persistLayout();
+    if (render) renderFileList();
+    return true;
+}
+
+function moveFilesSection(sourceId, targetId, { placeAfter = false } = {}) {
+    if (!FILES_REORDERABLE_SECTIONS.has(sourceId) || !FILES_REORDERABLE_SECTIONS.has(targetId)) {
+        return false;
+    }
+    if (sourceId === targetId) return false;
+    const order = getFilesSectionOrder();
+    const sourceIndex = order.indexOf(sourceId);
+    const targetIndex = order.indexOf(targetId);
+    if (sourceIndex === -1 || targetIndex === -1) return false;
+    order.splice(sourceIndex, 1);
+    const nextTargetIndex = order.indexOf(targetId);
+    const insertIndex = placeAfter ? nextTargetIndex + 1 : nextTargetIndex;
+    order.splice(Math.max(0, insertIndex), 0, sourceId);
+    return setFilesSectionOrder(order, { persist: true, render: true });
+}
+
 function setFilesGamesOpen(open) {
     layoutState.filesGamesOpen = Boolean(open);
     applyFilesLayout();
     persistLayout();
+    renderFileList();
+}
+
+function setFilesAppsOpen(open) {
+    layoutState.filesAppsOpen = Boolean(open);
+    applyFilesLayout();
+    persistLayout();
+    renderFileList();
 }
 
 function setFilesSectionOpen(section, open) {
@@ -592,6 +2096,37 @@ function setFilesSectionOpen(section, open) {
     applyFilesLayout();
     persistLayout();
     renderFileList();
+}
+
+function syncFilesColumnGutter() {
+    if (!el.filesPanel || !el.fileList) return;
+    const width = el.fileList.offsetWidth || 0;
+    const clientWidth = el.fileList.clientWidth || 0;
+    if (width === filesGutterLastWidth && clientWidth === filesGutterLastClientWidth) return;
+    filesGutterLastWidth = width;
+    filesGutterLastClientWidth = clientWidth;
+    const gutter = Math.max(0, width - clientWidth);
+    if (gutter === filesGutterLastValue) return;
+    filesGutterLastValue = gutter;
+    el.filesPanel.style.setProperty("--files-column-gutter", `${gutter}px`);
+}
+
+function queueFilesColumnGutterSync() {
+    if (filesGutterSyncFrame != null) return;
+    filesGutterSyncFrame = scheduleFrame(() => {
+        filesGutterSyncFrame = null;
+        syncFilesColumnGutter();
+    });
+}
+
+function queueLayoutResizeSync() {
+    if (layoutResizeSyncFrame != null) return;
+    layoutResizeSyncFrame = scheduleFrame(() => {
+        layoutResizeSyncFrame = null;
+        normalizeLayoutWidths();
+        syncLayoutControls();
+        queueFilesColumnGutterSync();
+    });
 }
 
 function syncDefaultEditorSandboxWidth({ persist = true } = {}) {
@@ -646,6 +2181,70 @@ function getPanelElement(name) {
     return null;
 }
 
+function capturePanelRectsForReflow() {
+    const map = new Map();
+    ["log", "editor", "files", "sandbox", "tools"].forEach((name) => {
+        const panel = getPanelElement(name);
+        if (!panel || !panel.isConnected) return;
+        if (panel.classList.contains("panel-drag-source")) return;
+        map.set(name, panel.getBoundingClientRect());
+    });
+    return map;
+}
+
+function clearPanelReflowAnimation(panel) {
+    if (!panel) return;
+    const active = panelReflowCleanupMap.get(panel);
+    if (active) {
+        panel.removeEventListener("transitionend", active.onEnd);
+        clearTimeout(active.timeoutId);
+        panelReflowCleanupMap.delete(panel);
+    }
+    panel.style.transition = "";
+    panel.style.transform = "";
+    panel.style.willChange = "";
+}
+
+function animatePanelReflow(previousRects) {
+    if (!(previousRects instanceof Map) || previousRects.size === 0) return;
+    if (!shouldAnimatePanelReflow()) return;
+    if (panelReflowFrame != null) {
+        cancelAnimationFrame(panelReflowFrame);
+        panelReflowFrame = null;
+    }
+    panelReflowFrame = requestAnimationFrame(() => {
+        panelReflowFrame = null;
+        previousRects.forEach((previousRect, panelName) => {
+            const panel = getPanelElement(panelName);
+            if (!panel || !panel.isConnected) return;
+            if (panel.classList.contains("panel-drag-source")) return;
+            if (panel.offsetParent === null) return;
+            clearPanelReflowAnimation(panel);
+            const nextRect = panel.getBoundingClientRect();
+            const deltaX = previousRect.left - nextRect.left;
+            const deltaY = previousRect.top - nextRect.top;
+            if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+
+            panel.style.transition = "none";
+            panel.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            panel.style.willChange = "transform";
+            panel.getBoundingClientRect();
+            panel.style.transition = `transform ${PANEL_REFLOW_ANIMATION_MS}ms ${PANEL_REFLOW_ANIMATION_EASING}`;
+            panel.style.transform = "";
+            const cleanup = () => {
+                clearPanelReflowAnimation(panel);
+            };
+            const onEnd = (event) => {
+                if (event.target !== panel || event.propertyName !== "transform") return;
+                cleanup();
+            };
+            const timeoutId = window.setTimeout(cleanup, PANEL_REFLOW_ANIMATION_MS + PANEL_REFLOW_CLEANUP_BUFFER_MS);
+            panelReflowCleanupMap.set(panel, { onEnd, timeoutId });
+            panel.addEventListener("transitionend", onEnd);
+        });
+    });
+}
+
 function setResizeActive(list, active) {
     const items = Array.isArray(list) ? list : [list];
     items.forEach((item) => {
@@ -679,17 +2278,20 @@ function getLayoutBounds() {
     const maxSidebar = Math.min(720, Math.max(200, workspaceRect.width * 0.6));
     const minSidebar = Math.min(maxSidebar, FILES_PANEL_MIN_WIDTH);
     const maxLog = Math.min(820, Math.max(220, workspaceRect.width * 0.65));
+    const minLog = Math.min(maxLog, LOG_PANEL_MIN_WIDTH);
     const maxSandbox = Math.min(980, Math.max(260, workspaceRect.width * 0.7));
+    const minSandbox = Math.min(maxSandbox, SANDBOX_PANEL_MIN_WIDTH);
     const maxTools = Math.min(820, Math.max(220, workspaceRect.width * 0.5));
+    const minTools = Math.min(maxTools, TOOLS_PANEL_MIN_WIDTH);
     const maxBottom = Math.max(160, Math.round(workspaceRect.height * 0.7));
     return {
-        logWidth: { min: 160, max: maxLog },
+        logWidth: { min: minLog, max: maxLog },
         sidebar: { min: minSidebar, max: maxSidebar },
-        sandboxWidth: { min: 240, max: maxSandbox },
-        toolsWidth: { min: 200, max: maxTools },
+        sandboxWidth: { min: minSandbox, max: maxSandbox },
+        toolsWidth: { min: minTools, max: maxTools },
         panelGap: { min: 0, max: 24 },
         cornerRadius: { min: 0, max: 16 },
-        bottomHeight: { min: 120, max: maxBottom },
+        bottomHeight: { min: WORKSPACE_ROW_MIN_HEIGHT, max: maxBottom },
     };
 }
 
@@ -843,6 +2445,7 @@ function sanitizeLayoutState(state = {}) {
     next.footerOpen = state.footerOpen !== undefined ? Boolean(state.footerOpen) : layoutState.footerOpen;
     next.filesFiltersOpen = state.filesFiltersOpen !== undefined ? Boolean(state.filesFiltersOpen) : layoutState.filesFiltersOpen;
     next.filesGamesOpen = state.filesGamesOpen !== undefined ? Boolean(state.filesGamesOpen) : layoutState.filesGamesOpen;
+    next.filesAppsOpen = state.filesAppsOpen !== undefined ? Boolean(state.filesAppsOpen) : layoutState.filesAppsOpen;
     next.filesOpenEditorsOpen = state.filesOpenEditorsOpen !== undefined
         ? Boolean(state.filesOpenEditorsOpen)
         : layoutState.filesOpenEditorsOpen;
@@ -852,6 +2455,7 @@ function sanitizeLayoutState(state = {}) {
     next.filesTrashOpen = state.filesTrashOpen !== undefined
         ? Boolean(state.filesTrashOpen)
         : layoutState.filesTrashOpen;
+    next.filesSectionOrder = normalizeFilesSectionOrder(state.filesSectionOrder ?? layoutState.filesSectionOrder);
 
     const fallbackWidth = safeNumber(state.outputWidth, null);
     next.logWidth = clamp(safeNumber(state.logWidth ?? fallbackWidth, layoutState.logWidth), bounds.logWidth.min, bounds.logWidth.max);
@@ -911,7 +2515,7 @@ function normalizeBottomHeight() {
     if (!rowHasOpenPanels("bottom")) return;
     const bounds = getLayoutBounds().bottomHeight;
     const workspaceHeight = el.workspace?.getBoundingClientRect().height || 0;
-    const minTop = rowHasOpenPanels("top") ? 180 : 0;
+    const minTop = rowHasOpenPanels("top") ? WORKSPACE_ROW_MIN_HEIGHT : 0;
     const maxBottom = Math.max(bounds.min, Math.min(bounds.max, workspaceHeight - minTop));
     const next = clamp(layoutState.bottomHeight, bounds.min, maxBottom);
     if (next !== layoutState.bottomHeight) {
@@ -1051,6 +2655,7 @@ function setEditorValue(value, { silent = false, lint = true } = {}) {
         editor.refresh?.();
         refreshEditorBreakpointMarkers();
         if (lint) queueEditorLint("set-editor");
+        syncEditorStatusBar();
         return;
     }
 
@@ -1063,6 +2668,7 @@ function setEditorValue(value, { silent = false, lint = true } = {}) {
     editor.refresh?.();
     refreshEditorBreakpointMarkers();
     if (lint) queueEditorLint("set-editor");
+    syncEditorStatusBar();
 }
 
 function clearEditor({ silent = false } = {}) {
@@ -1105,11 +2711,145 @@ function wireDiagnostics() {
     });
 }
 
-function ensureLogOpen(reason) {
+function normalizeConsoleView(next = "") {
+    return String(next || "").trim().toLowerCase() === "terminal" ? "terminal" : "console";
+}
+
+function ensureConsoleTabs() {
+    const logBody = el.logPanel?.querySelector(".card-bd");
+    if (!logBody || !el.log) return null;
+
+    let tabs = logBody.querySelector("#consoleTabs");
+    if (!tabs) {
+        tabs = document.createElement("div");
+        tabs.id = "consoleTabs";
+        tabs.className = "console-tabs";
+        tabs.setAttribute("role", "tablist");
+        tabs.setAttribute("aria-label", "Console views");
+        tabs.innerHTML = `
+            <button id="consoleTabConsole" type="button" class="console-tab" role="tab" data-console-view="console" aria-controls="consoleLogView" aria-selected="true">Console</button>
+            <button id="consoleTabTerminal" type="button" class="console-tab" role="tab" data-console-view="terminal" aria-controls="consoleTerminalView" aria-selected="false">Terminal</button>
+        `;
+    }
+
+    let logView = logBody.querySelector("#consoleLogView");
+    if (!logView) {
+        logView = document.createElement("section");
+        logView.id = "consoleLogView";
+        logView.className = "console-view console-view-log";
+        logView.setAttribute("role", "tabpanel");
+        logView.setAttribute("aria-labelledby", "consoleTabConsole");
+        logView.setAttribute("aria-hidden", "false");
+    }
+
+    if (!logView.contains(el.log)) {
+        logView.appendChild(el.log);
+    }
+
+    let terminalView = logBody.querySelector("#consoleTerminalView");
+    if (!terminalView) {
+        terminalView = document.createElement("section");
+        terminalView.id = "consoleTerminalView";
+        terminalView.className = "console-view console-terminal-view";
+        terminalView.setAttribute("role", "tabpanel");
+        terminalView.setAttribute("aria-labelledby", "consoleTabTerminal");
+        terminalView.setAttribute("aria-hidden", "true");
+        terminalView.hidden = true;
+    }
+
+    if (tabs.parentElement !== logBody) {
+        logBody.insertBefore(tabs, logBody.firstChild);
+    }
+    if (logView.parentElement !== logBody) {
+        logBody.appendChild(logView);
+    }
+    if (terminalView.parentElement !== logBody) {
+        logBody.appendChild(terminalView);
+    }
+
+    return {
+        tabs,
+        logView,
+        terminalView,
+        btnConsole: tabs.querySelector("#consoleTabConsole"),
+        btnTerminal: tabs.querySelector("#consoleTabTerminal"),
+    };
+}
+
+function setConsoleView(next = "console", { focus = false } = {}) {
+    const ui = ensureConsoleTabs();
+    if (!ui?.btnConsole || !ui?.btnTerminal || !ui?.logView || !ui?.terminalView) return false;
+
+    const view = normalizeConsoleView(next);
+    const consoleActive = view === "console";
+    consoleViewMode = view;
+
+    if (el.logPanel) {
+        el.logPanel.dataset.consoleView = view;
+    }
+
+    ui.btnConsole.setAttribute("aria-selected", consoleActive ? "true" : "false");
+    ui.btnTerminal.setAttribute("aria-selected", consoleActive ? "false" : "true");
+    ui.btnConsole.tabIndex = consoleActive ? 0 : -1;
+    ui.btnTerminal.tabIndex = consoleActive ? -1 : 0;
+    ui.btnConsole.setAttribute("data-active", consoleActive ? "true" : "false");
+    ui.btnTerminal.setAttribute("data-active", consoleActive ? "false" : "true");
+
+    ui.logView.hidden = !consoleActive;
+    ui.terminalView.hidden = consoleActive;
+    ui.logView.setAttribute("aria-hidden", consoleActive ? "false" : "true");
+    ui.terminalView.setAttribute("aria-hidden", consoleActive ? "true" : "false");
+
+    if (el.btnCopyLog) {
+        el.btnCopyLog.hidden = !consoleActive;
+        el.btnCopyLog.disabled = !consoleActive;
+    }
+    if (el.btnClearLog) {
+        el.btnClearLog.hidden = !consoleActive;
+        el.btnClearLog.disabled = !consoleActive;
+    }
+
+    if (focus) {
+        requestAnimationFrame(() => {
+            if (consoleActive) {
+                ui.btnConsole.focus();
+                return;
+            }
+            const terminalUi = ensureDevTerminalPanel();
+            terminalUi?.input?.focus();
+        });
+    }
+    return true;
+}
+
+function wireConsoleTabs() {
+    const ui = ensureConsoleTabs();
+    if (!ui?.tabs) return;
+    if (ui.tabs.dataset.wired === "true") {
+        setConsoleView(consoleViewMode);
+        return;
+    }
+    ui.tabs.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-console-view]");
+        if (!btn) return;
+        setConsoleView(btn.dataset.consoleView, { focus: true });
+    });
+    ui.tabs.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const next = normalizeConsoleView(consoleViewMode === "console" ? "terminal" : "console");
+        setConsoleView(next, { focus: true });
+    });
+    ui.tabs.dataset.wired = "true";
+    setConsoleView(consoleViewMode);
+}
+
+function ensureLogOpen(reason, { view = "console" } = {}) {
     if (!layoutState.logOpen) {
         setPanelOpen("log", true);
         if (reason) pushDiag("info", reason);
     }
+    setConsoleView(view);
 }
 
 function ensureToolsOpen(reason) {
@@ -1121,10 +2861,7 @@ function ensureToolsOpen(reason) {
 
 function queueProblemsRender() {
     if (problemsRenderFrame != null) return;
-    const schedule = typeof requestAnimationFrame === "function"
-        ? requestAnimationFrame
-        : ((fn) => setTimeout(fn, 16));
-    problemsRenderFrame = schedule(() => {
+    problemsRenderFrame = scheduleFrame(() => {
         problemsRenderFrame = null;
         renderProblemsList();
         renderFileList();
@@ -1143,6 +2880,83 @@ function pruneProblemDiagnostics() {
 function normalizeProblemLevel(level) {
     if (level === "error" || level === "warn") return level;
     return "info";
+}
+
+function formatSandboxLogPart(value, maxChars = SANDBOX_CONSOLE_ARG_MAX_CHARS) {
+    if (typeof value === "string") return truncateText(value, maxChars);
+    if (value instanceof Error) return truncateText(value.stack || value.message || String(value), maxChars);
+    if (typeof value === "function") return value.name ? `[Function ${value.name}]` : "[Function]";
+    if (
+        value == null
+        || typeof value === "number"
+        || typeof value === "boolean"
+        || typeof value === "bigint"
+        || typeof value === "symbol"
+    ) {
+        return truncateText(String(value), maxChars);
+    }
+    try {
+        return truncateText(JSON.stringify(value, null, 2), maxChars);
+    } catch {
+        return truncateText(String(value), maxChars);
+    }
+}
+
+function normalizeSandboxConsolePayload(payload = {}) {
+    const level = normalizeProblemLevel(payload?.level);
+    const args = Array.isArray(payload?.args) ? payload.args : [payload?.args];
+    const limited = args
+        .slice(0, SANDBOX_CONSOLE_MAX_ARGS)
+        .map((part) => formatSandboxLogPart(part, SANDBOX_CONSOLE_ARG_MAX_CHARS));
+    if (args.length > SANDBOX_CONSOLE_MAX_ARGS) {
+        limited.push(`... [${args.length - SANDBOX_CONSOLE_MAX_ARGS} more argument(s) truncated]`);
+    }
+    return { level, args: limited };
+}
+
+function clearSandboxReadyTimer() {
+    if (!sandboxRunReadyTimer) return;
+    clearTimeout(sandboxRunReadyTimer);
+    sandboxRunReadyTimer = null;
+}
+
+function markSandboxReady() {
+    clearSandboxReadyTimer();
+    if (health.sandbox?.dataset?.state === "warn") {
+        setHealth(health.sandbox, "ok", "Sandbox: Ready");
+    }
+}
+
+function flushSandboxConsoleQueue() {
+    sandboxConsoleFlushFrame = null;
+    if (!sandboxConsoleQueue.length) return;
+    const entries = sandboxConsoleQueue.splice(0, sandboxConsoleQueue.length);
+    markSandboxReady();
+    ensureLogOpen("Console opened for new logs.");
+    if (typeof logger.appendMany === "function") {
+        logger.appendMany(entries.map((entry) => ({ type: entry.level, parts: entry.args })));
+    } else {
+        entries.forEach((entry) => {
+            logger.append(entry.level, entry.args);
+        });
+    }
+}
+
+function queueSandboxConsoleLog(level = "info", args = []) {
+    const normalizedLevel = normalizeProblemLevel(level);
+    const normalizedArgs = Array.isArray(args) ? args : [args];
+    sandboxConsoleQueue.push({ level: normalizedLevel, args: normalizedArgs });
+    if (sandboxConsoleQueue.length > SANDBOX_CONSOLE_QUEUE_LIMIT) {
+        sandboxConsoleQueue.splice(0, sandboxConsoleQueue.length - SANDBOX_CONSOLE_QUEUE_LIMIT);
+    }
+    if (sandboxConsoleFlushFrame != null) return;
+    sandboxConsoleFlushFrame = scheduleFrame(() => flushSandboxConsoleQueue());
+}
+
+function isTrustedSandboxMessageEvent(event) {
+    const source = event?.source;
+    const runnerWindow = getRunnerWindow();
+    return Boolean(source && runnerWindow && source === runnerWindow);
 }
 
 function normalizeProblemDiagnostic(entry = {}) {
@@ -1260,6 +3074,7 @@ function renderProblemsList() {
     problemsById = new Map(entries.map((entry) => [entry.id, entry]));
     if (!entries.length) {
         el.problemsList.innerHTML = `<li class="diagnostics-empty">No active problems.</li>`;
+        syncFooterRuntimeStatus();
         return;
     }
     el.problemsList.innerHTML = entries
@@ -1294,6 +3109,7 @@ function renderProblemsList() {
             `;
         })
         .join("");
+    syncFooterRuntimeStatus();
 }
 
 function clearProblemsPanel() {
@@ -1487,6 +3303,7 @@ function setTaskRunnerBusy(active, label = "") {
 }
 
 function appendTaskRunnerOutput(level = "info", message = "", { task = "", location = null } = {}) {
+    const rawMessage = String(message || "");
     const explicitLocation = location && location.fileId
         ? {
             fileId: location.fileId,
@@ -1495,13 +3312,13 @@ function appendTaskRunnerOutput(level = "info", message = "", { task = "", locat
             ch: Math.max(0, Number(location.ch) || 0),
         }
         : null;
-    const inferredLocation = explicitLocation || inferTaskRunnerLocation(message);
+    const inferredLocation = explicitLocation || inferTaskRunnerLocation(rawMessage);
     const entry = {
         id: `task-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`,
         at: Date.now(),
         level: normalizeProblemLevel(level),
         task: String(task || ""),
-        message: String(message || ""),
+        message: truncateText(rawMessage, TASK_RUNNER_MESSAGE_MAX_CHARS),
         location: inferredLocation,
     };
     taskRunnerEntries = [...taskRunnerEntries, entry].slice(-TASK_RUNNER_OUTPUT_LIMIT);
@@ -1730,6 +3547,355 @@ function wireTaskRunner() {
     });
 }
 
+function ensureDevTerminalPanel() {
+    const consoleUi = ensureConsoleTabs();
+    const terminalHost = consoleUi?.terminalView;
+    if (!terminalHost) return null;
+
+    if (devTerminalUI?.panel && document.contains(devTerminalUI.panel)) {
+        if (!terminalHost.contains(devTerminalUI.panel)) {
+            terminalHost.appendChild(devTerminalUI.panel);
+        }
+        return devTerminalUI;
+    }
+
+    let panel = document.getElementById("devTerminalPanel");
+    if (!panel) {
+        panel = document.createElement("section");
+        panel.id = "devTerminalPanel";
+    }
+    panel.className = "diagnostics-panel dev-terminal-panel";
+    panel.setAttribute("aria-live", "polite");
+    if (!panel.querySelector("#devTerminalInput")) {
+        panel.innerHTML = `
+        <header class="diagnostics-header">
+            <div>
+                <p class="diagnostics-label">Dev Terminal</p>
+                <p class="diagnostics-sub">Safe local command runner</p>
+            </div>
+            <div class="diagnostics-actions">
+                <span id="devTerminalStatus" class="dev-terminal-status" data-state="safe">Safe Mode</span>
+                <button id="devTerminalClear" type="button">Clear</button>
+            </div>
+        </header>
+        <div class="dev-terminal-shell" role="group" aria-label="Dev terminal input">
+            <span class="dev-terminal-prompt" aria-hidden="true">$</span>
+            <label class="sr-only" for="devTerminalInput">Dev terminal command</label>
+            <input id="devTerminalInput" type="text" autocomplete="off" spellcheck="false" placeholder="Type 'help' for commands..." />
+            <button id="devTerminalRun" type="button">Run</button>
+        </div>
+        <ul id="devTerminalOutput" class="diagnostics-list dev-terminal-output" role="list"></ul>
+    `;
+    }
+    if (!terminalHost.contains(panel)) {
+        terminalHost.appendChild(panel);
+    }
+
+    devTerminalUI = {
+        panel,
+        status: panel.querySelector("#devTerminalStatus"),
+        clear: panel.querySelector("#devTerminalClear"),
+        input: panel.querySelector("#devTerminalInput"),
+        run: panel.querySelector("#devTerminalRun"),
+        output: panel.querySelector("#devTerminalOutput"),
+    };
+    return devTerminalUI;
+}
+
+function formatDevTerminalTime(timestamp = Date.now()) {
+    try {
+        return new Date(timestamp).toLocaleTimeString([], { hour12: false });
+    } catch {
+        return "--:--:--";
+    }
+}
+
+function syncDevTerminalStatus() {
+    const ui = ensureDevTerminalPanel();
+    if (!ui?.status) return;
+    ui.status.dataset.state = "safe";
+    ui.status.textContent = "Safe Mode";
+}
+
+function setDevTerminalBusy(active) {
+    devTerminalBusy = Boolean(active);
+    const ui = ensureDevTerminalPanel();
+    if (!ui) return;
+    if (ui.input) ui.input.disabled = devTerminalBusy;
+    if (ui.run) ui.run.disabled = devTerminalBusy;
+}
+
+function clearDevTerminalOutput() {
+    const ui = ensureDevTerminalPanel();
+    if (!ui?.output) return;
+    ui.output.innerHTML = `<li class="diagnostics-empty">No commands yet.</li>`;
+}
+
+function appendDevTerminalEntry(level = "info", message = "", { kind = "output" } = {}) {
+    const ui = ensureDevTerminalPanel();
+    if (!ui?.output) return;
+    const list = ui.output;
+    const emptyRow = list.querySelector(".diagnostics-empty");
+    if (emptyRow) {
+        list.innerHTML = "";
+    }
+    const safeLevel = normalizeProblemLevel(level);
+    const safeKind = kind === "command" ? "command" : "output";
+    const row = document.createElement("li");
+    row.className = "diagnostics-item dev-terminal-item";
+    row.dataset.level = safeLevel;
+    row.dataset.kind = safeKind;
+    const safeMessage = truncateText(String(message || ""), DEV_TERMINAL_MESSAGE_MAX_CHARS);
+    row.innerHTML = `
+        <span class="dev-terminal-meta">${escapeHTML(formatDevTerminalTime())}</span>
+        <span class="dev-terminal-text">${escapeHTML(safeMessage)}</span>
+    `;
+    list.appendChild(row);
+    while (list.children.length > DEV_TERMINAL_OUTPUT_LIMIT) {
+        list.removeChild(list.firstElementChild);
+    }
+    row.scrollIntoView({ block: "nearest" });
+}
+
+function parseDevTerminalArgs(input = "") {
+    const source = String(input || "");
+    const tokens = [];
+    const regex = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|(\S+)/g;
+    let match;
+    while ((match = regex.exec(source)) !== null) {
+        const token = match[1] ?? match[2] ?? match[3] ?? "";
+        tokens.push(token.replace(/\\(["'])/g, "$1"));
+    }
+    return tokens;
+}
+
+function maskDevTerminalCommand(input = "") {
+    return String(input || "").trim();
+}
+
+function normalizeTaskRunnerCommand(task = "") {
+    const input = String(task || "").trim().toLowerCase();
+    if (!input) return "";
+    const map = {
+        all: "run-all",
+        app: "run-app",
+        lint: "lint-workspace",
+        format: "format-active",
+        save: "save-all",
+    };
+    return map[input] || input;
+}
+
+function pushDevTerminalHistory(input = "") {
+    const raw = String(input || "").trim();
+    if (!raw) return;
+    const last = devTerminalHistory[devTerminalHistory.length - 1];
+    if (last !== raw) {
+        devTerminalHistory = [...devTerminalHistory, raw].slice(-DEV_TERMINAL_HISTORY_LIMIT);
+    }
+    devTerminalHistoryIndex = devTerminalHistory.length;
+}
+
+function setDevTerminalInputValue(value = "") {
+    const ui = ensureDevTerminalPanel();
+    if (!ui?.input) return;
+    ui.input.value = String(value || "");
+}
+
+function navigateDevTerminalHistory(direction = 0) {
+    const ui = ensureDevTerminalPanel();
+    if (!ui?.input) return;
+    if (!devTerminalHistory.length) return;
+    const step = Number(direction) || 0;
+    if (step === 0) return;
+    devTerminalHistoryIndex = clamp(devTerminalHistoryIndex + step, 0, devTerminalHistory.length);
+    if (devTerminalHistoryIndex >= devTerminalHistory.length) {
+        ui.input.value = "";
+        return;
+    }
+    ui.input.value = devTerminalHistory[devTerminalHistoryIndex] || "";
+    ui.input.setSelectionRange(ui.input.value.length, ui.input.value.length);
+}
+
+function focusDevTerminalInput({ openLog = true } = {}) {
+    const ui = ensureDevTerminalPanel();
+    if (!ui?.input) return false;
+    if (openLog) {
+        ensureLogOpen("Console opened for Dev Terminal.", { view: "terminal" });
+    } else {
+        setConsoleView("terminal");
+    }
+    requestAnimationFrame(() => ui.input?.focus());
+    return true;
+}
+
+async function executeDevTerminalCommand(input = "") {
+    const raw = String(input || "").trim();
+    if (!raw) return false;
+
+    appendDevTerminalEntry("info", `$ ${maskDevTerminalCommand(raw)}`, { kind: "command" });
+    pushDevTerminalHistory(raw);
+
+    const args = parseDevTerminalArgs(raw);
+    if (!args.length) return false;
+    const command = String(args[0] || "").toLowerCase();
+    const values = args.slice(1);
+
+    if (command === "clear") {
+        clearDevTerminalOutput();
+        return true;
+    }
+
+    if (command === "help") {
+        const lines = [
+            "Commands: help, clear, status, run, format, save, save-all",
+            "Commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
+            "Commands: open <log|editor|files|sandbox|tools>, theme <dark|light|purple|retro|temple>, files",
+            "Safety: privileged/eval commands are disabled",
+        ];
+        lines.forEach((line) => appendDevTerminalEntry("info", line));
+        return true;
+    }
+
+    if (command === "status") {
+        appendDevTerminalEntry("info", `Mode: safe • history: ${devTerminalHistory.length}`);
+        return true;
+    }
+
+    if (command === "run") {
+        run();
+        appendDevTerminalEntry("info", "Sandbox run started.");
+        return true;
+    }
+
+    if (command === "format") {
+        const ok = await formatCurrentEditor({ announce: false });
+        appendDevTerminalEntry(ok ? "info" : "warn", ok ? "Formatted active file." : "Format skipped.");
+        return ok;
+    }
+
+    if (command === "save") {
+        const ok = saveActiveFile({ announce: false });
+        appendDevTerminalEntry("info", ok ? "Saved active file." : "No changes to save.");
+        return ok;
+    }
+
+    if (command === "save-all") {
+        const ok = saveAllFiles({ announce: false });
+        appendDevTerminalEntry("info", ok ? "Saved all dirty files." : "No dirty files.");
+        return ok;
+    }
+
+    if (command === "task") {
+        const taskId = normalizeTaskRunnerCommand(values[0] || "");
+        if (!taskId) {
+            appendDevTerminalEntry("warn", "Usage: task <run-all|run-app|lint-workspace|format-active|save-all>");
+            return false;
+        }
+        const ok = await runTaskRunnerTask(taskId);
+        appendDevTerminalEntry(ok ? "info" : "warn", ok ? `Task started: ${taskId}` : `Task failed: ${taskId}`);
+        return ok;
+    }
+
+    if (command === "theme") {
+        const nextTheme = normalizeTheme(values[0] || "", undefined, "");
+        if (!nextTheme) {
+            appendDevTerminalEntry("warn", "Usage: theme <dark|light|purple|retro|temple>");
+            return false;
+        }
+        applyTheme(nextTheme);
+        appendDevTerminalEntry("info", `Theme set to ${nextTheme}.`);
+        return true;
+    }
+
+    if (command === "open") {
+        const panel = String(values[0] || "").trim().toLowerCase();
+        if (!["log", "editor", "files", "sandbox", "tools"].includes(panel)) {
+            appendDevTerminalEntry("warn", "Usage: open <log|editor|files|sandbox|tools>");
+            return false;
+        }
+        setPanelOpen(panel, true);
+        appendDevTerminalEntry("info", `Opened panel: ${panel}.`);
+        return true;
+    }
+
+    if (command === "files") {
+        appendDevTerminalEntry("info", `Workspace files: ${files.length} • folders: ${collectFolderPaths(files, folders).size} • trash: ${trashFiles.length}`);
+        return true;
+    }
+
+    if (["lock", "set-code", "unlock", "remove-code", "dev-help", "dev-js"].includes(command)) {
+        appendDevTerminalEntry("warn", `Command disabled for safety: ${command}`);
+        return false;
+    }
+
+    appendDevTerminalEntry("warn", `Unknown command: ${command}. Type 'help'.`);
+    return false;
+}
+
+function wireDevTerminal() {
+    wireConsoleTabs();
+    const ui = ensureDevTerminalPanel();
+    if (!ui) return;
+    if (ui.panel.dataset.wired === "true") return;
+
+    devTerminalHistory = [];
+    devTerminalHistoryIndex = 0;
+    syncDevTerminalStatus();
+    clearDevTerminalOutput();
+    appendDevTerminalEntry("info", "Dev Terminal ready. Type 'help' to list commands.");
+
+    ui.clear?.addEventListener("click", () => {
+        clearDevTerminalOutput();
+    });
+    ui.run?.addEventListener("click", async () => {
+        const value = ui.input?.value || "";
+        if (!value.trim() || devTerminalBusy) return;
+        setDevTerminalBusy(true);
+        try {
+            await executeDevTerminalCommand(value);
+        } catch (err) {
+            appendDevTerminalEntry("error", `Command failed: ${String(err?.message || err)}`);
+        } finally {
+            setDevTerminalBusy(false);
+            setDevTerminalInputValue("");
+            ui.input?.focus();
+        }
+    });
+    ui.input?.addEventListener("keydown", async (event) => {
+        if (event.key === "ArrowUp") {
+            event.preventDefault();
+            navigateDevTerminalHistory(-1);
+            return;
+        }
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            navigateDevTerminalHistory(1);
+            return;
+        }
+        if (event.key === "Escape") {
+            event.preventDefault();
+            ui.input.value = "";
+            return;
+        }
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (devTerminalBusy) return;
+        const value = ui.input.value || "";
+        if (!value.trim()) return;
+        setDevTerminalBusy(true);
+        try {
+            await executeDevTerminalCommand(value);
+        } catch (err) {
+            appendDevTerminalEntry("error", `Command failed: ${String(err?.message || err)}`);
+        } finally {
+            setDevTerminalBusy(false);
+            setDevTerminalInputValue("");
+        }
+    });
+    ui.panel.dataset.wired = "true";
+}
+
 function isSandboxWindowOpen() {
     return Boolean(sandboxWindow && !sandboxWindow.closed);
 }
@@ -1796,12 +3962,38 @@ function buildSandboxPopoutHtml() {
                 --button-hover: rgba(52, 30, 87, 0.92);
                 --runner-bg: #140b24;
             }
+            :root[data-theme="retro"] {
+                color-scheme: dark;
+                --bg: #0f140f;
+                --surface: #182018;
+                --bar-bg: rgba(14, 19, 14, 0.96);
+                --text: #d7f7c1;
+                --muted: rgba(183, 227, 160, 0.86);
+                --border: rgba(121, 163, 97, 0.38);
+                --border-strong: rgba(180, 214, 132, 0.64);
+                --button-bg: rgba(28, 38, 23, 0.9);
+                --button-hover: rgba(38, 52, 31, 0.96);
+                --runner-bg: #0f140f;
+            }
+            :root[data-theme="temple"] {
+                color-scheme: light;
+                --bg: #0f3fc6;
+                --surface: #f7f0dc;
+                --bar-bg: rgba(247, 240, 220, 0.96);
+                --text: #15214a;
+                --muted: rgba(21, 33, 74, 0.76);
+                --border: rgba(26, 43, 102, 0.34);
+                --border-strong: rgba(26, 43, 102, 0.52);
+                --button-bg: rgba(248, 242, 226, 0.96);
+                --button-hover: rgba(236, 226, 200, 0.98);
+                --runner-bg: #0f3fc6;
+            }
             * { box-sizing: border-box; }
             html, body { margin: 0; height: 100%; }
             body {
                 background: var(--bg);
                 color: var(--text);
-                font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+                font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
             }
             .bar {
                 height: 36px;
@@ -2021,6 +4213,7 @@ function toggleSandboxPopout() {
 function onPopoutMessage(event) {
     const data = event.data;
     if (!data || data.source !== "fazide-popout") return;
+    if (!isSandboxWindowOpen() || event.source !== sandboxWindow) return;
     if (data.type === "dock_request") {
         closeSandboxWindow();
         return;
@@ -2071,7 +4264,59 @@ function initDocking() {
         if (activeZone) activeZone.setAttribute("data-active", "true");
     };
 
-    const applyDrop = () => {
+    const movePanelHorizontally = (panel, direction) => {
+        const row = getPanelRow(panel);
+        const order = Array.isArray(layoutState.panelRows?.[row]) ? [...layoutState.panelRows[row]] : [];
+        const currentIndex = order.indexOf(panel);
+        if (currentIndex === -1) return false;
+        const nextIndex = clamp(currentIndex + direction, 0, order.length - 1);
+        if (nextIndex === currentIndex) return false;
+        setPanelOrder(panel, nextIndex, { animatePanels: true });
+        return true;
+    };
+
+    const movePanelVertically = (panel, direction) => {
+        const targetRow = direction < 0 ? "top" : "bottom";
+        const currentRow = getPanelRow(panel);
+        if (currentRow === targetRow) return false;
+        const currentOrder = Array.isArray(layoutState.panelRows?.[currentRow]) ? layoutState.panelRows[currentRow] : [];
+        const targetOrder = Array.isArray(layoutState.panelRows?.[targetRow]) ? layoutState.panelRows[targetRow] : [];
+        const currentIndex = currentOrder.indexOf(panel);
+        const targetIndex = clamp(currentIndex, 0, targetOrder.length);
+        movePanelToRow(panel, targetRow, targetIndex, { animatePanels: true });
+        return true;
+    };
+
+    const getDropIndexForRow = (rowName, pointerX, panelToMove) => {
+        const rowOrder = Array.isArray(layoutState.panelRows?.[rowName]) ? [...layoutState.panelRows[rowName]] : [];
+        const orderWithoutPanel = rowOrder.filter((name) => name !== panelToMove);
+        if (!orderWithoutPanel.length) return 0;
+
+        if (!Number.isFinite(pointerX)) return orderWithoutPanel.length;
+
+        let sawVisiblePanel = false;
+        for (let i = 0; i < orderWithoutPanel.length; i += 1) {
+            const panelName = orderWithoutPanel[i];
+            if (!isPanelOpen(panelName)) continue;
+            const panelEl = getPanelEl(panelName);
+            if (!panelEl || !panelEl.isConnected) continue;
+            const rect = panelEl.getBoundingClientRect();
+            if (!Number.isFinite(rect.width) || rect.width <= 0) continue;
+            sawVisiblePanel = true;
+            const midpoint = rect.left + rect.width / 2;
+            if (pointerX < midpoint) return i;
+        }
+
+        if (sawVisiblePanel) return orderWithoutPanel.length;
+
+        const rowEl = rowName === "bottom" ? el.workspaceBottom : el.workspaceTop;
+        if (!rowEl) return orderWithoutPanel.length;
+        const rowRect = rowEl.getBoundingClientRect();
+        const rowMidpoint = rowRect.left + rowRect.width / 2;
+        return pointerX < rowMidpoint ? 0 : orderWithoutPanel.length;
+    };
+
+    const applyDrop = (dropPoint = null) => {
         if (!activeZone || !activePanel) return;
         const zoneName = activeZone.getAttribute("data-dock-zone");
         if (!zoneName) return;
@@ -2088,11 +4333,42 @@ function initDocking() {
             return;
         }
         if (zoneName === "bottom") {
-            movePanelToRow(activePanel, "bottom", 0);
+            const dropIndex = getDropIndexForRow("bottom", dropPoint?.x, activePanel);
+            movePanelToRow(activePanel, "bottom", dropIndex);
         }
     };
 
     handles.forEach((handle) => {
+        handle.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown Home End");
+        if (!handle.getAttribute("title")) {
+            handle.setAttribute("title", "Drag to dock, or use arrow keys to move this panel");
+        }
+
+        handle.addEventListener("keydown", (event) => {
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
+            const panel = handle.getAttribute("data-panel");
+            if (!panel) return;
+            let moved = false;
+            if (event.key === "ArrowLeft") moved = movePanelHorizontally(panel, -1);
+            if (event.key === "ArrowRight") moved = movePanelHorizontally(panel, 1);
+            if (event.key === "ArrowUp") moved = movePanelVertically(panel, -1);
+            if (event.key === "ArrowDown") moved = movePanelVertically(panel, 1);
+            if (event.key === "Home") {
+                const row = getPanelRow(panel);
+                movePanelToRow(panel, row, 0, { animatePanels: true });
+                moved = true;
+            }
+            if (event.key === "End") {
+                const row = getPanelRow(panel);
+                const length = Array.isArray(layoutState.panelRows?.[row]) ? layoutState.panelRows[row].length : 1;
+                movePanelToRow(panel, row, Math.max(0, length - 1), { animatePanels: true });
+                moved = true;
+            }
+            if (moved) {
+                event.preventDefault();
+            }
+        });
+
         handle.addEventListener("pointerdown", (event) => {
             if (event.button !== 0) return;
             const panel = handle.getAttribute("data-panel");
@@ -2120,24 +4396,56 @@ function initDocking() {
             document.body?.classList.add("dock-dragging");
             handle.setPointerCapture(event.pointerId);
 
-            const onMove = (moveEvent) => {
-                const elAt = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+            let dragMoveFrame = null;
+            let dragMoveState = null;
+
+            const applyDragMove = (state) => {
+                if (!state) return;
+                const elAt = document.elementFromPoint(state.x, state.y);
                 const zone = elAt ? elAt.closest(".dock-zone") : null;
                 updateActiveZone(zone);
                 if (dragGhost) {
-                    const nextX = moveEvent.clientX - dragOffset.x;
-                    const nextY = moveEvent.clientY - dragOffset.y;
+                    const nextX = state.x - dragOffset.x;
+                    const nextY = state.y - dragOffset.y;
                     dragGhost.style.transform = `translate3d(${nextX}px, ${nextY}px, 0) rotate(-0.35deg) scale(1.02)`;
                 }
             };
 
-            const onEnd = () => {
-                handle.releasePointerCapture(event.pointerId);
+            const onMove = (moveEvent) => {
+                dragMoveState = { x: moveEvent.clientX, y: moveEvent.clientY };
+                if (dragMoveFrame != null) return;
+                dragMoveFrame = requestAnimationFrame(() => {
+                    dragMoveFrame = null;
+                    const next = dragMoveState;
+                    dragMoveState = null;
+                    applyDragMove(next);
+                });
+            };
+
+            const onEnd = (endEvent) => {
+                let dropPoint = null;
+                if (dragMoveFrame != null) {
+                    cancelAnimationFrame(dragMoveFrame);
+                    dragMoveFrame = null;
+                }
+                if (endEvent && Number.isFinite(endEvent.clientX) && Number.isFinite(endEvent.clientY)) {
+                    dropPoint = { x: endEvent.clientX, y: endEvent.clientY };
+                    applyDragMove(dropPoint);
+                } else if (dragMoveState) {
+                    dropPoint = dragMoveState;
+                    applyDragMove(dragMoveState);
+                }
+                dragMoveState = null;
+                try {
+                    handle.releasePointerCapture(event.pointerId);
+                } catch (err) {
+                    // no-op
+                }
                 handle.removeEventListener("pointermove", onMove);
                 handle.removeEventListener("pointerup", onEnd);
                 handle.removeEventListener("pointercancel", onEnd);
                 document.body?.classList.remove("dock-dragging");
-                applyDrop();
+                applyDrop(dropPoint);
                 updateActiveZone(null);
                 setOverlayOpen(false);
                 if (activePanelEl) activePanelEl.classList.remove("panel-floating", "panel-drag-source");
@@ -2184,6 +4492,7 @@ function initSplitters() {
             showColGuideForPanels(leftEl, rightEl);
             const onMove = (moveEvent) => {
                 const delta = moveEvent.clientX - startX;
+                const snapEnabled = !moveEvent.altKey;
                 if (leftControl && rightControl) {
                     const minDelta = Math.max(
                         leftBounds.min - startLeft,
@@ -2194,24 +4503,26 @@ function initSplitters() {
                         startRight - rightBounds.min
                     );
                     const clamped = clamp(delta, minDelta, maxDelta);
-                    leftControl.set(startLeft + clamped);
-                    rightControl.set(startRight - clamped);
+                    const snapped = snapEnabled ? Math.round(clamped / RESIZE_SNAP_STEP) * RESIZE_SNAP_STEP : clamped;
+                    const nextDelta = clamp(snapped, minDelta, maxDelta);
+                    leftControl.set(startLeft + nextDelta);
+                    rightControl.set(startRight - nextDelta);
                     showColGuideForPanels(leftEl, rightEl);
                     return;
                 }
                 if (leftControl && !rightControl) {
-                    const next = clamp(startLeft + delta, leftEffective.min, leftEffective.max);
+                    const next = snapDimension(startLeft + delta, leftEffective.min, leftEffective.max, { enabled: snapEnabled });
                     leftControl.set(next);
                     showColGuideForPanels(leftEl, rightEl);
                     return;
                 }
                 if (!leftControl && rightControl) {
-                    const next = clamp(startRight - delta, rightEffective.min, rightEffective.max);
+                    const next = snapDimension(startRight - delta, rightEffective.min, rightEffective.max, { enabled: snapEnabled });
                     rightControl.set(next);
                     showColGuideForPanels(leftEl, rightEl);
                     return;
                 }
-                const next = clamp(startWidth + delta, bounds.min, bounds.max);
+                const next = snapDimension(startWidth + delta, bounds.min, bounds.max, { enabled: snapEnabled });
                 setWidth(next);
                 showColGuideForPanels(leftEl, rightEl);
             };
@@ -2256,7 +4567,7 @@ function initSplitters() {
         });
 
         splitter.addEventListener("keydown", (event) => {
-            const step = event.altKey ? 1 : event.shiftKey ? 40 : 12;
+            const step = event.altKey ? 2 : event.shiftKey ? 48 : 16;
             if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
                 const dir = event.key === "ArrowRight" ? 1 : -1;
                 const leftName = splitter.dataset.resizeLeft;
@@ -2315,7 +4626,7 @@ function initSplitters() {
             const startHeight = layoutState.bottomHeight;
             const bounds = getLayoutBounds().bottomHeight;
             const workspaceHeight = el.workspace?.getBoundingClientRect().height || 0;
-            const minTop = rowHasOpenPanels("top") ? 180 : 0;
+            const minTop = rowHasOpenPanels("top") ? WORKSPACE_ROW_MIN_HEIGHT : 0;
             const maxBottom = Math.max(bounds.min, Math.min(bounds.max, workspaceHeight - minTop));
             setResizeActive([el.workspaceTop, el.workspaceBottom], true);
             hideColGuide();
@@ -2324,7 +4635,7 @@ function initSplitters() {
 
             const onMove = (moveEvent) => {
                 const delta = moveEvent.clientY - startY;
-                const next = clamp(startHeight - delta, bounds.min, maxBottom);
+                const next = snapDimension(startHeight - delta, bounds.min, maxBottom, { enabled: !moveEvent.altKey });
                 setBottomHeight(next);
                 const boundary = getRowBoundaryY();
                 if (boundary !== null) showRowGuideAt(boundary);
@@ -2360,13 +4671,20 @@ function initSplitters() {
             splitter.addEventListener("pointercancel", onCancel);
         });
 
+        splitter.addEventListener("dblclick", () => {
+            const fallback = LAYOUT_PRESETS.studio;
+            setBottomHeight(fallback.bottomHeight);
+            persistLayout();
+            pushDiag("info", "Bottom dock height reset.");
+        });
+
         splitter.addEventListener("keydown", (event) => {
-            const step = event.altKey ? 1 : event.shiftKey ? 40 : 12;
+            const step = event.altKey ? 2 : event.shiftKey ? 48 : 16;
             if (event.key === "ArrowUp" || event.key === "ArrowDown") {
                 const dir = event.key === "ArrowDown" ? 1 : -1;
                 const bounds = getLayoutBounds().bottomHeight;
                 const workspaceHeight = el.workspace?.getBoundingClientRect().height || 0;
-                const minTop = rowHasOpenPanels("top") ? 180 : 0;
+                const minTop = rowHasOpenPanels("top") ? WORKSPACE_ROW_MIN_HEIGHT : 0;
                 const maxBottom = Math.max(bounds.min, Math.min(bounds.max, workspaceHeight - minTop));
                 const next = clamp(layoutState.bottomHeight - dir * step, bounds.min, maxBottom);
                 setBottomHeight(next);
@@ -2411,7 +4729,7 @@ function initEdgeResizing() {
         const startY = startEvent.clientY;
         const startHeight = layoutState.bottomHeight;
         const workspaceHeight = el.workspace?.getBoundingClientRect().height || 0;
-        const minTop = rowHasOpenPanels("top") ? 180 : 0;
+        const minTop = rowHasOpenPanels("top") ? WORKSPACE_ROW_MIN_HEIGHT : 0;
         const maxBottom = Math.max(bounds.min, Math.min(bounds.max, workspaceHeight - minTop));
 
         document.body?.setAttribute("data-resize", "row");
@@ -2421,7 +4739,7 @@ function initEdgeResizing() {
         if (boundaryStart !== null) showRowGuideAt(boundaryStart);
         const onMove = (moveEvent) => {
             const delta = moveEvent.clientY - startY;
-            const next = clamp(startHeight - delta, bounds.min, maxBottom);
+            const next = snapDimension(startHeight - delta, bounds.min, maxBottom, { enabled: !moveEvent.altKey });
             setBottomHeight(next);
             const boundary = getRowBoundaryY();
             if (boundary !== null) showRowGuideAt(boundary);
@@ -2484,6 +4802,7 @@ function initEdgeResizing() {
         showColGuideForPanels(leftEl, rightEl);
         const onMove = (moveEvent) => {
             const delta = moveEvent.clientX - startX;
+            const snapEnabled = !moveEvent.altKey;
             if (leftControl && rightControl) {
                 const minDelta = Math.max(
                     leftBounds.min - startLeft,
@@ -2494,19 +4813,21 @@ function initEdgeResizing() {
                     startRight - rightBounds.min
                 );
                 const clamped = clamp(delta, minDelta, maxDelta);
-                leftControl.set(startLeft + clamped);
-                rightControl.set(startRight - clamped);
+                const snapped = snapEnabled ? Math.round(clamped / RESIZE_SNAP_STEP) * RESIZE_SNAP_STEP : clamped;
+                const nextDelta = clamp(snapped, minDelta, maxDelta);
+                leftControl.set(startLeft + nextDelta);
+                rightControl.set(startRight - nextDelta);
                 showColGuideForPanels(leftEl, rightEl);
                 return;
             }
             if (leftControl && !rightControl) {
-                const next = clamp(startLeft + delta, leftEffective.min, leftEffective.max);
+                const next = snapDimension(startLeft + delta, leftEffective.min, leftEffective.max, { enabled: snapEnabled });
                 leftControl.set(next);
                 showColGuideForPanels(leftEl, rightEl);
                 return;
             }
             if (!leftControl && rightControl) {
-                const next = clamp(startRight - delta, rightEffective.min, rightEffective.max);
+                const next = snapDimension(startRight - delta, rightEffective.min, rightEffective.max, { enabled: snapEnabled });
                 rightControl.set(next);
                 showColGuideForPanels(leftEl, rightEl);
             }
@@ -2694,7 +5015,7 @@ function togglePanel(panel) {
     if (panel === "tools") return setPanelOpen("tools", !layoutState.toolsOpen);
 }
 
-function setPanelOrder(panel, index) {
+function setPanelOrder(panel, index, { animatePanels = true } = {}) {
     const row = getPanelRow(panel);
     const order = Array.isArray(layoutState.panelRows?.[row]) ? [...layoutState.panelRows[row]] : [];
     const currentIndex = order.indexOf(panel);
@@ -2704,12 +5025,12 @@ function setPanelOrder(panel, index) {
     order.splice(currentIndex, 1);
     order.splice(clamped, 0, panel);
     layoutState.panelRows[row] = order;
-    applyLayout();
+    applyLayout({ animatePanels });
     persistLayout();
     syncLayoutControls();
 }
 
-function movePanelToRow(panel, row, index = 0) {
+function movePanelToRow(panel, row, index = 0, { animatePanels = true } = {}) {
     const targetRow = row === "bottom" ? "bottom" : "top";
     const otherRow = targetRow === "top" ? "bottom" : "top";
     const nextRows = normalizePanelRows(layoutState.panelRows);
@@ -2719,7 +5040,7 @@ function movePanelToRow(panel, row, index = 0) {
     const clamped = clamp(Number(index), 0, target.length);
     target.splice(clamped, 0, panel);
     layoutState.panelRows = nextRows;
-    applyLayout();
+    applyLayout({ animatePanels });
     persistLayout();
     syncLayoutControls();
 }
@@ -2739,11 +5060,11 @@ function setPanelRadius(value) {
     }
 }
 
-function applyLayoutPreset(name) {
+function applyLayoutPreset(name, { animatePanels = true } = {}) {
     const preset = LAYOUT_PRESETS[name];
     if (!preset) return;
     layoutState = sanitizeLayoutState({ ...layoutState, ...preset });
-    applyLayout();
+    applyLayout({ animatePanels });
     persistLayout();
     syncLayoutControls();
     if (name === "studio") {
@@ -2772,13 +5093,21 @@ function formatBasic(code) {
 async function formatCurrentEditor({ announce = true } = {}) {
     const source = editor.get();
     const mode = editorSettings.formatterMode || "auto";
+    let currentCode = source;
+    const applyFormattedCode = (nextCode, lintReason) => {
+        const normalized = String(nextCode ?? "");
+        if (normalized === currentCode) return false;
+        setEditorValue(normalized, { silent: true });
+        updateActiveFileCode(normalized);
+        queueEditorLint(lintReason);
+        currentCode = normalized;
+        return true;
+    };
 
     // Keep UX immediate: apply basic formatting synchronously before async formatter load.
     if (mode !== "prettier") {
-        const basic = formatBasic(source);
-        setEditorValue(basic, { silent: true });
-        updateActiveFileCode(basic);
-        queueEditorLint("format-basic");
+        const basic = formatBasic(currentCode);
+        applyFormattedCode(basic, "format-basic");
         if (mode === "basic") {
             if (announce) {
                 logger.append("system", ["Formatted (basic)."]);
@@ -2788,7 +5117,7 @@ async function formatCurrentEditor({ announce = true } = {}) {
         }
     }
 
-    const result = await formatter.formatJavaScript(editor.get(), {
+    const result = await formatter.formatJavaScript(currentCode, {
         mode,
         tabSize: editorSettings.tabSize,
         printWidth: editorSettings.lineWrapping ? 100 : 120,
@@ -2802,10 +5131,8 @@ async function formatCurrentEditor({ announce = true } = {}) {
         }
         return result;
     }
-    const formatted = String(result.code ?? source);
-    setEditorValue(formatted, { silent: true });
-    updateActiveFileCode(formatted);
-    queueEditorLint("format");
+    const formatted = String(result.code ?? currentCode);
+    applyFormattedCode(formatted, "format");
     if (announce) {
         const label = result.method || "basic";
         logger.append("system", [`Formatted (${label}).`]);
@@ -2815,8 +5142,11 @@ async function formatCurrentEditor({ announce = true } = {}) {
 }
 
 function buildSavedDiffPreview(savedCode, currentCode) {
-    const saved = String(savedCode ?? "").split("\n");
-    const current = String(currentCode ?? "").split("\n");
+    const savedText = String(savedCode ?? "");
+    const currentText = String(currentCode ?? "");
+    if (savedText === currentText) return "No unsaved differences.\n";
+    const saved = savedText.split("\n");
+    const current = currentText.split("\n");
     const max = Math.max(saved.length, current.length);
     const out = [];
     let changed = 0;
@@ -2839,16 +5169,128 @@ function renderEditorMirror() {
     if (!el.editorMirror) return;
     const active = getActiveFile();
     if (!editorSplitOpen) {
+        if (editorSplitScrollSyncFrame) {
+            cancelAnimationFrame(editorSplitScrollSyncFrame);
+            editorSplitScrollSyncFrame = 0;
+        }
+        if (!editorMirrorLastOpen) return;
         el.editorMirror.setAttribute("data-open", "false");
         el.editorMirror.textContent = "";
+        editorMirrorLastOpen = false;
+        editorMirrorLastFileId = "";
+        editorMirrorLastSavedCode = null;
+        editorMirrorLastCurrentCode = null;
         return;
     }
+    bindEditorSplitScrollSync();
     el.editorMirror.setAttribute("data-open", "true");
     if (!active) {
+        if (
+            editorMirrorLastOpen &&
+            editorMirrorLastFileId === "__none__" &&
+            editorMirrorLastSavedCode === null &&
+            editorMirrorLastCurrentCode === null
+        ) {
+            return;
+        }
         el.editorMirror.textContent = "No active file.";
+        editorMirrorLastOpen = true;
+        editorMirrorLastFileId = "__none__";
+        editorMirrorLastSavedCode = null;
+        editorMirrorLastCurrentCode = null;
+        scheduleEditorSplitScrollSync("editor");
         return;
     }
-    el.editorMirror.textContent = buildSavedDiffPreview(active.savedCode, active.code);
+    const savedCode = String(active.savedCode ?? "");
+    const currentCode = String(active.code ?? "");
+    if (
+        editorMirrorLastOpen &&
+        editorMirrorLastFileId === active.id &&
+        editorMirrorLastSavedCode === savedCode &&
+        editorMirrorLastCurrentCode === currentCode
+    ) {
+        return;
+    }
+    el.editorMirror.textContent = buildSavedDiffPreview(savedCode, currentCode);
+    editorMirrorLastOpen = true;
+    editorMirrorLastFileId = active.id;
+    editorMirrorLastSavedCode = savedCode;
+    editorMirrorLastCurrentCode = currentCode;
+    scheduleEditorSplitScrollSync("editor");
+}
+
+function getEditorSplitScrollContainer() {
+    if (editor.type === "codemirror") {
+        const cm = editor.raw;
+        const scroller = cm?.getScrollerElement?.();
+        if (scroller instanceof HTMLElement) return scroller;
+        const wrapper = cm?.getWrapperElement?.();
+        const fallback = wrapper?.querySelector?.(".CodeMirror-scroll");
+        if (fallback instanceof HTMLElement) return fallback;
+        return null;
+    }
+    return editor.raw instanceof HTMLElement ? editor.raw : null;
+}
+
+function bindEditorSplitScrollSync() {
+    if (el.editorMirror && !editorSplitMirrorScrollHandler) {
+        editorSplitMirrorScrollHandler = () => syncEditorSplitScroll("mirror");
+        el.editorMirror.addEventListener("scroll", editorSplitMirrorScrollHandler, { passive: true });
+    }
+    const nextHost = getEditorSplitScrollContainer();
+    if (nextHost === editorSplitScrollHost) return;
+    if (editorSplitScrollHost && editorSplitHostScrollHandler) {
+        editorSplitScrollHost.removeEventListener("scroll", editorSplitHostScrollHandler);
+    }
+    editorSplitScrollHost = nextHost;
+    if (!editorSplitScrollHost) return;
+    if (!editorSplitHostScrollHandler) {
+        editorSplitHostScrollHandler = () => syncEditorSplitScroll("editor");
+    }
+    editorSplitScrollHost.addEventListener("scroll", editorSplitHostScrollHandler, { passive: true });
+}
+
+function setEditorSplitScrollTop(nextTop) {
+    const top = Math.max(0, Number(nextTop) || 0);
+    if (editor.type === "codemirror" && editor.raw && typeof editor.raw.scrollTo === "function") {
+        const info = typeof editor.raw.getScrollInfo === "function"
+            ? editor.raw.getScrollInfo()
+            : null;
+        editor.raw.scrollTo(info?.left ?? null, top);
+        return;
+    }
+    const scroller = getEditorSplitScrollContainer();
+    if (scroller) scroller.scrollTop = top;
+}
+
+function syncEditorSplitScroll(source = "editor") {
+    if (!editorSplitOpen || !el.editorMirror) return;
+    bindEditorSplitScrollSync();
+    const mirror = el.editorMirror;
+    const editorScroller = editorSplitScrollHost;
+    if (!(editorScroller instanceof HTMLElement)) return;
+    if (editorSplitScrollSyncLock) return;
+    editorSplitScrollSyncLock = true;
+    try {
+        if (source === "mirror") {
+            setEditorSplitScrollTop(mirror.scrollTop);
+        } else {
+            mirror.scrollTop = editorScroller.scrollTop;
+        }
+    } finally {
+        editorSplitScrollSyncLock = false;
+    }
+}
+
+function scheduleEditorSplitScrollSync(source = "editor") {
+    if (!editorSplitOpen) return;
+    if (editorSplitScrollSyncFrame) {
+        cancelAnimationFrame(editorSplitScrollSyncFrame);
+    }
+    editorSplitScrollSyncFrame = requestAnimationFrame(() => {
+        editorSplitScrollSyncFrame = 0;
+        syncEditorSplitScroll(source);
+    });
 }
 
 function setEditorSplitOpen(open) {
@@ -2856,10 +5298,29 @@ function setEditorSplitOpen(open) {
     if (el.editorPanel) {
         el.editorPanel.setAttribute("data-editor-split", editorSplitOpen ? "true" : "false");
     }
-    if (el.btnEditorSplit) {
-        el.btnEditorSplit.setAttribute("data-active", editorSplitOpen ? "true" : "false");
+    bindEditorSplitScrollSync();
+    if (!editorSplitOpen && editorSplitScrollSyncFrame) {
+        cancelAnimationFrame(editorSplitScrollSyncFrame);
+        editorSplitScrollSyncFrame = 0;
     }
+    syncEditorToolButtons();
     renderEditorMirror();
+    scheduleEditorSplitScrollSync("editor");
+}
+
+function syncEditorToolButtons() {
+    const states = [
+        [el.btnEditorFind, editorSearchOpen],
+        [el.btnEditorSymbols, symbolPaletteOpen],
+        [el.btnProjectSearch, projectSearchOpen],
+        [el.btnEditorSplit, editorSplitOpen],
+        [el.btnEditorHistory, editorHistoryOpen],
+        [el.btnEditorSettings, editorSettingsOpen],
+    ];
+    states.forEach(([btn, active]) => {
+        if (!btn) return;
+        btn.setAttribute("data-active", active ? "true" : "false");
+    });
 }
 
 function escapeHTML(str) {
@@ -2877,6 +5338,10 @@ function escapeRegExp(str) {
 
 function makeFileId() {
     return `file-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
+}
+
+function makeTrashGroupId() {
+    return `trash-group-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
 }
 
 function splitLeafExtension(leaf = "") {
@@ -2944,6 +5409,19 @@ function normalizeFileName(name, fallback = FILE_DEFAULT_NAME) {
     return collapseDuplicateTerminalExtension(buildPathFromSegments(segments));
 }
 
+function normalizeLooseFileName(name, fallback = FILE_DEFAULT_NAME) {
+    const fallbackValue = String(fallback ?? FILE_DEFAULT_NAME).trim() || FILE_DEFAULT_NAME;
+    const raw = String(name ?? "").trim();
+    const source = raw || fallbackValue;
+    const segments = splitPathSegments(source);
+    if (!segments.length) {
+        const fallbackSegments = splitPathSegments(fallbackValue);
+        if (!fallbackSegments.length) return "untitled";
+        return collapseDuplicateTerminalExtension(buildPathFromSegments(fallbackSegments));
+    }
+    return collapseDuplicateTerminalExtension(buildPathFromSegments(segments));
+}
+
 function normalizePathSlashes(value = "") {
     return String(value ?? "")
         .replace(/\\/g, "/")
@@ -2974,6 +5452,31 @@ function getFileDirectory(fileName) {
     if (segments.length <= 1) return "";
     segments.pop();
     return buildPathFromSegments(segments);
+}
+
+function getSpecialFileIconPath(fileName = "") {
+    const leaf = getFileBaseName(fileName).toLowerCase();
+    if (!leaf) return null;
+    if (leaf === "dockerfile" || leaf.startsWith("dockerfile.")) return FILE_ICON_PATHS.docker;
+    if (leaf === ".gitignore" || leaf === ".gitattributes" || leaf === ".gitmodules") return FILE_ICON_PATHS.git;
+    if (leaf === "package.json" || leaf === "package-lock.json" || leaf === "npm-shrinkwrap.json") return FILE_ICON_PATHS.node;
+    if (leaf === "yarn.lock" || leaf === "pnpm-lock.yaml") return FILE_ICON_PATHS.node;
+    if (leaf.endsWith(".env") || leaf.startsWith(".env.")) return FILE_ICON_PATHS.node;
+    return null;
+}
+
+function getFileIconPath(fileName = "") {
+    const special = getSpecialFileIconPath(fileName);
+    if (special) return special;
+    const leaf = getFileBaseName(fileName);
+    const extension = splitLeafExtension(leaf).extension.toLowerCase().replace(/^\./, "");
+    if (!extension) return FILE_ICON_PATHS.defaultFile;
+    if (IMAGE_FILE_EXTENSIONS.has(extension)) return FILE_ICON_PATHS.image;
+    return FILE_EXTENSION_ICON_MAP[extension] || FILE_ICON_PATHS.defaultFile;
+}
+
+function getFolderIconPath(expanded = false) {
+    return expanded ? FILE_ICON_PATHS.folderOpen : FILE_ICON_PATHS.folderClosed;
 }
 
 function getFolderBaseName(folderPath = "") {
@@ -3200,9 +5703,8 @@ function createFileInFolder(folderPath, { rename = true } = {}) {
     const before = snapshotWorkspaceState();
     flushEditorAutosave();
     stashActiveFile();
-    const preferredExtension = getPreferredNewFileExtension();
-    const filePath = ensureUniqueName(getNextScriptFileName(normalizedFolder, preferredExtension));
-    const file = makeFile(filePath, getStarterCodeForFileName(filePath));
+    const filePath = getNextUntitledFileName(normalizedFolder);
+    const file = makeFile(filePath, "", { preserveExtensionless: true });
     files.push(file);
     activeFileId = file.id;
     setSingleSelection(file.id);
@@ -3211,7 +5713,7 @@ function createFileInFolder(folderPath, { rename = true } = {}) {
     setEditorValue(file.code, { silent: true });
     recordCodeSnapshot(file.id, file.code, "create-in-folder", { force: true });
     editingFileId = rename ? file.id : null;
-    editingDraft = rename ? file.name : null;
+    editingDraft = rename ? getFileBaseName(file.name) : null;
     editingError = "";
     pendingNewFileRenameId = rename ? file.id : null;
     clearFolderRenameState();
@@ -3431,13 +5933,15 @@ async function deleteFolderPath(folderPath, { confirm = true, focus = true } = {
 
     if (count > 0) {
         queueDeleteUndo(`Deleted folder ${normalized}`);
-        pushFilesToTrash(scopedFiles);
+        pushFilesToTrash(scopedFiles, {
+            deletedFolderPath: normalized,
+        });
         const removedIds = new Set(scopedFiles.map((file) => file.id));
         files = files.filter((file) => !removedIds.has(file.id));
         openTabIds = openTabIds.filter((tabId) => !removedIds.has(tabId));
 
         if (!files.length) {
-            const fallback = makeFile(FILE_DEFAULT_NAME, "");
+            const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
             files = [fallback];
             activeFileId = fallback.id;
             setSingleSelection(fallback.id);
@@ -3569,10 +6073,13 @@ function buildFileTree(list = [], { explicitFolders = folders } = {}) {
     return root;
 }
 
-function makeFile(name = FILE_DEFAULT_NAME, code = DEFAULT_CODE) {
+function makeFile(name = FILE_DEFAULT_NAME, code = DEFAULT_CODE, { preserveExtensionless = false } = {}) {
+    const normalizedName = preserveExtensionless
+        ? normalizeLooseFileName(name, FILE_DEFAULT_NAME)
+        : normalizeFileName(name);
     return {
         id: makeFileId(),
-        name: normalizeFileName(name),
+        name: normalizedName,
         code,
         savedCode: code,
         touchedAt: Date.now(),
@@ -3598,10 +6105,183 @@ function normalizeFile(file) {
 function normalizeTrashEntry(entry) {
     const normalized = normalizeFile(entry);
     if (!normalized) return null;
+    const deletedFolderPath = normalizeFolderPath(entry?.deletedFolderPath, { allowEmpty: true });
+    const deletedGroupId = typeof entry?.deletedGroupId === "string" ? entry.deletedGroupId.trim() : "";
     return {
         ...normalized,
         deletedAt: Number.isFinite(entry?.deletedAt) ? entry.deletedAt : Date.now(),
+        deletedFolderPath: deletedFolderPath || "",
+        deletedGroupId: deletedFolderPath && deletedGroupId ? deletedGroupId : "",
     };
+}
+
+function clampWorkspaceEntries(list = [], {
+    normalizeEntry,
+    maxItems = 0,
+    maxPathChars = 0,
+    maxCodeCharsPerEntry = 0,
+    maxTotalCodeChars = 0,
+} = {}) {
+    const normalize = typeof normalizeEntry === "function" ? normalizeEntry : ((entry) => entry);
+    const itemLimit = Math.max(0, Number(maxItems) || 0);
+    const pathLimit = Math.max(0, Number(maxPathChars) || 0);
+    const perEntryCodeLimit = Math.max(0, Number(maxCodeCharsPerEntry) || 0);
+    const totalCodeLimit = Math.max(0, Number(maxTotalCodeChars) || 0);
+
+    const out = [];
+    const usedIds = new Set();
+    let totalCodeChars = 0;
+    let dropped = 0;
+    let truncatedCode = 0;
+    let dedupedIds = 0;
+
+    (Array.isArray(list) ? list : []).forEach((entry) => {
+        if (itemLimit > 0 && out.length >= itemLimit) {
+            dropped += 1;
+            return;
+        }
+
+        const normalized = normalize(entry);
+        if (!normalized) {
+            dropped += 1;
+            return;
+        }
+
+        const next = { ...normalized };
+        const pathValue = String(next.name || "");
+        if (!pathValue || (pathLimit > 0 && pathValue.length > pathLimit)) {
+            dropped += 1;
+            return;
+        }
+
+        const id = String(next.id || makeFileId());
+        if (usedIds.has(id)) {
+            next.id = makeFileId();
+            dedupedIds += 1;
+        } else {
+            next.id = id;
+        }
+        usedIds.add(next.id);
+
+        const originalCode = String(next.code ?? "");
+        let allowedChars = perEntryCodeLimit > 0 ? perEntryCodeLimit : originalCode.length;
+        if (totalCodeLimit > 0) {
+            const remaining = Math.max(0, totalCodeLimit - totalCodeChars);
+            if (remaining <= 0) {
+                dropped += 1;
+                return;
+            }
+            allowedChars = Math.min(allowedChars, remaining);
+        }
+        allowedChars = Math.max(0, allowedChars);
+        const nextCode = originalCode.slice(0, allowedChars);
+        if (nextCode.length < originalCode.length) {
+            truncatedCode += 1;
+        }
+        next.code = nextCode;
+        next.savedCode = nextCode;
+        totalCodeChars += nextCode.length;
+        out.push(next);
+    });
+
+    return {
+        entries: out,
+        dropped,
+        truncatedCode,
+        dedupedIds,
+        totalCodeChars,
+    };
+}
+
+function applyWorkspaceSafetyLimits(payload, { source = "workspace" } = {}) {
+    if (!payload || typeof payload !== "object") return null;
+
+    const fileResult = clampWorkspaceEntries(payload.files, {
+        normalizeEntry: normalizeFile,
+        maxItems: WORKSPACE_MAX_FILES,
+        maxPathChars: WORKSPACE_MAX_PATH_CHARS,
+        maxCodeCharsPerEntry: WORKSPACE_MAX_FILE_CODE_CHARS,
+        maxTotalCodeChars: WORKSPACE_MAX_TOTAL_CODE_CHARS,
+    });
+    const trashResult = clampWorkspaceEntries(payload.trash, {
+        normalizeEntry: normalizeTrashEntry,
+        maxItems: WORKSPACE_MAX_TRASH,
+        maxPathChars: WORKSPACE_MAX_PATH_CHARS,
+        maxCodeCharsPerEntry: WORKSPACE_MAX_FILE_CODE_CHARS,
+        maxTotalCodeChars: WORKSPACE_MAX_TRASH_CODE_CHARS,
+    });
+
+    const rawFolders = normalizeFolderList(payload.folders);
+    const folderLengthFiltered = rawFolders.filter((folderPath) => String(folderPath || "").length <= WORKSPACE_MAX_PATH_CHARS);
+    const limitedFolders = folderLengthFiltered.slice(0, WORKSPACE_MAX_FOLDERS);
+
+    const fallbackInserted = fileResult.entries.length === 0;
+    const limitedFiles = fallbackInserted
+        ? [makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE)]
+        : fileResult.entries;
+
+    const activeId = limitedFiles.some((file) => file.id === payload.activeId)
+        ? payload.activeId
+        : limitedFiles[0].id;
+
+    const fileIds = new Set(limitedFiles.map((file) => file.id));
+    const nextOpenIds = [];
+    const seenOpenIds = new Set();
+    (Array.isArray(payload.openIds) ? payload.openIds : []).forEach((id) => {
+        const nextId = String(id || "");
+        if (!nextId || seenOpenIds.has(nextId) || !fileIds.has(nextId)) return;
+        if (nextOpenIds.length >= WORKSPACE_MAX_OPEN_TABS) return;
+        seenOpenIds.add(nextId);
+        nextOpenIds.push(nextId);
+    });
+    if (!nextOpenIds.includes(activeId)) {
+        nextOpenIds.unshift(activeId);
+    }
+    const normalizedOpenIds = nextOpenIds.slice(0, WORKSPACE_MAX_OPEN_TABS);
+
+    const summary = {
+        source: String(source || "workspace"),
+        droppedFiles: fileResult.dropped,
+        truncatedFiles: fileResult.truncatedCode,
+        dedupedFileIds: fileResult.dedupedIds,
+        droppedTrash: trashResult.dropped,
+        truncatedTrash: trashResult.truncatedCode,
+        dedupedTrashIds: trashResult.dedupedIds,
+        droppedFoldersForLength: rawFolders.length - folderLengthFiltered.length,
+        droppedFoldersForCap: Math.max(0, folderLengthFiltered.length - limitedFolders.length),
+        openTabsTrimmed: Math.max(0, (Array.isArray(payload.openIds) ? payload.openIds.length : 0) - normalizedOpenIds.length),
+        fallbackInserted,
+    };
+    summary.hasAdjustments = Object.keys(summary)
+        .filter((key) => key !== "source" && key !== "hasAdjustments")
+        .some((key) => Boolean(summary[key]));
+
+    return {
+        ...payload,
+        files: limitedFiles,
+        trash: trashResult.entries,
+        folders: limitedFolders,
+        activeId,
+        openIds: normalizedOpenIds.length ? normalizedOpenIds : [activeId],
+        _limitSummary: summary,
+    };
+}
+
+function logWorkspaceSafetyAdjustments(summary, { label = "Workspace safety limits applied." } = {}) {
+    if (!summary?.hasAdjustments) return;
+    const details = [];
+    if (summary.droppedFiles) details.push(`files dropped: ${summary.droppedFiles}`);
+    if (summary.truncatedFiles) details.push(`files trimmed: ${summary.truncatedFiles}`);
+    if (summary.dedupedFileIds) details.push(`file IDs regenerated: ${summary.dedupedFileIds}`);
+    if (summary.droppedTrash) details.push(`trash dropped: ${summary.droppedTrash}`);
+    if (summary.truncatedTrash) details.push(`trash trimmed: ${summary.truncatedTrash}`);
+    if (summary.dedupedTrashIds) details.push(`trash IDs regenerated: ${summary.dedupedTrashIds}`);
+    if (summary.droppedFoldersForLength) details.push(`folders dropped (path length): ${summary.droppedFoldersForLength}`);
+    if (summary.droppedFoldersForCap) details.push(`folders dropped (count cap): ${summary.droppedFoldersForCap}`);
+    if (summary.openTabsTrimmed) details.push(`open tabs trimmed: ${summary.openTabsTrimmed}`);
+    if (summary.fallbackInserted) details.push("fallback file inserted");
+    const suffix = details.length ? ` ${details.join(" | ")}` : "";
+    logger.append("warn", [`${label}${suffix}`]);
 }
 
 function pruneTrashEntries() {
@@ -3837,7 +6517,7 @@ function parseWorkspacePayload(raw) {
             : [];
         const normalizedOpen = openIds.length ? openIds : [activeId];
         if (!normalizedOpen.includes(activeId)) normalizedOpen.unshift(activeId);
-        return {
+        const nextPayload = {
             files: filesValue,
             folders: parsedFolders,
             activeId,
@@ -3845,6 +6525,11 @@ function parseWorkspacePayload(raw) {
             trash: parsedTrash,
             savedAt: Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,
         };
+        const limitedPayload = applyWorkspaceSafetyLimits(nextPayload, { source: "storage" }) || nextPayload;
+        if (limitedPayload?._limitSummary?.hasAdjustments) {
+            console.warn("FAZ IDE: workspace payload adjusted by safety limits", limitedPayload._limitSummary);
+        }
+        return limitedPayload;
     } catch (err) {
         console.warn("FAZ IDE: invalid workspace payload", err);
         return null;
@@ -3913,11 +6598,21 @@ function queueDeleteUndo(label = "Undo delete") {
     }, UNDO_DELETE_WINDOW_MS);
 }
 
-function pushFilesToTrash(list = []) {
+function pushFilesToTrash(list = [], { deletedFolderPath = "", deletedGroupId = "" } = {}) {
+    const now = Date.now();
+    const normalizedFolderPath = normalizeFolderPath(deletedFolderPath, { allowEmpty: true }) || "";
+    const normalizedGroupId = normalizedFolderPath
+        ? (String(deletedGroupId || "").trim() || makeTrashGroupId())
+        : "";
     const normalized = list
         .map((file) => normalizeFile(file))
         .filter(Boolean)
-        .map((file) => ({ ...file, deletedAt: Date.now() }));
+        .map((file) => ({
+            ...file,
+            deletedAt: now,
+            deletedFolderPath: normalizedFolderPath,
+            deletedGroupId: normalizedGroupId,
+        }));
     if (!normalized.length) return;
     trashFiles = [...normalized, ...trashFiles];
     pruneTrashEntries();
@@ -3991,20 +6686,55 @@ function ensureTabOpen(id) {
     }
 }
 
-function normalizeGame(game, index = 0) {
-    if (!game) return null;
-    const rawId = String(game.id ?? "").trim();
-    const rawName = String(game.name ?? "").trim();
-    const name = rawName || rawId || `Game ${index + 1}`;
+function normalizeTemplateIconSource(value = "") {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    if (/^https:\/\//i.test(raw)) return raw;
+    if (/^\.\.?\//.test(raw) || raw.startsWith("/") || raw.startsWith("assets/")) {
+        return normalizePathSlashes(raw);
+    }
+    return "";
+}
+
+function normalizeTemplateIconSources(entry = {}) {
+    const seen = new Set();
+    const normalized = [];
+    const add = (candidate) => {
+        const source = normalizeTemplateIconSource(candidate);
+        if (!source) return;
+        const key = source.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        normalized.push(source);
+    };
+
+    const iconField = entry?.icon;
+    if (typeof iconField === "string") add(iconField);
+    if (iconField && typeof iconField === "object" && Array.isArray(iconField.sources)) {
+        iconField.sources.forEach(add);
+    }
+    if (Array.isArray(entry?.iconSources)) {
+        entry.iconSources.forEach(add);
+    }
+    if (entry?.iconSrc !== undefined) add(entry.iconSrc);
+
+    return normalized.slice(0, TEMPLATE_ICON_SOURCE_LIMIT);
+}
+
+function normalizeTemplate(entry, index = 0, { fallbackLabel = "Template" } = {}) {
+    if (!entry) return null;
+    const rawId = String(entry.id ?? "").trim();
+    const rawName = String(entry.name ?? "").trim();
+    const name = rawName || rawId || `${fallbackLabel} ${index + 1}`;
     const id = rawId || name.toLowerCase().replace(/\s+/g, "-");
-    const hasExplicitFolder = Object.prototype.hasOwnProperty.call(game, "folder");
-    const rawFolder = hasExplicitFolder ? game.folder : id;
+    const hasExplicitFolder = Object.prototype.hasOwnProperty.call(entry, "folder");
+    const rawFolder = hasExplicitFolder ? entry.folder : id;
     const normalizedFolder = normalizeFolderPath(rawFolder, { allowEmpty: true });
     const folder = normalizedFolder || (hasExplicitFolder ? "" : id);
-    const legacySrc = String(game.src ?? "").trim();
-    const legacyFileName = String(game.fileName ?? "").trim();
-    const rawFiles = Array.isArray(game.files) && game.files.length
-        ? game.files
+    const legacySrc = String(entry.src ?? "").trim();
+    const legacyFileName = String(entry.fileName ?? "").trim();
+    const rawFiles = Array.isArray(entry.files) && entry.files.length
+        ? entry.files
         : (legacySrc ? [{ path: legacyFileName || `${id}.js`, src: legacySrc }] : []);
     const seenFilePaths = new Set();
     const files = rawFiles
@@ -4020,64 +6750,212 @@ function normalizeGame(game, index = 0) {
         })
         .filter(Boolean);
     if (!files.length) return null;
-    const preferredEntry = String(game.entryFile ?? game.entry ?? "").trim();
+    const preferredEntry = String(entry.entryFile ?? entry.entry ?? "").trim();
     const preferredKey = normalizeFileName(preferredEntry, preferredEntry || files[0].path).toLowerCase();
     const preferred = files.find((file) => file.path.toLowerCase() === preferredKey);
     const firstScript = files.find((file) => getFileBaseName(file.path).toLowerCase().endsWith(".js"));
     const entryFile = preferred?.path || firstScript?.path || files[0].path;
+    const iconSources = normalizeTemplateIconSources(entry);
     return {
         id,
         name,
         folder,
         files,
         entryFile,
+        iconSources,
     };
 }
 
-function normalizeGames(list) {
+function normalizeTemplateList(list, { fallbackLabel = "Template" } = {}) {
     if (!Array.isArray(list)) return [];
     const seen = new Set();
     return list
-        .map((game, index) => normalizeGame(game, index))
+        .map((entry, index) => normalizeTemplate(entry, index, { fallbackLabel }))
         .filter(Boolean)
-        .filter((game) => {
-            if (seen.has(game.id)) return false;
-            seen.add(game.id);
+        .filter((entry) => {
+            if (seen.has(entry.id)) return false;
+            seen.add(entry.id);
             return true;
         });
+}
+
+function normalizeGames(list) {
+    return normalizeTemplateList(list, { fallbackLabel: "Game" });
+}
+
+function normalizeApplications(list) {
+    return normalizeTemplateList(list, { fallbackLabel: "Application" });
 }
 
 function getGameById(id) {
     return games.find((game) => game.id === id);
 }
 
-function syncGamesUI({ force = false } = {}) {
-    if (!el.filesGames || !el.gameSelect) return;
+function getApplicationById(id) {
+    return applications.find((app) => app.id === id);
+}
+
+function createTemplateOptionIcon(sources = []) {
+    const iconSources = Array.isArray(sources) ? sources.filter(Boolean).slice(0, TEMPLATE_ICON_SOURCE_LIMIT) : [];
+    if (!iconSources.length) return null;
+
+    const icon = document.createElement("img");
+    icon.className = "files-games-option-icon";
+    icon.alt = "";
+    icon.setAttribute("aria-hidden", "true");
+    icon.loading = "lazy";
+    icon.decoding = "async";
+    icon.referrerPolicy = "no-referrer";
+    let index = 0;
+    const applySource = (nextIndex) => {
+        if (nextIndex >= iconSources.length) {
+            icon.classList.add("is-hidden");
+            icon.removeAttribute("src");
+            return;
+        }
+        index = nextIndex;
+        icon.src = iconSources[index];
+    };
+    icon.addEventListener("error", () => {
+        applySource(index + 1);
+    });
+    applySource(0);
+    return icon;
+}
+
+function renderTemplateOptionLabel(option, name = "", iconSources = []) {
+    const icon = createTemplateOptionIcon(iconSources);
+    if (icon) option.appendChild(icon);
+    const label = document.createElement("span");
+    label.className = "files-games-option-label";
+    label.textContent = String(name || "");
+    option.appendChild(label);
+}
+
+function syncGamesUI() {
+    if (!el.filesGames || !el.gamesSelectorToggle || !el.gamesList) return;
+    el.gamesSelectorToggle.setAttribute("draggable", "true");
+    el.gamesSelectorToggle.dataset.filesSectionId = "games";
     if (!layoutState.filesGamesOpen || !games.length) {
         el.filesGames.setAttribute("aria-hidden", "true");
-        el.gameSelect.disabled = true;
-        if (el.gameLoad) el.gameLoad.disabled = true;
+        el.filesGames.setAttribute("data-list-open", "false");
+        el.gamesSelectorToggle.disabled = true;
+        el.gamesSelectorToggle.setAttribute("aria-expanded", "false");
+        el.gamesList.setAttribute("aria-hidden", "true");
+        el.gamesList.innerHTML = "";
+        el.gamesList.removeAttribute("aria-activedescendant");
+        if (el.gameLoad) {
+            el.gameLoad.disabled = true;
+            el.gameLoad.hidden = true;
+        }
         return;
     }
 
+    if (!games.some((game) => game.id === selectedGameId)) {
+        selectedGameId = games[0]?.id ?? "";
+    }
+
     el.filesGames.setAttribute("aria-hidden", "false");
-    el.gameSelect.disabled = false;
-    if (force || !el.gameSelect.options.length) {
-        el.gameSelect.innerHTML = "";
-        games.forEach((game) => {
-            const option = document.createElement("option");
-            option.value = game.id;
-            option.textContent = game.name;
-            el.gameSelect.appendChild(option);
-        });
+    el.filesGames.setAttribute("data-list-open", gamesSelectorOpen ? "true" : "false");
+    el.gamesSelectorToggle.disabled = false;
+    el.gamesSelectorToggle.setAttribute("aria-expanded", gamesSelectorOpen ? "true" : "false");
+    el.gamesList.setAttribute("aria-hidden", gamesSelectorOpen ? "false" : "true");
+
+    let activeDescendant = "";
+    el.gamesList.innerHTML = "";
+    games.forEach((game, index) => {
+        const option = document.createElement("button");
+        const optionId = `game-option-${index}`;
+        const selected = game.id === selectedGameId;
+        option.type = "button";
+        option.className = "files-games-option";
+        option.id = optionId;
+        option.dataset.gameId = game.id;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", selected ? "true" : "false");
+        option.setAttribute("data-selected", selected ? "true" : "false");
+        renderTemplateOptionLabel(option, game.name, game.iconSources);
+
+        const item = document.createElement("li");
+        item.className = "files-games-item";
+        item.appendChild(option);
+        el.gamesList.appendChild(item);
+
+        if (selected) activeDescendant = optionId;
+    });
+    if (activeDescendant) {
+        el.gamesList.setAttribute("aria-activedescendant", activeDescendant);
+    } else {
+        el.gamesList.removeAttribute("aria-activedescendant");
     }
 
-    if (!games.some((game) => game.id === el.gameSelect.value)) {
-        el.gameSelect.value = games[0]?.id ?? "";
+    if (el.gameLoad) {
+        el.gameLoad.hidden = !gamesSelectorOpen;
+        el.gameLoad.disabled = !selectedGameId || !gamesSelectorOpen;
+    }
+}
+
+function syncApplicationsUI() {
+    if (!el.filesApps || !el.appsSelectorToggle || !el.applicationsList) return;
+    el.appsSelectorToggle.setAttribute("draggable", "true");
+    el.appsSelectorToggle.dataset.filesSectionId = "applications";
+    if (!layoutState.filesAppsOpen || !applications.length) {
+        el.filesApps.setAttribute("aria-hidden", "true");
+        el.filesApps.setAttribute("data-list-open", "false");
+        el.appsSelectorToggle.disabled = true;
+        el.appsSelectorToggle.setAttribute("aria-expanded", "false");
+        el.applicationsList.setAttribute("aria-hidden", "true");
+        el.applicationsList.innerHTML = "";
+        el.applicationsList.removeAttribute("aria-activedescendant");
+        if (el.appLoad) {
+            el.appLoad.disabled = true;
+            el.appLoad.hidden = true;
+        }
+        return;
     }
 
-    const hasSelection = Boolean(el.gameSelect.value);
-    if (el.gameLoad) el.gameLoad.disabled = !hasSelection;
+    if (!applications.some((app) => app.id === selectedApplicationId)) {
+        selectedApplicationId = applications[0]?.id ?? "";
+    }
+
+    el.filesApps.setAttribute("aria-hidden", "false");
+    el.filesApps.setAttribute("data-list-open", applicationsSelectorOpen ? "true" : "false");
+    el.appsSelectorToggle.disabled = false;
+    el.appsSelectorToggle.setAttribute("aria-expanded", applicationsSelectorOpen ? "true" : "false");
+    el.applicationsList.setAttribute("aria-hidden", applicationsSelectorOpen ? "false" : "true");
+
+    let activeDescendant = "";
+    el.applicationsList.innerHTML = "";
+    applications.forEach((app, index) => {
+        const option = document.createElement("button");
+        const optionId = `application-option-${index}`;
+        const selected = app.id === selectedApplicationId;
+        option.type = "button";
+        option.className = "files-games-option";
+        option.id = optionId;
+        option.dataset.applicationId = app.id;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", selected ? "true" : "false");
+        option.setAttribute("data-selected", selected ? "true" : "false");
+        renderTemplateOptionLabel(option, app.name, app.iconSources);
+
+        const item = document.createElement("li");
+        item.className = "files-games-item";
+        item.appendChild(option);
+        el.applicationsList.appendChild(item);
+
+        if (selected) activeDescendant = optionId;
+    });
+    if (activeDescendant) {
+        el.applicationsList.setAttribute("aria-activedescendant", activeDescendant);
+    } else {
+        el.applicationsList.removeAttribute("aria-activedescendant");
+    }
+
+    if (el.appLoad) {
+        el.appLoad.hidden = !applicationsSelectorOpen;
+        el.appLoad.disabled = !selectedApplicationId || !applicationsSelectorOpen;
+    }
 }
 
 async function loadGameById(id, { runAfter = false } = {}) {
@@ -4088,6 +6966,8 @@ async function loadGameById(id, { runAfter = false } = {}) {
         return false;
     }
 
+    selectedGameId = game.id;
+    syncGamesUI();
     status.set(`Loading ${game.name}...`);
     if (el.gameLoad) el.gameLoad.disabled = true;
 
@@ -4157,6 +7037,87 @@ async function loadGameById(id, { runAfter = false } = {}) {
     }
 }
 
+async function loadApplicationById(id, { runAfter = false } = {}) {
+    const app = getApplicationById(id);
+    if (!app) {
+        status.set("Application not found");
+        logger.append("error", [`Application "${id}" not found.`]);
+        return false;
+    }
+
+    selectedApplicationId = app.id;
+    syncApplicationsUI();
+    status.set(`Loading ${app.name}...`);
+    if (el.appLoad) el.appLoad.disabled = true;
+
+    try {
+        const before = snapshotWorkspaceState();
+        const loadedFiles = await Promise.all(
+            app.files.map(async (file) => {
+                const response = await fetch(file.src, { cache: "no-store" });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+                }
+                return {
+                    path: file.path,
+                    code: await response.text(),
+                };
+            })
+        );
+        if (!loadedFiles.length) {
+            throw new Error("Application template is empty.");
+        }
+        const normalizedFolder = normalizeFolderPath(app.folder, { allowEmpty: true });
+        const folderPath = normalizedFolder ? ensureUniqueFolderPath(normalizedFolder, { ignoreCase: true }) : "";
+        const entryPath = normalizeFileName(app.entryFile || loadedFiles[0].path, loadedFiles[0].path);
+        const created = [];
+        const reservedPaths = new Set(files.map((file) => file.name));
+
+        stashActiveFile();
+        loadedFiles.forEach((file) => {
+            const desiredPath = folderPath ? `${folderPath}/${file.path}` : file.path;
+            const workspacePath = ensureUniquePathInSet(desiredPath, reservedPaths);
+            const target = makeFile(workspacePath, file.code);
+            target.savedCode = file.code;
+            files.push(target);
+            created.push(target);
+        });
+        if (folderPath) {
+            folders = normalizeFolderList([...folders, folderPath]);
+            expandFolderPathAncestors(folderPath);
+        }
+
+        const preferredPath = folderPath ? `${folderPath}/${entryPath}` : entryPath;
+        const activeTarget = created.find(
+            (file) => file.name.toLowerCase() === normalizeFileName(preferredPath, entryPath).toLowerCase()
+        ) || created.find((file) => getFileBaseName(file.name).toLowerCase().endsWith(".js"))
+            || created.find((file) => getFileBaseName(file.name).toLowerCase().endsWith(".html"))
+            || created[0];
+
+        activeFileId = activeTarget.id;
+        ensureTabOpen(activeTarget.id);
+        clearInlineRenameState();
+        setEditorValue(activeTarget.code, { silent: true });
+        persistFiles();
+        renderFileList();
+        recordFileHistory(`Load application ${app.name}`, before);
+
+        status.set(runAfter ? `Loaded ${app.name} (running)` : `Loaded ${app.name}`);
+        logger.append("system", [`Loaded application: ${app.name} into ${folderPath || "workspace root"} (${created.length} files)`]);
+
+        if (runAfter) {
+            run();
+        }
+        return true;
+    } catch (err) {
+        status.set("Application load failed");
+        logger.append("error", [`Failed to load ${app.name}: ${String(err.message || err)}`]);
+        return false;
+    } finally {
+        syncApplicationsUI();
+    }
+}
+
 function formatBytes(bytes = 0) {
     const safe = Math.max(0, Number(bytes) || 0);
     if (safe >= 1024 * 1024) return `${(safe / (1024 * 1024)).toFixed(1)} MB`;
@@ -4199,13 +7160,84 @@ function setPromptDialogError(message) {
     el.promptDialogError.setAttribute("data-visible", text ? "true" : "false");
 }
 
+function ensurePromptDialogSecondaryButton() {
+    if (promptDialogSecondaryButton && document.contains(promptDialogSecondaryButton)) {
+        return promptDialogSecondaryButton;
+    }
+    const actions = el.promptDialog?.querySelector(".prompt-dialog-actions");
+    if (!actions) return null;
+    const existing = actions.querySelector(".prompt-dialog-secondary");
+    if (existing instanceof HTMLButtonElement) {
+        promptDialogSecondaryButton = existing;
+        return promptDialogSecondaryButton;
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "prompt-dialog-secondary";
+    btn.setAttribute("data-visible", "false");
+    btn.hidden = true;
+    actions.insertBefore(btn, el.promptDialogConfirm || null);
+    promptDialogSecondaryButton = btn;
+    return promptDialogSecondaryButton;
+}
+
+function clearPromptDialogSecondaryDisarmTimer() {
+    if (!promptDialogSecondaryDisarmTimer) return;
+    clearTimeout(promptDialogSecondaryDisarmTimer);
+    promptDialogSecondaryDisarmTimer = null;
+}
+
+function setPromptDialogSecondaryArmed(armed, { focus = false } = {}) {
+    if (!promptDialogState?.hasSecondaryAction || !promptDialogSecondaryButton) return;
+    const next = Boolean(armed);
+    promptDialogState.secondaryArmed = next;
+    promptDialogSecondaryButton.setAttribute("data-armed", next ? "true" : "false");
+    if (next) {
+        promptDialogSecondaryButton.textContent = String(
+            promptDialogState.secondaryArmedText || promptDialogState.secondaryText || "Delete forever"
+        );
+        promptDialogSecondaryButton.title = "Armed: click again to permanently delete";
+        promptDialogSecondaryButton.setAttribute("aria-label", "Armed delete forever. Click again to confirm.");
+    } else {
+        promptDialogSecondaryButton.textContent = String(promptDialogState.secondaryText || "Delete forever");
+        promptDialogSecondaryButton.title = "Click once to lift safety cover, click again to confirm";
+        promptDialogSecondaryButton.setAttribute("aria-label", "Protected delete forever. Click once to arm.");
+    }
+    if (focus) {
+        requestAnimationFrame(() => promptDialogSecondaryButton?.focus());
+    }
+}
+
+function schedulePromptDialogSecondaryDisarm(delayMs = 2400) {
+    clearPromptDialogSecondaryDisarmTimer();
+    const delay = Math.max(350, Number(delayMs) || 2400);
+    promptDialogSecondaryDisarmTimer = setTimeout(() => {
+        promptDialogSecondaryDisarmTimer = null;
+        if (!promptDialogState?.hasSecondaryAction) return;
+        if (!promptDialogState.secondaryRequiresConfirm || !promptDialogState.secondaryArmed) return;
+        setPromptDialogSecondaryArmed(false);
+    }, delay);
+}
+
 function closePromptDialog(result) {
     if (!promptDialogState) return;
     const { resolve, restoreFocusEl } = promptDialogState;
     promptDialogState = null;
+    clearPromptDialogSecondaryDisarmTimer();
     setPromptDialogOpen(false);
+    el.promptDialog.setAttribute("data-mode", "confirm");
     el.promptDialogList.innerHTML = "";
     el.promptDialogInput.value = "";
+    if (promptDialogSecondaryButton) {
+        promptDialogSecondaryButton.textContent = "";
+        promptDialogSecondaryButton.setAttribute("data-visible", "false");
+        promptDialogSecondaryButton.setAttribute("data-variant", "neutral");
+        promptDialogSecondaryButton.setAttribute("data-armable", "false");
+        promptDialogSecondaryButton.setAttribute("data-armed", "false");
+        promptDialogSecondaryButton.removeAttribute("data-shield-label");
+        promptDialogSecondaryButton.removeAttribute("data-armed-label");
+        promptDialogSecondaryButton.hidden = true;
+    }
     clearPromptDialogError();
     if (restoreFocusEl && document.contains(restoreFocusEl) && typeof restoreFocusEl.focus === "function") {
         requestAnimationFrame(() => restoreFocusEl.focus());
@@ -4236,7 +7268,18 @@ function submitPromptDialog() {
         closePromptDialog(value);
         return;
     }
-    closePromptDialog(true);
+    closePromptDialog(promptDialogState.confirmValue);
+}
+
+function submitPromptDialogSecondary() {
+    if (!promptDialogState?.hasSecondaryAction) return;
+    if (promptDialogState.secondaryRequiresConfirm && !promptDialogState.secondaryArmed) {
+        setPromptDialogSecondaryArmed(true, { focus: true });
+        schedulePromptDialogSecondaryDisarm(2600);
+        return;
+    }
+    clearPromptDialogSecondaryDisarmTimer();
+    closePromptDialog(promptDialogState.secondaryValue);
 }
 
 function openPromptDialog(config = {}) {
@@ -4259,11 +7302,26 @@ function openPromptDialog(config = {}) {
     const message = String(config.message || "");
     const items = Array.isArray(config.items) ? config.items : [];
     const confirmText = String(config.confirmText || (mode === "prompt" ? "Save" : "Confirm"));
+    const confirmValue = Object.prototype.hasOwnProperty.call(config, "confirmValue")
+        ? config.confirmValue
+        : true;
     const cancelText = String(config.cancelText || "Cancel");
     const cancelValue = Object.prototype.hasOwnProperty.call(config, "cancelValue")
         ? config.cancelValue
         : (mode === "prompt" ? null : false);
     const danger = Boolean(config.danger);
+    const secondaryText = String(config.secondaryText || "").trim();
+    const hasSecondaryAction = mode === "confirm" && Boolean(secondaryText);
+    const secondaryValue = Object.prototype.hasOwnProperty.call(config, "secondaryValue")
+        ? config.secondaryValue
+        : null;
+    const secondaryDanger = Boolean(config.secondaryDanger);
+    const secondaryRequiresConfirm = Boolean(config.secondaryRequiresConfirm);
+    const secondaryArmedText = String(config.secondaryArmedText || "Delete forever");
+    const secondaryShieldLabel = String(config.secondaryShieldLabel || "Protected");
+    const secondaryArmedLabel = Object.prototype.hasOwnProperty.call(config, "secondaryArmedLabel")
+        ? String(config.secondaryArmedLabel ?? "")
+        : "Armed";
     const inputPlaceholder = String(config.inputPlaceholder || "");
     const inputValue = String(config.inputValue ?? "");
     const listTitle = String(config.listTitle || "");
@@ -4274,12 +7332,21 @@ function openPromptDialog(config = {}) {
             mode,
             resolve,
             cancelValue,
+            confirmValue,
+            hasSecondaryAction,
+            secondaryValue,
+            secondaryRequiresConfirm,
+            secondaryArmed: false,
+            secondaryText,
+            secondaryArmedText,
+            secondaryArmedLabel,
             validate: config.validate,
             normalize: config.normalize,
             restoreFocusEl,
         };
 
         el.promptDialogTitle.textContent = title;
+        el.promptDialog.setAttribute("data-mode", mode);
         el.promptDialogMessage.textContent = message;
         el.promptDialogMessage.setAttribute("data-visible", message ? "true" : "false");
         el.promptDialogInputWrap.setAttribute("data-open", mode === "prompt" ? "true" : "false");
@@ -4301,6 +7368,38 @@ function openPromptDialog(config = {}) {
         el.promptDialogCancel.textContent = cancelText;
         el.promptDialogConfirm.textContent = confirmText;
         el.promptDialogConfirm.setAttribute("data-variant", danger ? "danger" : "primary");
+        const secondaryBtn = ensurePromptDialogSecondaryButton();
+        if (secondaryBtn) {
+            if (hasSecondaryAction) {
+                secondaryBtn.textContent = secondaryText;
+                secondaryBtn.hidden = false;
+                secondaryBtn.setAttribute("data-visible", "true");
+                secondaryBtn.setAttribute("data-variant", secondaryDanger ? "danger" : "neutral");
+                secondaryBtn.setAttribute("data-armable", secondaryRequiresConfirm ? "true" : "false");
+                secondaryBtn.setAttribute("data-armed", "false");
+                secondaryBtn.setAttribute("data-armed-label", secondaryArmedLabel);
+                if (secondaryRequiresConfirm) {
+                    secondaryBtn.setAttribute("data-shield-label", secondaryShieldLabel);
+                    setPromptDialogSecondaryArmed(false);
+                } else {
+                    secondaryBtn.removeAttribute("data-shield-label");
+                    secondaryBtn.title = "";
+                    secondaryBtn.setAttribute("aria-label", secondaryText);
+                }
+            } else {
+                secondaryBtn.textContent = "";
+                secondaryBtn.hidden = true;
+                secondaryBtn.setAttribute("data-visible", "false");
+                secondaryBtn.setAttribute("data-variant", "neutral");
+                secondaryBtn.setAttribute("data-armable", "false");
+                secondaryBtn.setAttribute("data-armed", "false");
+                secondaryBtn.removeAttribute("data-shield-label");
+                secondaryBtn.removeAttribute("data-armed-label");
+                secondaryBtn.title = "";
+                secondaryBtn.removeAttribute("aria-label");
+                clearPromptDialogSecondaryDisarmTimer();
+            }
+        }
 
         setPromptDialogOpen(true);
         requestAnimationFrame(() => {
@@ -4446,6 +7545,12 @@ function getNextScriptFileName(directory = "", preferredExtension = ".js") {
     const fallbackLeaf = `script${files.length + 1}${extension}`;
     const fallback = folder ? `${folder}/${fallbackLeaf}` : fallbackLeaf;
     return ensureUniqueName(fallback);
+}
+
+function getNextUntitledFileName(directory = "") {
+    const folder = normalizeFolderPath(directory, { allowEmpty: true });
+    const base = folder ? `${folder}/untitled` : "untitled";
+    return ensureUniqueName(base, null, { preserveExtensionless: true });
 }
 
 function getNextFolderName(parentPath = "") {
@@ -4813,7 +7918,7 @@ async function bulkTrashSelectedFiles() {
     }
 
     if (!files.length) {
-        const fallback = makeFile(FILE_DEFAULT_NAME, "");
+        const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
         files = [fallback];
         activeFileId = fallback.id;
         setSingleSelection(fallback.id);
@@ -5178,6 +8283,97 @@ function normalizeEditorFontFamily(value) {
     return "default";
 }
 
+function normalizeEditorSyntaxTheme(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    const normalized = EDITOR_SYNTAX_THEME_ALIASES[raw] || raw;
+    if (EDITOR_SYNTAX_THEME_NAMES.includes(normalized)) {
+        return normalized;
+    }
+    return DEFAULT_EDITOR_SYNTAX_THEME;
+}
+
+function toTitleCaseThemeName(value = "") {
+    return String(value || "")
+        .trim()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/\b([a-z])/gi, (match) => match.toUpperCase());
+}
+
+function getEditorSyntaxThemeLabel(themeName = "") {
+    const normalized = normalizeEditorSyntaxTheme(themeName);
+    const meta = EDITOR_SYNTAX_THEME_METADATA[normalized];
+    if (meta?.label) return meta.label;
+    return toTitleCaseThemeName(normalized);
+}
+
+function getEditorSyntaxThemeColorSummary(themeName = "") {
+    const normalized = normalizeEditorSyntaxTheme(themeName);
+    const meta = EDITOR_SYNTAX_THEME_METADATA[normalized];
+    if (Array.isArray(meta?.colors) && meta.colors.length) {
+        return meta.colors.slice(0, 5).join(" / ");
+    }
+    const palette = EDITOR_ALL_SYNTAX_THEME_PALETTES[normalized];
+    const fallbackIdentity = deriveSyntaxThemeIdentity(palette || {});
+    const surfaceIdentity = fallbackIdentity.dark || fallbackIdentity.light || fallbackIdentity.purple || {};
+    const fallback = [
+        surfaceIdentity.primary,
+        surfaceIdentity.secondary,
+        surfaceIdentity.accent,
+        surfaceIdentity.support,
+        surfaceIdentity.neutral,
+    ].filter(Boolean);
+    return fallback.slice(0, 5).join(" / ");
+}
+
+function buildEditorSyntaxThemeOptionText(themeName = "") {
+    const label = getEditorSyntaxThemeLabel(themeName);
+    const summary = getEditorSyntaxThemeColorSummary(themeName);
+    return summary ? `${label} (${summary})` : label;
+}
+
+function renderEditorSyntaxThemeSelectOptions() {
+    const select = el.editorSyntaxThemeSelect;
+    if (!select) return;
+    const preferred = normalizeEditorSyntaxTheme(editorSettings?.syntaxTheme || select.value || DEFAULT_EDITOR_SYNTAX_THEME);
+    const fragment = document.createDocumentFragment();
+    EDITOR_SYNTAX_THEME_NAMES.forEach((themeName) => {
+        const option = document.createElement("option");
+        option.value = themeName;
+        option.textContent = buildEditorSyntaxThemeOptionText(themeName);
+        fragment.appendChild(option);
+    });
+    select.innerHTML = "";
+    select.appendChild(fragment);
+    select.value = preferred;
+}
+
+function getEditorSyntaxThemeSurface(themeValue = currentTheme) {
+    const normalizedTheme = normalizeTheme(themeValue);
+    if (normalizedTheme === "light" || normalizedTheme === "temple") return "light";
+    if (normalizedTheme === "purple") return "purple";
+    return "dark";
+}
+
+function applyEditorSyntaxTheme() {
+    const syntaxThemeName = normalizeEditorSyntaxTheme(editorSettings?.syntaxTheme);
+    const syntaxTheme = EDITOR_ALL_SYNTAX_THEME_PALETTES[syntaxThemeName] || EDITOR_ALL_SYNTAX_THEME_PALETTES[DEFAULT_EDITOR_SYNTAX_THEME];
+    const surface = getEditorSyntaxThemeSurface(currentTheme);
+    const palette = syntaxTheme?.[surface] || syntaxTheme?.dark || {};
+    const root = document?.documentElement;
+    if (!root) return;
+    EDITOR_SYNTAX_VAR_KEYS.forEach((token) => {
+        const cssVar = `--syntax-${token}`;
+        const nextColor = palette[token];
+        if (nextColor) {
+            root.style.setProperty(cssVar, String(nextColor));
+        } else {
+            root.style.removeProperty(cssVar);
+        }
+    });
+    root.setAttribute("data-syntax-theme", syntaxThemeName);
+}
+
 function applyEditorFontFamily() {
     const fontFamily = normalizeEditorFontFamily(editorSettings.fontFamily);
     const fontStack = EDITOR_FONT_FAMILY_OPTIONS[fontFamily] || EDITOR_FONT_FAMILY_OPTIONS.default;
@@ -5198,6 +8394,7 @@ function sanitizeEditorSettings(input = {}) {
         tabSize: clamp(Number(input.tabSize ?? profileDefaults.tabSize), 2, 8),
         fontSize: clamp(Number(input.fontSize ?? profileDefaults.fontSize), 11, 22),
         fontFamily: normalizeEditorFontFamily(input.fontFamily ?? profileDefaults.fontFamily ?? "default"),
+        syntaxTheme: normalizeEditorSyntaxTheme(input.syntaxTheme ?? profileDefaults.syntaxTheme ?? DEFAULT_EDITOR_SYNTAX_THEME),
         lineWrapping: Boolean(input.lineWrapping ?? profileDefaults.lineWrapping),
         lintEnabled: Boolean(input.lintEnabled ?? profileDefaults.lintEnabled),
         errorLensEnabled: Boolean(input.errorLensEnabled ?? profileDefaults.errorLensEnabled ?? true),
@@ -5232,6 +8429,8 @@ function applyEditorSettings({ persist = false, refreshUI = true } = {}) {
     });
     editor.setFontSize?.(editorSettings.fontSize);
     applyEditorFontFamily();
+    applyEditorSyntaxTheme();
+    editor.refresh?.();
     if (refreshUI) syncEditorSettingsPanel();
     if (persist) persistEditorSettings();
     if (editorSettings.lintEnabled) {
@@ -5263,6 +8462,7 @@ function syncEditorSettingsPanel() {
     if (el.editorTabSize) el.editorTabSize.value = String(editorSettings.tabSize);
     if (el.editorFontSize) el.editorFontSize.value = String(editorSettings.fontSize);
     if (el.editorFontFamilySelect) el.editorFontFamilySelect.value = normalizeEditorFontFamily(editorSettings.fontFamily);
+    if (el.editorSyntaxThemeSelect) el.editorSyntaxThemeSelect.value = normalizeEditorSyntaxTheme(editorSettings.syntaxTheme);
     if (el.editorAutoSaveMs) el.editorAutoSaveMs.value = String(editorSettings.autosaveMs);
     if (el.editorWrapToggle) el.editorWrapToggle.checked = editorSettings.lineWrapping;
     if (el.editorLintToggle) el.editorLintToggle.checked = editorSettings.lintEnabled;
@@ -5274,6 +8474,7 @@ function syncEditorSettingsPanel() {
 
 function setEditorSettingsOpen(open) {
     editorSettingsOpen = Boolean(open);
+    syncEditorToolButtons();
     if (!el.editorSettingsPanel || !el.editorSettingsBackdrop) return;
     el.editorSettingsPanel.setAttribute("data-open", editorSettingsOpen ? "true" : "false");
     el.editorSettingsPanel.setAttribute("aria-hidden", editorSettingsOpen ? "false" : "true");
@@ -5385,8 +8586,17 @@ function formatSnapshotTime(at) {
 }
 
 function buildDiffSummary(beforeCode, afterCode) {
-    const beforeLines = String(beforeCode ?? "").split("\n");
-    const afterLines = String(afterCode ?? "").split("\n");
+    const beforeText = String(beforeCode ?? "");
+    const afterText = String(afterCode ?? "");
+    if (beforeText === afterText) {
+        return {
+            added: 0,
+            removed: 0,
+            preview: ["No line changes."],
+        };
+    }
+    const beforeLines = beforeText.split("\n");
+    const afterLines = afterText.split("\n");
     const beforeCount = new Map();
     const afterCount = new Map();
 
@@ -5425,6 +8635,81 @@ function buildDiffSummary(beforeCode, afterCode) {
     };
 }
 
+function formatHistoryReason(reason = "snapshot") {
+    const raw = String(reason || "snapshot").trim() || "snapshot";
+    return {
+        full: raw,
+        short: truncateText(raw, EDITOR_HISTORY_REASON_MAX_CHARS, { suffix: "..." }),
+    };
+}
+
+function syncEditorHistoryActionState({ hasActiveFile = false, entries = [], selectedEntry = null } = {}) {
+    const entryCount = Array.isArray(entries) ? entries.length : 0;
+    if (el.editorHistorySnapshot) {
+        el.editorHistorySnapshot.disabled = !hasActiveFile;
+    }
+    if (el.editorHistoryRestore) {
+        el.editorHistoryRestore.disabled = !(hasActiveFile && selectedEntry);
+    }
+    if (el.editorHistoryClear) {
+        el.editorHistoryClear.disabled = !(hasActiveFile && entryCount > 0);
+    }
+}
+
+function setEditorHistoryRowActiveState(row, active) {
+    if (!(row instanceof HTMLElement)) return;
+    row.dataset.active = active ? "true" : "false";
+    row.setAttribute("aria-pressed", active ? "true" : "false");
+    row.tabIndex = active ? 0 : -1;
+}
+
+function renderEditorHistoryEntries(entries = []) {
+    if (!el.editorHistoryList) return;
+    if (!entries.length) {
+        const empty = document.createElement("li");
+        empty.className = "quick-open-empty";
+        empty.textContent = "No snapshots yet.";
+        el.editorHistoryList.replaceChildren(empty);
+        return;
+    }
+    const fragment = document.createDocumentFragment();
+    entries.forEach((entry) => {
+        const isActive = entry.id === selectedHistoryEntryId;
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "editor-history-row";
+        button.dataset.historyId = entry.id;
+        setEditorHistoryRowActiveState(button, isActive);
+
+        const main = document.createElement("span");
+        main.className = "editor-history-main";
+
+        const title = document.createElement("strong");
+        title.className = "editor-history-title";
+        title.textContent = formatSnapshotTime(entry.at);
+
+        const reason = document.createElement("span");
+        reason.className = "editor-history-meta editor-history-reason";
+        const reasonLabel = formatHistoryReason(entry.reason);
+        reason.textContent = reasonLabel.short;
+        if (reasonLabel.short !== reasonLabel.full) {
+            reason.title = reasonLabel.full;
+        }
+
+        main.append(title, reason);
+
+        const meta = document.createElement("span");
+        meta.className = "editor-history-meta editor-history-age";
+        meta.textContent = formatRelativeTime(entry.at);
+
+        button.append(main, meta);
+        li.appendChild(button);
+        fragment.appendChild(li);
+    });
+    el.editorHistoryList.replaceChildren(fragment);
+}
+
 function renderEditorHistoryDiff(entry = null) {
     if (!el.editorHistoryDiff) return;
     const active = getActiveFile();
@@ -5446,44 +8731,50 @@ function renderEditorHistoryList() {
     if (!el.editorHistoryList) return;
     const active = getActiveFile();
     if (!active) {
-        el.editorHistoryList.innerHTML = "";
         renderEditorHistoryDiff(null);
+        el.editorHistoryList.replaceChildren();
+        selectedHistoryEntryId = null;
+        syncEditorHistoryActionState({ hasActiveFile: false, entries: [], selectedEntry: null });
         return;
     }
     const entries = getFileHistoryEntries(active.id);
     if (!entries.length) {
-        el.editorHistoryList.innerHTML = `<li class="quick-open-empty">No snapshots yet.</li>`;
+        renderEditorHistoryEntries([]);
         selectedHistoryEntryId = null;
         renderEditorHistoryDiff(null);
+        syncEditorHistoryActionState({ hasActiveFile: true, entries, selectedEntry: null });
         return;
     }
-    if (!entries.some((entry) => entry.id === selectedHistoryEntryId)) {
-        selectedHistoryEntryId = entries[0].id;
+    let selected = entries.find((entry) => entry.id === selectedHistoryEntryId) || null;
+    if (!selected) {
+        selected = entries[0];
+        selectedHistoryEntryId = selected?.id || null;
     }
-    el.editorHistoryList.innerHTML = entries
-        .map((entry) => {
-            const activeRow = entry.id === selectedHistoryEntryId;
-            return `
-                <li>
-                    <button type="button" class="editor-history-row" data-history-id="${entry.id}" data-active="${activeRow}">
-                        <span>
-                            <strong>${escapeHTML(formatSnapshotTime(entry.at))}</strong>
-                            <span class="editor-history-meta">${escapeHTML(entry.reason)}</span>
-                        </span>
-                        <span class="editor-history-meta">${escapeHTML(formatRelativeTime(entry.at))}</span>
-                    </button>
-                </li>
-            `;
-        })
-        .join("");
-    const selected = entries.find((entry) => entry.id === selectedHistoryEntryId) || null;
+    renderEditorHistoryEntries(entries);
     renderEditorHistoryDiff(selected);
+    syncEditorHistoryActionState({ hasActiveFile: true, entries, selectedEntry: selected });
 }
 
-function selectHistoryEntry(id) {
+function selectHistoryEntry(id, { focusRow = false } = {}) {
     const entries = getFileHistoryEntries(activeFileId);
-    if (!entries.some((entry) => entry.id === id)) return false;
+    const selected = entries.find((entry) => entry.id === id) || null;
+    if (!selected) return false;
     selectedHistoryEntryId = id;
+    if (el.editorHistoryList && editorHistoryOpen) {
+        const rows = Array.from(el.editorHistoryList.querySelectorAll(".editor-history-row[data-history-id]"));
+        let selectedRow = null;
+        rows.forEach((row) => {
+            const active = row.dataset.historyId === id;
+            setEditorHistoryRowActiveState(row, active);
+            if (active) selectedRow = row;
+        });
+        if (focusRow && selectedRow && typeof selectedRow.focus === "function") {
+            selectedRow.focus();
+        }
+        renderEditorHistoryDiff(selected);
+        syncEditorHistoryActionState({ hasActiveFile: Boolean(getActiveFile()), entries, selectedEntry: selected });
+        return true;
+    }
     renderEditorHistoryList();
     return true;
 }
@@ -5516,6 +8807,7 @@ function clearActiveFileHistory() {
 
 function setEditorHistoryOpen(open) {
     editorHistoryOpen = Boolean(open);
+    syncEditorToolButtons();
     if (!el.editorHistoryPanel || !el.editorHistoryBackdrop) return;
     el.editorHistoryPanel.setAttribute("data-open", editorHistoryOpen ? "true" : "false");
     el.editorHistoryPanel.setAttribute("aria-hidden", editorHistoryOpen ? "false" : "true");
@@ -5857,14 +9149,16 @@ function getFindScopes(findState, source = editor.get()) {
 
 function collectFindResults(code, findState) {
     const source = String(code ?? "");
-    if (!buildFindRegex(findState, { global: true })) return [];
+    const baseRegex = buildFindRegex(findState, { global: true });
+    if (!baseRegex) return [];
+    const regexSource = baseRegex.source;
+    const regexFlags = baseRegex.flags;
     const scopes = getFindScopes(findState, source);
     if (!scopes.length) return [];
     const results = [];
     for (const scope of scopes) {
         const segment = source.slice(scope.start, scope.end);
-        const regex = buildFindRegex(findState, { global: true });
-        if (!regex) return [];
+        const regex = new RegExp(regexSource, regexFlags);
         let match;
         let guard = 0;
         while ((match = regex.exec(segment)) && guard < 5000) {
@@ -5983,6 +9277,7 @@ function replaceAllFindResults() {
     const code = editor.get();
     const findState = getFindState();
     if (!findResults.length) return false;
+    const matchCount = findResults.length;
     let replaced = code;
     if (findState.selectionOnly) {
         const scopes = getFindScopes(findState, code);
@@ -6000,17 +9295,22 @@ function replaceAllFindResults() {
         if (!regex) return false;
         replaced = code.replace(regex, findState.replace);
     }
+    if (replaced === code) {
+        status.set("No replacements applied");
+        return false;
+    }
     setEditorValue(replaced, { silent: true });
     updateActiveFileCode(replaced);
     refreshFindResults({ preserveIndex: false, focusSelection: false });
     renderFileList();
     queueEditorLint("replace-all");
-    status.set(`Replaced ${findResults.length} matches`);
+    status.set(`Replaced ${matchCount} match${matchCount === 1 ? "" : "es"}`);
     return true;
 }
 
 function setEditorSearchOpen(open, { replaceMode = false } = {}) {
     editorSearchOpen = Boolean(open);
+    syncEditorToolButtons();
     if (!el.editorSearchPanel || !el.editorSearchBackdrop) return;
     el.editorSearchPanel.setAttribute("data-open", editorSearchOpen ? "true" : "false");
     el.editorSearchPanel.setAttribute("aria-hidden", editorSearchOpen ? "false" : "true");
@@ -6279,6 +9579,7 @@ function replaceSelectedProjectResults() {
 
 function setProjectSearchOpen(open) {
     projectSearchOpen = Boolean(open);
+    syncEditorToolButtons();
     if (!el.projectSearchPanel || !el.projectSearchBackdrop) return;
     el.projectSearchPanel.setAttribute("data-open", projectSearchOpen ? "true" : "false");
     el.projectSearchPanel.setAttribute("aria-hidden", projectSearchOpen ? "false" : "true");
@@ -6320,6 +9621,7 @@ function closeProjectSearch({ focusEditor = true } = {}) {
 function parseSymbolsFromCodeFallback(code) {
     const lines = String(code ?? "").split("\n");
     const symbols = [];
+    const reservedMethodNames = new Set(["if", "for", "while", "switch", "catch"]);
     const pushSymbol = (line, ch, name, kind, signature = "") => {
         if (!name) return;
         symbols.push({
@@ -6355,8 +9657,7 @@ function parseSymbolsFromCodeFallback(code) {
         }
         const method = lineText.match(/^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{/);
         if (method) {
-            const reserved = new Set(["if", "for", "while", "switch", "catch"]);
-            if (!reserved.has(method[1])) {
+            if (!reservedMethodNames.has(method[1])) {
                 pushSymbol(line, lineText.indexOf(method[1]), method[1], "method", `${method[1]}(${method[2]})`);
             }
         }
@@ -6381,8 +9682,20 @@ function getSymbolMatches(query = "", symbols = null) {
         .slice(0, 250);
 }
 
-async function getSymbolsForCurrentCode() {
-    const code = editor.get();
+function buildSymbolSourceCacheKey(code = "") {
+    const source = String(code ?? "");
+    const active = getActiveFile();
+    const fileId = active?.id || "none";
+    const touchedAt = Number(active?.touchedAt) || 0;
+    const length = source.length;
+    const head = length ? source.charCodeAt(0) : 0;
+    const mid = length ? source.charCodeAt((length / 2) | 0) : 0;
+    const tail = length ? source.charCodeAt(length - 1) : 0;
+    return `${fileId}:${touchedAt}:${length}:${head}:${mid}:${tail}`;
+}
+
+async function getSymbolsForCurrentCode(sourceCode = editor.get()) {
+    const code = String(sourceCode ?? "");
     try {
         const astSymbols = await astClient.symbols(code);
         if (Array.isArray(astSymbols) && astSymbols.length) {
@@ -6401,6 +9714,31 @@ async function getSymbolsForCurrentCode() {
         // fallback below
     }
     return parseSymbolsFromCodeFallback(code);
+}
+
+async function getCachedSymbolsForCurrentCode(sourceCode = editor.get()) {
+    const code = String(sourceCode ?? "");
+    const nextKey = buildSymbolSourceCacheKey(code);
+    if (symbolSourceCacheKey === nextKey) {
+        return symbolSourceCache;
+    }
+    if (symbolSourceCachePromise?.key === nextKey) {
+        return symbolSourceCachePromise.promise;
+    }
+    const promise = getSymbolsForCurrentCode(code)
+        .then((symbols) => {
+            const nextSymbols = Array.isArray(symbols) ? symbols : [];
+            symbolSourceCacheKey = nextKey;
+            symbolSourceCache = nextSymbols;
+            return nextSymbols;
+        })
+        .finally(() => {
+            if (symbolSourceCachePromise?.key === nextKey) {
+                symbolSourceCachePromise = null;
+            }
+        });
+    symbolSourceCachePromise = { key: nextKey, promise };
+    return promise;
 }
 
 function getSymbolReferenceName() {
@@ -6584,7 +9922,7 @@ function renderSymbolResults() {
 
 async function refreshSymbolResults(query = el.symbolSearchInput?.value || "") {
     const requestId = ++symbolRequestId;
-    const sourceSymbols = await getSymbolsForCurrentCode();
+    const sourceSymbols = await getCachedSymbolsForCurrentCode(editor.get());
     if (requestId !== symbolRequestId) return;
     symbolResults = getSymbolMatches(query, sourceSymbols);
     if (symbolResults.length && symbolIndex >= symbolResults.length) {
@@ -6718,6 +10056,7 @@ async function renameSymbolAtCursor() {
 
 function setSymbolPaletteOpen(open) {
     symbolPaletteOpen = Boolean(open);
+    syncEditorToolButtons();
     if (!el.symbolPalette || !el.symbolPaletteBackdrop) return;
     el.symbolPalette.setAttribute("data-open", symbolPaletteOpen ? "true" : "false");
     el.symbolPalette.setAttribute("aria-hidden", symbolPaletteOpen ? "false" : "true");
@@ -6813,6 +10152,82 @@ function detectLanguageFromFileName(fileName = "") {
     if (lower.endsWith(".css")) return "css";
     if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
     return "text";
+}
+
+function getLanguageLabel(language = "text") {
+    if (language === "javascript") return "JavaScript";
+    if (language === "typescript") return "TypeScript";
+    if (language === "json") return "JSON";
+    if (language === "html") return "HTML";
+    if (language === "css") return "CSS";
+    if (language === "markdown") return "Markdown";
+    return "Text";
+}
+
+function getEditorSelectionStats() {
+    const selections = editor.getSelections?.() || [];
+    if (!Array.isArray(selections) || !selections.length) {
+        return { ranges: 0, chars: 0 };
+    }
+    let ranges = 0;
+    let chars = 0;
+    selections.forEach((selection) => {
+        const anchor = selection?.anchor || selection?.head;
+        const head = selection?.head || selection?.anchor;
+        if (!anchor || !head) return;
+        ranges += 1;
+        const anchorIndex = Number(editor.indexFromPos?.(anchor));
+        const headIndex = Number(editor.indexFromPos?.(head));
+        if (Number.isFinite(anchorIndex) && Number.isFinite(headIndex)) {
+            chars += Math.max(0, Math.abs(headIndex - anchorIndex));
+        }
+    });
+    return { ranges, chars };
+}
+
+function syncEditorStatusBar() {
+    if (!el.footerEditorStatus) return;
+    const active = getActiveFile();
+    const cursor = editor.getCursor?.() || { line: 0, ch: 0 };
+    const line = Math.max(0, Number(cursor.line) || 0) + 1;
+    const col = Math.max(0, Number(cursor.ch) || 0) + 1;
+    const code = String(editor.get?.() ?? active?.code ?? "");
+    const chars = code.length;
+    const language = detectLanguageFromFileName(active?.name || "");
+    const languageLabel = getLanguageLabel(language);
+    const selection = getEditorSelectionStats();
+    const dirty = Boolean(active && isFileDirty(active));
+    const activeLeaf = getFileBaseName(active?.name || "");
+    const parsedLeaf = splitLeafExtension(activeLeaf);
+    const fileStem = parsedLeaf.stem || activeLeaf || "-";
+
+    if (el.footerEditorFile) {
+        el.footerEditorFile.textContent = `File Name: ${fileStem}`;
+        el.footerEditorFile.title = active?.name || "No active file";
+    }
+    if (el.footerEditorLang) {
+        el.footerEditorLang.textContent = `Lang: ${languageLabel}`;
+        el.footerEditorLang.title = `Language: ${languageLabel}`;
+    }
+    if (el.footerEditorDirty) {
+        el.footerEditorDirty.dataset.dirty = dirty ? "true" : "false";
+        el.footerEditorDirty.textContent = dirty ? "Unsaved" : "Saved";
+        el.footerEditorDirty.title = dirty ? "File has unsaved changes" : "File is saved";
+    }
+    if (el.footerEditorCursor) {
+        el.footerEditorCursor.textContent = `Ln ${line}, Col ${col}`;
+        el.footerEditorCursor.title = `Cursor at line ${line}, column ${col}`;
+    }
+    if (el.footerEditorSelection) {
+        el.footerEditorSelection.textContent = `Sel ${selection.chars}`;
+        el.footerEditorSelection.title = selection.ranges > 0
+            ? `${selection.chars} selected character${selection.chars === 1 ? "" : "s"}`
+            : "No selection";
+    }
+    if (el.footerEditorChars) {
+        el.footerEditorChars.textContent = `Chars ${chars}`;
+        el.footerEditorChars.title = `${chars} total character${chars === 1 ? "" : "s"} in active file`;
+    }
 }
 
 function getEditorModeForLanguage(language = "text") {
@@ -7264,7 +10679,6 @@ function wireEditorHistory() {
         if (!active) return;
         recordCodeSnapshot(active.id, active.code, "manual", { force: true });
         status.set("Snapshot saved");
-        renderEditorHistoryList();
     });
     el.editorHistoryRestore?.addEventListener("click", () => restoreSelectedHistoryEntry());
     el.editorHistoryClear?.addEventListener("click", async () => {
@@ -7282,6 +10696,26 @@ function wireEditorHistory() {
         const row = event.target.closest("[data-history-id]");
         if (!row) return;
         selectHistoryEntry(row.dataset.historyId);
+    });
+    el.editorHistoryList?.addEventListener("keydown", (event) => {
+        const key = String(event.key || "");
+        if (!["ArrowDown", "ArrowUp", "Home", "End", "PageDown", "PageUp"].includes(key)) return;
+        const rows = Array.from(el.editorHistoryList.querySelectorAll(".editor-history-row[data-history-id]"));
+        if (!rows.length) return;
+        const current = event.target.closest(".editor-history-row[data-history-id]");
+        const currentIndex = Math.max(0, rows.findIndex((row) => row === current));
+        let nextIndex = currentIndex;
+        if (key === "ArrowDown") nextIndex = Math.min(rows.length - 1, currentIndex + 1);
+        if (key === "ArrowUp") nextIndex = Math.max(0, currentIndex - 1);
+        if (key === "PageDown") nextIndex = Math.min(rows.length - 1, currentIndex + 8);
+        if (key === "PageUp") nextIndex = Math.max(0, currentIndex - 8);
+        if (key === "Home") nextIndex = 0;
+        if (key === "End") nextIndex = rows.length - 1;
+        const target = rows[nextIndex];
+        const targetId = target?.dataset?.historyId;
+        if (!targetId) return;
+        event.preventDefault();
+        selectHistoryEntry(targetId, { focusRow: true });
     });
 }
 
@@ -7307,6 +10741,10 @@ function wireEditorSettings() {
     });
     el.editorFontFamilySelect?.addEventListener("change", (event) => {
         editorSettings = sanitizeEditorSettings({ ...editorSettings, fontFamily: event.target.value });
+        applyEditorSettings({ persist: true, refreshUI: true });
+    });
+    el.editorSyntaxThemeSelect?.addEventListener("change", (event) => {
+        editorSettings = sanitizeEditorSettings({ ...editorSettings, syntaxTheme: event.target.value });
         applyEditorSettings({ persist: true, refreshUI: true });
     });
     el.editorAutoSaveMs?.addEventListener("change", (event) => {
@@ -7551,6 +10989,14 @@ function getCommandPaletteEntries() {
             shortcut: "",
             enabled: !taskRunnerBusy,
             run: () => runTaskRunnerTask("save-all"),
+        },
+        {
+            id: "cmd-dev-terminal",
+            label: "Console: Focus Dev Terminal",
+            keywords: "console dev terminal safe utility commands",
+            shortcut: "",
+            enabled: true,
+            run: () => focusDevTerminalInput({ openLog: true }),
         },
         {
             id: "cmd-find",
@@ -7956,8 +11402,23 @@ function wireShortcutHelp() {
 function wirePromptDialog() {
     setPromptDialogOpen(false);
     clearPromptDialogError();
+    ensurePromptDialogSecondaryButton();
     el.promptDialogBackdrop?.addEventListener("click", () => cancelPromptDialog());
     el.promptDialogCancel?.addEventListener("click", () => cancelPromptDialog());
+    promptDialogSecondaryButton?.addEventListener("click", () => submitPromptDialogSecondary());
+    promptDialogSecondaryButton?.addEventListener("mouseleave", () => {
+        if (!promptDialogState?.hasSecondaryAction) return;
+        if (!promptDialogState.secondaryRequiresConfirm || !promptDialogState.secondaryArmed) return;
+        clearPromptDialogSecondaryDisarmTimer();
+        setPromptDialogSecondaryArmed(false);
+    });
+    promptDialogSecondaryButton?.addEventListener("contextmenu", (event) => {
+        if (!promptDialogState?.hasSecondaryAction) return;
+        if (!promptDialogState.secondaryRequiresConfirm || !promptDialogState.secondaryArmed) return;
+        event.preventDefault();
+        clearPromptDialogSecondaryDisarmTimer();
+        setPromptDialogSecondaryArmed(false, { focus: true });
+    });
     el.promptDialogConfirm?.addEventListener("click", () => submitPromptDialog());
     el.promptDialogInput?.addEventListener("input", () => clearPromptDialogError());
     el.promptDialogInput?.addEventListener("keydown", (event) => {
@@ -7973,11 +11434,21 @@ function wirePromptDialog() {
     });
     el.promptDialog?.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
+            if (promptDialogState?.hasSecondaryAction && promptDialogState.secondaryRequiresConfirm && promptDialogState.secondaryArmed) {
+                event.preventDefault();
+                clearPromptDialogSecondaryDisarmTimer();
+                setPromptDialogSecondaryArmed(false, { focus: true });
+                return;
+            }
             event.preventDefault();
             cancelPromptDialog();
             return;
         }
         if (event.key === "Enter" && promptDialogState?.mode === "confirm") {
+            const targetButton = event.target instanceof Element ? event.target.closest("button") : null;
+            if (targetButton && targetButton !== el.promptDialogConfirm) {
+                return;
+            }
             event.preventDefault();
             submitPromptDialog();
         }
@@ -8055,7 +11526,7 @@ function exportWorkspace() {
 }
 
 function normalizeImportedWorkspace(input) {
-    return normalizeImportedWorkspacePayload(input, {
+    const normalized = normalizeImportedWorkspacePayload(input, {
         normalizeFile,
         normalizeTrashEntry,
         normalizeFolderList,
@@ -8066,6 +11537,8 @@ function normalizeImportedWorkspace(input) {
         sanitizeLayoutState,
         currentLayoutState: layoutState,
     });
+    if (!normalized) return null;
+    return applyWorkspaceSafetyLimits(normalized, { source: "import" });
 }
 
 function applyImportedWorkspace(normalized, { label = "Import workspace", focusEditor = true } = {}) {
@@ -8107,6 +11580,9 @@ function applyImportedWorkspace(normalized, { label = "Import workspace", focusE
     recordFileHistory(label, before);
     status.set("Workspace imported");
     logger.append("system", ["Workspace imported."]);
+    logWorkspaceSafetyAdjustments(normalized._limitSummary, {
+        label: "Import safety limits applied.",
+    });
     if (focusEditor) editor.focus();
     return true;
 }
@@ -8120,7 +11596,15 @@ function triggerWorkspaceImportPicker() {
 async function importWorkspaceFromFile(file) {
     if (!file) return false;
     const text = await file.text();
-    const parsed = parseWorkspaceImportText(text, { normalizeImportedWorkspace });
+    const parsed = parseWorkspaceImportText(text, {
+        normalizeImportedWorkspace,
+        maxInputChars: WORKSPACE_IMPORT_MAX_INPUT_CHARS,
+    });
+    if (!parsed.ok && parsed.error === "input-too-large") {
+        status.set("Import too large");
+        logger.append("error", [String(parsed.message || `Import failed: workspace file too large (max ${WORKSPACE_IMPORT_MAX_INPUT_CHARS} chars).`)]);
+        return false;
+    }
     if (!parsed.ok && parsed.error === "invalid-json") {
         status.set("Import failed");
         logger.append("error", [`Import failed: invalid JSON (${String(parsed.message || "unknown error")}).`]);
@@ -8158,26 +11642,63 @@ function isSupportedLocalFolderFileName(name = "") {
     return LOCAL_FOLDER_IMPORT_EXTENSIONS.has(extension);
 }
 
-async function readDirectoryWorkspaceEntries(handle, prefix = "") {
+async function readDirectoryWorkspaceEntries(handle, prefix = "", budget = null) {
+    const nextBudget = budget || {
+        maxFiles: WORKSPACE_MAX_FILES,
+        maxFolders: WORKSPACE_MAX_FOLDERS,
+        maxFileBytes: LOCAL_FOLDER_MAX_FILE_BYTES,
+        maxTotalBytes: LOCAL_FOLDER_MAX_TOTAL_BYTES,
+        filesRead: 0,
+        foldersRead: 0,
+        filesDropped: 0,
+        foldersDropped: 0,
+        filesSkippedBySize: 0,
+        filesSkippedByTotalBytes: 0,
+        bytesRead: 0,
+    };
     const out = { files: [], folders: [] };
     if (!handle || typeof handle.entries !== "function") return out;
+
     for await (const [name, entry] of handle.entries()) {
         const nextPath = prefix ? `${prefix}/${name}` : name;
         if (entry.kind === "directory") {
             const folderPath = normalizeFolderPath(nextPath, { allowEmpty: true });
-            if (folderPath) out.folders.push(folderPath);
-            const nested = await readDirectoryWorkspaceEntries(entry, nextPath);
+            if (folderPath) {
+                if (nextBudget.foldersRead < nextBudget.maxFolders) {
+                    out.folders.push(folderPath);
+                    nextBudget.foldersRead += 1;
+                } else {
+                    nextBudget.foldersDropped += 1;
+                }
+            }
+            if (nextBudget.filesRead >= nextBudget.maxFiles) continue;
+            const nested = await readDirectoryWorkspaceEntries(entry, nextPath, nextBudget);
             out.files.push(...nested.files);
             out.folders.push(...nested.folders);
             continue;
         }
         if (entry.kind !== "file" || !isSupportedLocalFolderFileName(name)) continue;
+        if (nextBudget.filesRead >= nextBudget.maxFiles) {
+            nextBudget.filesDropped += 1;
+            continue;
+        }
         const file = await entry.getFile();
+        const fileSize = Math.max(0, Number(file?.size) || 0);
+        if (nextBudget.maxFileBytes > 0 && fileSize > nextBudget.maxFileBytes) {
+            nextBudget.filesSkippedBySize += 1;
+            continue;
+        }
+        if (nextBudget.maxTotalBytes > 0 && nextBudget.bytesRead + fileSize > nextBudget.maxTotalBytes) {
+            nextBudget.filesSkippedByTotalBytes += 1;
+            continue;
+        }
         const code = await file.text();
         out.files.push({
             path: normalizePathSlashes(nextPath),
             code: String(code ?? ""),
         });
+        nextBudget.filesRead += 1;
+        nextBudget.bytesRead += fileSize;
     }
     out.folders = normalizeFolderList(out.folders);
     return out;
@@ -8191,7 +11712,20 @@ async function openLocalProjectFolder() {
     }
     try {
         const handle = await window.showDirectoryPicker();
-        const { files: entries, folders: discoveredFolders } = await readDirectoryWorkspaceEntries(handle);
+        const localFolderBudget = {
+            maxFiles: WORKSPACE_MAX_FILES,
+            maxFolders: WORKSPACE_MAX_FOLDERS,
+            maxFileBytes: LOCAL_FOLDER_MAX_FILE_BYTES,
+            maxTotalBytes: LOCAL_FOLDER_MAX_TOTAL_BYTES,
+            filesRead: 0,
+            foldersRead: 0,
+            filesDropped: 0,
+            foldersDropped: 0,
+            filesSkippedBySize: 0,
+            filesSkippedByTotalBytes: 0,
+            bytesRead: 0,
+        };
+        const { files: entries, folders: discoveredFolders } = await readDirectoryWorkspaceEntries(handle, "", localFolderBudget);
         if (!entries.length) {
             status.set("No supported files found");
             logger.append("system", ["No supported text files found in selected folder."]);
@@ -8208,7 +11742,7 @@ async function openLocalProjectFolder() {
         );
         const usedPaths = new Set();
         const remappedPaths = [];
-        files = sortedEntries.map((entry) => {
+        const mappedFiles = sortedEntries.map((entry) => {
             const originalPath = normalizePathSlashes(String(entry?.path || ""));
             const normalizedPath = ensureUniquePathInSet(originalPath, usedPaths);
             if (normalizedPath !== originalPath) {
@@ -8218,17 +11752,25 @@ async function openLocalProjectFolder() {
             file.savedCode = entry.code;
             return file;
         });
-        folders = normalizeFolderList([
-            ...discoveredFolders,
-            ...collectFolderPaths(files, []),
-        ]);
-        activeFileId = files[0].id;
-        openTabIds = [activeFileId];
-        selectedFileIds = new Set([activeFileId]);
+        const importedWorkspace = applyWorkspaceSafetyLimits({
+            files: mappedFiles,
+            folders: normalizeFolderList([
+                ...discoveredFolders,
+                ...collectFolderPaths(mappedFiles, []),
+            ]),
+            activeId: mappedFiles[0]?.id || null,
+            openIds: mappedFiles[0]?.id ? [mappedFiles[0].id] : [],
+            trash: [],
+        }, { source: "local-folder" });
+        files = importedWorkspace?.files || [];
+        folders = normalizeFolderList(importedWorkspace?.folders || []);
+        activeFileId = files[0]?.id || null;
+        openTabIds = activeFileId ? [activeFileId] : [];
+        selectedFileIds = activeFileId ? new Set([activeFileId]) : new Set();
         selectedFolderPaths = new Set();
         selectionAnchorFileId = activeFileId;
         clearInlineRenameState();
-        setEditorValue(files[0].code, { silent: true });
+        setEditorValue(files[0]?.code ?? DEFAULT_CODE, { silent: true });
         cleanupCodeHistoryForKnownFiles();
         files.forEach((file) => recordCodeSnapshot(file.id, file.code, "folder-open", { force: true }));
         projectDirectoryHandle = handle;
@@ -8236,10 +11778,22 @@ async function openLocalProjectFolder() {
         renderFileList();
         queueEditorLint("open-folder");
         recordFileHistory("Open local folder", before);
-        status.set(`Loaded ${entries.length} file${entries.length === 1 ? "" : "s"} from folder`);
-        logger.append("system", [`Loaded ${entries.length} workspace file${entries.length === 1 ? "" : "s"} from local folder.`]);
+        status.set(`Loaded ${files.length} file${files.length === 1 ? "" : "s"} from folder`);
+        logger.append("system", [`Loaded ${files.length} workspace file${files.length === 1 ? "" : "s"} from local folder.`]);
         if (folders.length) {
             logger.append("system", [`Detected ${folders.length} folder path${folders.length === 1 ? "" : "s"} from local folder.`]);
+        }
+        if (localFolderBudget.filesDropped > 0) {
+            logger.append("warn", [`Skipped ${localFolderBudget.filesDropped} file${localFolderBudget.filesDropped === 1 ? "" : "s"} due to local folder file cap (${WORKSPACE_MAX_FILES}).`]);
+        }
+        if (localFolderBudget.foldersDropped > 0) {
+            logger.append("warn", [`Skipped ${localFolderBudget.foldersDropped} folder path${localFolderBudget.foldersDropped === 1 ? "" : "s"} due to folder cap (${WORKSPACE_MAX_FOLDERS}).`]);
+        }
+        if (localFolderBudget.filesSkippedBySize > 0) {
+            logger.append("warn", [`Skipped ${localFolderBudget.filesSkippedBySize} file${localFolderBudget.filesSkippedBySize === 1 ? "" : "s"} over per-file size cap (${LOCAL_FOLDER_MAX_FILE_BYTES} bytes).`]);
+        }
+        if (localFolderBudget.filesSkippedByTotalBytes > 0) {
+            logger.append("warn", [`Skipped ${localFolderBudget.filesSkippedByTotalBytes} file${localFolderBudget.filesSkippedByTotalBytes === 1 ? "" : "s"} after hitting total import cap (${LOCAL_FOLDER_MAX_TOTAL_BYTES} bytes).`]);
         }
         if (remappedPaths.length) {
             const sample = remappedPaths
@@ -8249,6 +11803,9 @@ async function openLocalProjectFolder() {
             const suffix = remappedPaths.length > 3 ? "..." : "";
             logger.append("warn", [`Resolved ${remappedPaths.length} file path collision${remappedPaths.length === 1 ? "" : "s"} (${sample}${suffix}).`]);
         }
+        logWorkspaceSafetyAdjustments(importedWorkspace?._limitSummary, {
+            label: "Local folder safety limits applied.",
+        });
         return true;
     } catch (err) {
         if (String(err?.name || "") === "AbortError") return false;
@@ -8516,6 +12073,7 @@ function syncFilesMenuActions() {
     const clearSelectionBtn = el.filesMenu.querySelector('[data-files-menu="clear-selection"]');
     const trashSelectedBtn = el.filesMenu.querySelector('[data-files-menu="trash-selected"]');
     const moveSelectedBtn = el.filesMenu.querySelector('[data-files-menu="move-selected"]');
+    const duplicateSelectedBtn = el.filesMenu.querySelector('[data-files-menu="duplicate-selected"]');
     const pinSelectedBtn = el.filesMenu.querySelector('[data-files-menu="pin-selected"]');
     const unpinSelectedBtn = el.filesMenu.querySelector('[data-files-menu="unpin-selected"]');
     const lockSelectedBtn = el.filesMenu.querySelector('[data-files-menu="lock-selected"]');
@@ -8548,6 +12106,10 @@ function syncFilesMenuActions() {
     if (moveSelectedBtn) {
         moveSelectedBtn.disabled = selectedCount === 0;
         moveSelectedBtn.textContent = selectedCount ? `Move (${selectedCount})` : "Move";
+    }
+    if (duplicateSelectedBtn) {
+        duplicateSelectedBtn.disabled = selectedFileCount === 0;
+        duplicateSelectedBtn.textContent = selectedFileCount ? `Duplicate (${selectedFileCount})` : "Duplicate";
     }
     if (pinSelectedBtn) pinSelectedBtn.disabled = selectedFileCount === 0;
     if (unpinSelectedBtn) unpinSelectedBtn.disabled = selectedFileCount === 0;
@@ -8725,6 +12287,7 @@ function syncFilesMenuToggles() {
     if (!el.filesMenu) return;
     const filtersBtn = el.filesMenu.querySelector('[data-files-toggle="filters"]');
     const gamesBtn = el.filesMenu.querySelector('[data-files-toggle="games"]');
+    const appsBtn = el.filesMenu.querySelector('[data-files-toggle="applications"]');
     const openEditorsBtn = el.filesMenu.querySelector('[data-files-toggle="open-editors"]');
     const filesBtn = el.filesMenu.querySelector('[data-files-toggle="files"]');
     const trashBtn = el.filesMenu.querySelector('[data-files-toggle="trash"]');
@@ -8738,6 +12301,12 @@ function syncFilesMenuToggles() {
         gamesBtn.setAttribute("aria-pressed", open ? "true" : "false");
         gamesBtn.textContent = "Games";
         gamesBtn.disabled = games.length === 0;
+    }
+    if (appsBtn) {
+        const open = layoutState.filesAppsOpen;
+        appsBtn.setAttribute("aria-pressed", open ? "true" : "false");
+        appsBtn.textContent = "Apps";
+        appsBtn.disabled = applications.length === 0;
     }
     if (openEditorsBtn) {
         const open = layoutState.filesOpenEditorsOpen;
@@ -8760,8 +12329,12 @@ function renderEditorTabs() {
     if (!el.editorTabs) return;
     openTabIds = normalizeOpenTabIds(openTabIds);
     if (!openTabIds.length) {
-        el.editorTabs.innerHTML = "";
+        if (lastRenderedEditorTabsMarkup !== "") {
+            el.editorTabs.innerHTML = "";
+            lastRenderedEditorTabsMarkup = "";
+        }
         el.editorTabs.removeAttribute("aria-activedescendant");
+        syncEditorStatusBar();
         return;
     }
 
@@ -8772,24 +12345,30 @@ function renderEditorTabs() {
             if (!file) return "";
             const active = id === activeFileId;
             const dirty = isFileDirty(file);
-            const safeName = escapeHTML(file.name);
+            const label = getFileBaseName(file.name) || file.name;
+            const safeLabel = escapeHTML(label);
+            const safePath = escapeHTML(file.name);
             const dirtyBadge = dirty ? `<span class="editor-tab-dirty" aria-label="Unsaved">*</span>` : "";
             return `
-                <div class="editor-tab" role="tab" tabindex="0" id="tab-${id}" data-tab-id="${id}" data-active="${active}" data-dirty="${dirty}" aria-selected="${active}">
-                    <span class="editor-tab-label">${safeName}</span>
+                <div class="editor-tab" role="tab" tabindex="0" id="tab-${id}" data-tab-id="${id}" data-active="${active}" data-dirty="${dirty}" aria-selected="${active}" title="${safePath}">
+                    <span class="editor-tab-label">${safeLabel}</span>
                     ${dirtyBadge}
-                    <button type="button" class="editor-tab-close" data-tab-close="${id}" aria-label="Close ${safeName}" ${disableClose ? "disabled" : ""}>×</button>
+                    <button type="button" class="editor-tab-close" data-tab-close="${id}" aria-label="Close ${safeLabel}" ${disableClose ? "disabled" : ""}>×</button>
                 </div>
             `;
         })
         .join("");
 
-    el.editorTabs.innerHTML = tabs;
+    if (tabs !== lastRenderedEditorTabsMarkup) {
+        el.editorTabs.innerHTML = tabs;
+        lastRenderedEditorTabsMarkup = tabs;
+    }
     if (activeFileId) {
         el.editorTabs.setAttribute("aria-activedescendant", `tab-${activeFileId}`);
     } else {
         el.editorTabs.removeAttribute("aria-activedescendant");
     }
+    syncEditorStatusBar();
 }
 
 function closeTab(id) {
@@ -8808,7 +12387,6 @@ function closeTab(id) {
     }
 
     persistFiles();
-    renderEditorTabs();
     renderFileList();
 }
 
@@ -8839,6 +12417,109 @@ function onEditorTabsKey(event) {
     }
 }
 
+function onHorizontalHeaderWheel(event) {
+    if (event.defaultPrevented || event.ctrlKey) return;
+    const container = event.currentTarget;
+    if (!(container instanceof HTMLElement)) return;
+    if ((container.scrollWidth - container.clientWidth) <= 1) return;
+    const deltaX = Number(event.deltaX) || 0;
+    const deltaY = Number(event.deltaY) || 0;
+    const rawDelta = Math.abs(deltaX) > 0 ? deltaX : deltaY;
+    if (!rawDelta) return;
+    const deltaMode = Number(event.deltaMode) || 0;
+    const unit = deltaMode === 1
+        ? 16
+        : deltaMode === 2
+            ? Math.max(1, container.clientWidth)
+            : 1;
+    const before = container.scrollLeft;
+    container.scrollLeft += rawDelta * unit;
+    if (container.scrollLeft !== before) {
+        event.preventDefault();
+    }
+}
+
+function wireHorizontalHeaderScroll() {
+    const headers = document.querySelectorAll(HORIZONTAL_HEADER_SCROLL_SELECTOR);
+    headers.forEach((header) => {
+        if (!(header instanceof HTMLElement)) return;
+        if (header.dataset.horizontalWheelBound === "true") return;
+        header.dataset.horizontalWheelBound = "true";
+        header.addEventListener("wheel", onHorizontalHeaderWheel, { passive: false });
+    });
+}
+
+function wireFooterMiddleMouseScroll() {
+    const footer = document.querySelector(".foot");
+    if (!(footer instanceof HTMLElement)) return;
+    if (footer.dataset.middleMousePanBound === "true") return;
+    footer.dataset.middleMousePanBound = "true";
+
+    footer.addEventListener("pointerdown", (event) => {
+        if (event.button !== 1) return;
+        if ((footer.scrollWidth - footer.clientWidth) <= 1) return;
+
+        event.preventDefault();
+        footer.dataset.middlePanActive = "true";
+
+        const startX = event.clientX;
+        const startScrollLeft = footer.scrollLeft;
+
+        const cleanup = (endEvent) => {
+            footer.removeEventListener("pointermove", onMove);
+            footer.removeEventListener("pointerup", cleanup);
+            footer.removeEventListener("pointercancel", cleanup);
+            footer.removeEventListener("lostpointercapture", cleanup);
+            delete footer.dataset.middlePanActive;
+
+            if (endEvent?.pointerId !== undefined) {
+                try {
+                    footer.releasePointerCapture(endEvent.pointerId);
+                } catch (err) {
+                    // no-op
+                }
+            }
+        };
+
+        const onMove = (moveEvent) => {
+            const deltaX = moveEvent.clientX - startX;
+            footer.scrollLeft = startScrollLeft - deltaX;
+        };
+
+        footer.addEventListener("pointermove", onMove);
+        footer.addEventListener("pointerup", cleanup);
+        footer.addEventListener("pointercancel", cleanup);
+        footer.addEventListener("lostpointercapture", cleanup);
+
+        if (event.pointerId !== undefined) {
+            try {
+                footer.setPointerCapture(event.pointerId);
+            } catch (err) {
+                // no-op
+            }
+        }
+    });
+}
+
+function onEditorTabsWheel(event) {
+    if (!el.editorTabs) return;
+    if (event.ctrlKey) return;
+    const container = el.editorTabs;
+    if ((container.scrollWidth - container.clientWidth) <= 1) return;
+    const deltaX = Number(event.deltaX) || 0;
+    const deltaY = Number(event.deltaY) || 0;
+    const rawDelta = Math.abs(deltaX) > 0 ? deltaX : deltaY;
+    if (!rawDelta) return;
+    const deltaMode = Number(event.deltaMode) || 0;
+    const unit = deltaMode === 1
+        ? 16
+        : deltaMode === 2
+            ? Math.max(1, container.clientWidth)
+            : 1;
+    event.preventDefault();
+    container.scrollLeft += rawDelta * unit;
+}
+
 function buildFileProblemCounts() {
     const map = new Map();
     collectProblemEntries().forEach((entry) => {
@@ -8851,6 +12532,67 @@ function buildFileProblemCounts() {
         map.set(entry.fileId, prev);
     });
     return map;
+}
+
+function isReorderableFilesSection(id) {
+    return FILES_REORDERABLE_SECTIONS.has(String(id || "").trim());
+}
+
+function renderStaticFilesSectionSlot(sectionId) {
+    return `<li class="file-section-slot file-section-slot-static" data-files-static-slot="${escapeHTML(sectionId)}"></li>`;
+}
+
+function mountStaticFilesSection(sectionId, node) {
+    if (!el.fileList || !node) return;
+    const slot = el.fileList.querySelector(`[data-files-static-slot="${sectionId}"]`);
+    if (!slot) return;
+    slot.appendChild(node);
+}
+
+function clearFilesSectionDropIndicators() {
+    if (!el.fileList) return;
+    el.fileList.querySelectorAll("[data-files-section-id][data-drop-before], [data-files-section-id][data-drop-after]").forEach((node) => {
+        node.removeAttribute("data-drop-before");
+        node.removeAttribute("data-drop-after");
+    });
+}
+
+function clearFilesSectionDragState() {
+    dragFilesSectionId = null;
+    dragFilesSectionDropId = null;
+    dragFilesSectionDropAfter = false;
+    if (!el.fileList) return;
+    el.fileList.querySelectorAll("[data-files-section-id][data-dragging-section]").forEach((node) => {
+        node.removeAttribute("data-dragging-section");
+    });
+    clearFilesSectionDropIndicators();
+}
+
+function resolveFilesSectionDragHandle(target) {
+    if (!(target instanceof Element)) return null;
+    const handle = target.closest("[data-files-section-id]");
+    if (!handle) return null;
+    const sectionId = String(handle.dataset.filesSectionId || "").trim();
+    if (!isReorderableFilesSection(sectionId)) return null;
+    return { handle, sectionId };
+}
+
+function resolveFilesSectionDropTarget(event) {
+    const resolved = resolveFilesSectionDragHandle(event.target);
+    if (!resolved) return null;
+    const { handle, sectionId } = resolved;
+    const rect = handle.getBoundingClientRect();
+    const pointerY = Number(event.clientY) || rect.top;
+    const placeAfter = pointerY > rect.top + (rect.height / 2);
+    return { handle, sectionId, placeAfter };
+}
+
+function updateFilesSectionDropIndicator(sectionId, { placeAfter = false } = {}) {
+    if (!el.fileList || !isReorderableFilesSection(sectionId)) return;
+    clearFilesSectionDropIndicators();
+    const target = el.fileList.querySelector(`[data-files-section-id="${sectionId}"]`);
+    if (!target) return;
+    target.setAttribute(placeAfter ? "data-drop-after" : "data-drop-before", "true");
 }
 
 function renderFileList() {
@@ -8913,16 +12655,6 @@ function renderFileList() {
         el.fileSearchClear.setAttribute("data-active", query ? "true" : "false");
     }
 
-    const shouldRenderTrash = layoutState.filesTrashOpen && visibleTrash.length > 0;
-    const hasVisibleFileRows = orderedFiles.length > 0 || openEditors.length > 0;
-    if (!hasVisibleFileRows && !shouldRenderTrash) {
-        const emptyCopy = query ? "No matches" : "No files";
-        el.fileList.innerHTML = `<li class="file-item"><span class="files-sub">${emptyCopy}</span></li>`;
-        el.fileList.removeAttribute("aria-activedescendant");
-        renderEditorTabs();
-        return;
-    }
-
     const renderFileRow = (file, sectionId, allowEditing, { depth = 0, displayName = null, showDirectory = false, guideLevels = null } = {}) => {
         const active = file.id === activeFileId;
         const selected = selectedFileIds.has(file.id);
@@ -8932,12 +12664,14 @@ function renderFileList() {
         const errorBlock = editing && editingError
             ? `<span class="file-error">${escapeHTML(editingError)}</span>`
             : "";
-        const draftValue = editing ? (editingDraft ?? file.name) : file.name;
+        const draftValue = editing ? (editingDraft ?? getFileBaseName(file.name)) : file.name;
         const invalid = editing && Boolean(editingError);
         const label = displayName || file.name;
         const activeTag = !editing && active
             ? `<span class="file-active-tag" aria-label="Active file">ACTIVE</span>`
             : "";
+        const iconPath = getFileIconPath(file.name);
+        const iconBlock = `<img class="file-row-icon" src="${escapeHTML(iconPath)}" alt="" aria-hidden="true" loading="lazy" decoding="async" />`;
         const nameBlock = editing
             ? `<input class="file-rename" data-file-rename="${file.id}" value="${escapeHTML(draftValue)}" aria-label="Rename file" aria-invalid="${invalid ? "true" : "false"}" />`
             : `<span class="file-name">${escapeHTML(label)}</span>`;
@@ -8959,6 +12693,7 @@ function renderFileList() {
             <li class="file-item" data-file-row-section="${sectionId}">
                 <${rowTag} ${rowAttrs}>
                     ${guides}
+                    ${iconBlock}
                     <span class="file-name-wrap">
                         ${nameBlock}
                         ${errorBlock}
@@ -8985,24 +12720,17 @@ function renderFileList() {
             explicitFolders,
         });
         const out = [];
-        const walk = (node, depth = 0, ancestorContinuations = []) => {
-            const totalChildren = node.folders.length + node.files.length;
-            const folderCount = node.folders.length;
-            node.folders.forEach((folderNode, folderIndex) => {
-                const siblingIndex = folderIndex;
-                const hasNextSibling = siblingIndex < totalChildren - 1;
+        const buildGuideLevels = (depthValue = 0) => {
+            const depthLimit = Math.max(0, Number(depthValue) || 0);
+            return Array.from({ length: depthLimit }, (_, level) => level);
+        };
+        const walk = (node, depth = 0) => {
+            const guideLevels = buildGuideLevels(depth);
+            node.folders.forEach((folderNode) => {
                 const expanded = isFolderExpanded(folderNode.path);
                 const editingFolder = allowEditing && editingFolderPath === folderNode.path;
                 const folderDraftValue = editingFolder ? (editingFolderDraft ?? folderNode.path) : folderNode.path;
                 const folderInvalid = editingFolder && Boolean(editingFolderError);
-                const guideLevels = [];
-                ancestorContinuations.forEach((carry, level) => {
-                    if (carry) guideLevels.push(level);
-                });
-                if (depth > 0) {
-                    const parentLevel = depth - 1;
-                    if (!guideLevels.includes(parentLevel)) guideLevels.push(parentLevel);
-                }
                 const guides = guideLevels.length
                     ? `<span class="file-tree-guides" aria-hidden="true">${guideLevels.map((level) => `<span class="file-tree-guide" style="left:${8 + (level * 12)}px"></span>`).join("")}</span>`
                     : "";
@@ -9022,6 +12750,7 @@ function renderFileList() {
                     : `
                         <span class="file-folder-name-wrap">
                             <span class="file-folder-caret" aria-hidden="true"></span>
+                            <img class="file-folder-icon" src="${escapeHTML(getFolderIconPath(expanded))}" alt="" aria-hidden="true" loading="lazy" decoding="async" />
                             <span class="file-folder-name">${escapeHTML(folderNode.name)}</span>
                         </span>
                     `;
@@ -9041,24 +12770,10 @@ function renderFileList() {
                     </li>
                 `);
                 if (expanded) {
-                    walk(folderNode, depth + 1, [...ancestorContinuations, hasNextSibling]);
+                    walk(folderNode, depth + 1);
                 }
             });
-            node.files.forEach((file, fileIndex) => {
-                const siblingIndex = folderCount + fileIndex;
-                const hasNextSibling = siblingIndex < totalChildren - 1;
-                const guideLevels = [];
-                ancestorContinuations.forEach((carry, level) => {
-                    if (carry) guideLevels.push(level);
-                });
-                if (depth > 0) {
-                    const parentLevel = depth - 1;
-                    if (!guideLevels.includes(parentLevel)) guideLevels.push(parentLevel);
-                }
-                if (depth > 0 && hasNextSibling) {
-                    const parentLevel = depth - 1;
-                    if (!guideLevels.includes(parentLevel)) guideLevels.push(parentLevel);
-                }
+            node.files.forEach((file) => {
                 out.push(renderFileRow(file, sectionId, allowEditing, {
                     depth,
                     displayName: getFileBaseName(file.name),
@@ -9067,7 +12782,7 @@ function renderFileList() {
                 }));
             });
         };
-        walk(tree, 0, []);
+        walk(tree, 0);
         return out.join("");
     };
 
@@ -9075,32 +12790,48 @@ function renderFileList() {
         .map((file) => `
             <li class="file-item file-item-trash" data-file-row-section="${sectionId}">
                 <div class="file-row file-row-trash" role="note" data-trash-id="${file.id}" data-file-row-section="${sectionId}">
+                    <img class="file-row-icon" src="${escapeHTML(getFileIconPath(file.name))}" alt="" aria-hidden="true" loading="lazy" decoding="async" />
                     <span class="file-name-wrap">
                         <span class="file-name">${escapeHTML(file.name)}</span>
                         <span class="file-info">Deleted ${formatRelativeTime(file.deletedAt)}</span>
+                        ${file.deletedFolderPath ? `<span class="file-info">Folder: ${escapeHTML(file.deletedFolderPath)}</span>` : ""}
                     </span>
                 </div>
             </li>
         `)
         .join("");
 
-    const renderSectionHeader = (label, id, open) => {
-        const caretOnLeft = id === "open-editors" || id === "files";
-        const caretSide = caretOnLeft ? "left" : "right";
-        const content = caretOnLeft
+    const renderSectionHeader = (label, id, open, options = {}) => {
+        const caretSide = "left";
+        const content = `
+            <span class="file-section-caret" aria-hidden="true"></span>
+            <span class="file-section-label">${label}</span>
+        `;
+        const showTrashAction = id === "trash" && options.showTrashAction;
+        const trashAction = showTrashAction
             ? `
-                <span class="file-section-caret" aria-hidden="true"></span>
-                <span class="file-section-label">${label}</span>
-            `
-            : `
-                <span class="file-section-label">${label}</span>
-                <span class="file-section-caret" aria-hidden="true"></span>
-            `;
+            <button
+                type="button"
+                class="file-section-action"
+                data-trash-action="empty"
+                data-variant="danger"
+                aria-label="Empty trash"
+                title="Empty trash"
+            >
+                <span class="file-section-action-mark" aria-hidden="true"></span>
+            </button>
+        `
+            : "";
+        const reorderable = options.reorderable !== false && isReorderableFilesSection(id);
+        const dragAttrs = reorderable
+            ? `draggable="true" data-files-section-id="${id}"`
+            : "";
         return `
         <li class="file-section-header">
-            <button type="button" class="file-section-toggle" data-file-section="${id}" data-caret-side="${caretSide}" aria-expanded="${open}">
+            <button type="button" class="file-section-toggle" data-file-section="${id}" data-caret-side="${caretSide}" aria-expanded="${open}" ${dragAttrs}>
                 ${content}
             </button>
+            ${trashAction}
         </li>
     `;
     };
@@ -9138,24 +12869,57 @@ function renderFileList() {
     let trashSection = "";
     if (visibleTrash.length) {
         const label = visibleTrash.length === 1 ? "Trash (1)" : `Trash (${visibleTrash.length})`;
-        trashSection = renderSectionHeader(label, "trash", trashOpen);
+        trashSection = renderSectionHeader(label, "trash", trashOpen, { showTrashAction: true });
         if (trashOpen) {
             trashSection += renderTrashRows(visibleTrash, "trash");
         }
     }
 
-    el.fileList.innerHTML = `${openEditorsSection}${filesSection}${trashSection}`;
+    const sectionMarkupById = {
+        games: renderStaticFilesSectionSlot("games"),
+        applications: renderStaticFilesSectionSlot("applications"),
+        "open-editors": openEditorsSection,
+        files: filesSection,
+    };
+    const orderedSections = getFilesSectionOrder()
+        .map((sectionId) => sectionMarkupById[sectionId] || "")
+        .join("");
+    const hasAnyVisibleRows = Boolean(orderedFiles.length || openEditors.length || visibleTrash.length);
+    const emptyCopy = query ? "No matches" : "No files";
+    const emptySection = hasAnyVisibleRows ? "" : `<li class="file-item"><span class="files-sub">${emptyCopy}</span></li>`;
+    const fileListMarkup = `${orderedSections}${trashSection}${emptySection}`;
+    if (fileListMarkup !== lastRenderedFileListMarkup) {
+        el.fileList.innerHTML = fileListMarkup;
+        lastRenderedFileListMarkup = fileListMarkup;
+    }
+    mountStaticFilesSection("games", el.filesGames);
+    mountStaticFilesSection("applications", el.filesApps);
+    if (dragFilesSectionId) {
+        const dragHandle = el.fileList.querySelector(`[data-files-section-id="${dragFilesSectionId}"]`);
+        if (dragHandle) {
+            dragHandle.setAttribute("data-dragging-section", "true");
+        }
+    }
+    if (dragFilesSectionDropId) {
+        updateFilesSectionDropIndicator(dragFilesSectionDropId, { placeAfter: dragFilesSectionDropAfter });
+    }
 
     const activeInFiles = activeFileId ? document.getElementById(`file-option-files-${activeFileId}`) : null;
     const activeInOpenEditors = activeFileId ? document.getElementById(`file-option-open-editors-${activeFileId}`) : null;
+    let activeDescendantId = "";
     if (activeInFiles) {
-        el.fileList.setAttribute("aria-activedescendant", activeInFiles.id);
+        activeDescendantId = activeInFiles.id;
+        el.fileList.setAttribute("aria-activedescendant", activeDescendantId);
     } else if (activeInOpenEditors) {
-        el.fileList.setAttribute("aria-activedescendant", activeInOpenEditors.id);
+        activeDescendantId = activeInOpenEditors.id;
+        el.fileList.setAttribute("aria-activedescendant", activeDescendantId);
     } else {
         el.fileList.removeAttribute("aria-activedescendant");
     }
-    scrollActiveFileRowIntoView();
+    if (activeDescendantId && activeDescendantId !== lastRenderedActiveDescendantId) {
+        scrollActiveFileRowIntoView();
+    }
+    lastRenderedActiveDescendantId = activeDescendantId;
     if (quickOpenOpen) {
         updateQuickOpenResults(quickOpenQuery);
     }
@@ -9163,6 +12927,7 @@ function renderFileList() {
         updateCommandPaletteResults(commandPaletteQuery);
     }
 
+    queueFilesColumnGutterSync();
     renderEditorTabs();
 
     if (editingFileId) {
@@ -9171,7 +12936,7 @@ function renderFileList() {
             if (input) {
                 input.focus();
                 const file = files.find((item) => item.id === editingFileId);
-                if (file && editingDraft === file.name) {
+                if (file && editingDraft === getFileBaseName(file.name)) {
                     selectBaseName(input);
                 }
             }
@@ -9201,7 +12966,7 @@ function stashActiveFile() {
 
 function selectFile(id) {
     if (id === activeFileId) {
-        const needsSelectionReset = selectedFileIds.size !== 1 || !selectedFileIds.has(id);
+        const needsSelectionReset = selectedFolderPaths.size > 0 || selectedFileIds.size !== 1 || !selectedFileIds.has(id);
         if (needsSelectionReset) {
             setSingleSelection(id);
             renderFileList();
@@ -9243,6 +13008,7 @@ function updateActiveFileCode(newCode, { scheduleAutosaveNow = true } = {}) {
     if (!file) return;
     file.code = String(newCode ?? "");
     file.touchedAt = Date.now();
+    syncEditorStatusBar();
     if (scheduleAutosaveNow) {
         scheduleEditorAutosave("autosave-edit");
     }
@@ -9295,10 +13061,9 @@ function saveAllFiles({ announce = true } = {}) {
 function createFile() {
     const before = snapshotWorkspaceState();
     flushEditorAutosave();
-    const preferredExtension = getPreferredNewFileExtension();
-    const defaultName = getNextScriptFileName("", preferredExtension);
+    const defaultName = getNextUntitledFileName("");
     stashActiveFile();
-    const file = makeFile(defaultName, getStarterCodeForFileName(defaultName));
+    const file = makeFile(defaultName, "", { preserveExtensionless: true });
     files.push(file);
     expandFolderAncestors(file.name);
     activeFileId = file.id;
@@ -9308,7 +13073,7 @@ function createFile() {
     recordCodeSnapshot(file.id, file.code, "create", { force: true });
     persistFiles();
     editingFileId = file.id;
-    editingDraft = file.name;
+    editingDraft = getFileBaseName(file.name);
     editingError = "";
     pendingNewFileRenameId = file.id;
     clearFolderRenameState();
@@ -9436,6 +13201,129 @@ function restoreTrashById(trashId, { activate = true, focus = true } = {}) {
     return true;
 }
 
+function getTrashGroupEntries(groupId) {
+    const normalized = String(groupId || "").trim();
+    if (!normalized) return [];
+    return trashFiles.filter((entry) => String(entry?.deletedGroupId || "").trim() === normalized);
+}
+
+function restoreTrashGroupById(groupId, {
+    preferredTrashId = "",
+    activate = true,
+    focus = true,
+} = {}) {
+    pruneTrashEntries();
+    const entries = getTrashGroupEntries(groupId);
+    if (!entries.length) return false;
+
+    const before = snapshotWorkspaceState();
+    stashActiveFile();
+
+    const groupIds = new Set(entries.map((entry) => entry.id));
+    trashFiles = trashFiles.filter((entry) => !groupIds.has(entry.id));
+
+    const restoredByTrashId = new Map();
+    const ordered = [...entries].reverse();
+    ordered.forEach((entry) => {
+        const restored = restoreTrashEntry(entry, { activate: false });
+        if (restored) restoredByTrashId.set(entry.id, restored);
+    });
+
+    if (!restoredByTrashId.size) {
+        persistFiles();
+        renderFileList();
+        return false;
+    }
+
+    if (activate) {
+        const preferred = preferredTrashId ? restoredByTrashId.get(preferredTrashId) : null;
+        const fallback = preferred || restoredByTrashId.get(ordered[ordered.length - 1]?.id) || [...restoredByTrashId.values()][0];
+        if (fallback) {
+            activeFileId = fallback.id;
+            setSingleSelection(fallback.id);
+            ensureTabOpen(fallback.id);
+            expandFolderAncestors(fallback.name);
+            setEditorValue(fallback.code, { silent: true });
+        }
+    }
+
+    openTabIds = normalizeOpenTabIds(openTabIds);
+    persistFiles();
+    renderFileList();
+
+    const restoredCount = restoredByTrashId.size;
+    const folderPath = normalizeFolderPath(entries[0]?.deletedFolderPath, { allowEmpty: true }) || "";
+    const folderLabel = folderPath ? `folder ${folderPath}` : "folder";
+    status.set(`Restored ${folderLabel}`);
+    logger.append("system", [`Restored ${restoredCount} ${restoredCount === 1 ? "file" : "files"} from ${folderLabel} in Trash.`]);
+    recordFileHistory(`Restore ${folderLabel} (${restoredCount})`, before);
+    if (focus) editor.focus();
+    return true;
+}
+
+function permanentlyDeleteTrashById(trashId, { focus = true } = {}) {
+    pruneTrashEntries();
+    const index = trashFiles.findIndex((entry) => entry.id === trashId);
+    if (index === -1) return false;
+    const before = snapshotWorkspaceState();
+    const [entry] = trashFiles.splice(index, 1);
+    persistFiles();
+    renderFileList();
+    status.set(`Deleted ${entry.name} permanently`);
+    logger.append("system", [`Permanently deleted ${entry.name} from Trash.`]);
+    recordFileHistory(`Permanent delete ${entry.name}`, before);
+    if (focus) editor.focus();
+    return true;
+}
+
+async function confirmRestoreTrashById(trashId) {
+    pruneTrashEntries();
+    const entry = trashFiles.find((item) => item.id === trashId);
+    if (!entry) return false;
+    const folderPath = normalizeFolderPath(entry.deletedFolderPath, { allowEmpty: true });
+    const groupedEntries = getTrashGroupEntries(entry.deletedGroupId);
+    const hasFolderGroup = Boolean(folderPath && groupedEntries.length > 1);
+    const groupedFileNames = hasFolderGroup
+        ? [...new Set(groupedEntries.map((item) => item.name))]
+        : [];
+    const groupedPreview = groupedFileNames.length > 8
+        ? [...groupedFileNames.slice(0, 8), `...and ${groupedFileNames.length - 8} more`]
+        : groupedFileNames;
+    const choice = await openPromptDialog({
+        mode: "confirm",
+        title: hasFolderGroup ? `Restore folder ${folderPath}?` : `Restore ${entry.name}?`,
+        message: hasFolderGroup
+            ? `Restore all ${groupedEntries.length} files from this folder.\nDelete forever removes only the selected file permanently.`
+            : "Restore returns this file to your workspace.\nDelete forever removes it permanently.",
+        items: hasFolderGroup ? groupedPreview : [entry.name],
+        listTitle: hasFolderGroup ? `Folder files (${groupedEntries.length})` : "Trash file",
+        confirmText: hasFolderGroup ? "Restore folder" : "Restore",
+        confirmValue: hasFolderGroup ? "restore-folder" : "restore",
+        cancelText: "Cancel",
+        cancelValue: false,
+        secondaryText: "Delete forever",
+        secondaryValue: "delete",
+        secondaryDanger: true,
+        secondaryRequiresConfirm: true,
+        secondaryArmedText: "Delete forever",
+        secondaryShieldLabel: "Safety cover",
+        secondaryArmedLabel: "",
+        danger: false,
+    });
+    if (choice === "delete") {
+        return permanentlyDeleteTrashById(trashId, { focus: true });
+    }
+    if (choice === "restore-folder") {
+        return restoreTrashGroupById(entry.deletedGroupId, {
+            preferredTrashId: trashId,
+            activate: true,
+            focus: true,
+        });
+    }
+    if (choice !== "restore") return false;
+    return restoreTrashById(trashId, { activate: true, focus: true });
+}
+
 function restoreLastDeletedFile() {
     pruneTrashEntries();
     if (!trashFiles.length) {
@@ -9488,25 +13376,41 @@ async function emptyTrash() {
         renderFileList();
         return false;
     }
-    const before = snapshotWorkspaceState();
     const count = trashFiles.length;
-    const confirmClear = await confirmWithFilePreview(
-        `Empty Trash (${count} files)?`,
-        trashFiles.map((file) => file.name),
-        { detail: "This cannot be undone." }
-    );
-    if (!confirmClear) return false;
+    const choice = await openPromptDialog({
+        mode: "confirm",
+        title: `Empty Trash (${count} ${count === 1 ? "file" : "files"})?`,
+        message: "Delete forever permanently removes everything in Trash.\nThis cannot be undone.",
+        items: trashFiles.map((file) => file.name),
+        listTitle: count === 1 ? "Trash file" : "Trash files",
+        confirmText: "Keep Trash",
+        confirmValue: false,
+        cancelText: "Cancel",
+        cancelValue: false,
+        secondaryText: "Delete forever",
+        secondaryValue: "delete",
+        secondaryDanger: true,
+        secondaryRequiresConfirm: true,
+        secondaryArmedText: "Delete forever",
+        secondaryShieldLabel: "Safety cover",
+        secondaryArmedLabel: "",
+        danger: false,
+    });
+    if (choice !== "delete") return false;
+    const before = snapshotWorkspaceState();
     trashFiles = [];
     persistFiles();
     renderFileList();
-    status.set("Trash emptied");
-    logger.append("system", [`Trash cleared (${count} files).`]);
-    recordFileHistory(`Empty trash (${count})`, before);
+    status.set(`Deleted ${count} ${count === 1 ? "file" : "files"} forever`);
+    logger.append("system", [`Permanently deleted ${count} ${count === 1 ? "file" : "files"} from Trash.`]);
+    recordFileHistory(`Permanent empty trash (${count})`, before);
     return true;
 }
 
 async function deleteAllFiles() {
-    if (!files.length) return;
+    const total = files.length;
+    const folderCount = collectFolderPaths(files, folders).size;
+    if (!total && !folderCount) return;
     const lockedCount = files.filter((file) => file.locked).length;
     if (lockedCount > 0) {
         const noun = lockedCount === 1 ? "file is" : "files are";
@@ -9515,19 +13419,23 @@ async function deleteAllFiles() {
         return;
     }
 
-    const total = files.length;
     const before = snapshotWorkspaceState();
+    const summary = folderCount
+        ? `Move all ${total} files to Trash and delete ${folderCount} folder${folderCount === 1 ? "" : "s"}?`
+        : `Move all ${total} files to Trash?`;
     const confirmDelete = await confirmWithFilePreview(
-        `Move all ${total} files to Trash?`,
+        summary,
         files.map((file) => file.name),
-        { detail: "This keeps one fresh file open." }
+        { detail: folderCount ? "All folder entries are removed. This keeps one fresh file open." : "This keeps one fresh file open." }
     );
     if (!confirmDelete) return;
-    queueDeleteUndo("Deleted all files");
+    queueDeleteUndo(folderCount ? "Deleted all files and folders" : "Deleted all files");
     pushFilesToTrash(files);
 
-    const fallback = makeFile(FILE_DEFAULT_NAME, "");
+    const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
     files = [fallback];
+    folders = [];
+    collapsedFolderPaths.clear();
     activeFileId = fallback.id;
     setSingleSelection(fallback.id);
     openTabIds = [fallback.id];
@@ -9536,9 +13444,15 @@ async function deleteAllFiles() {
     setEditorValue(fallback.code, { silent: true });
     persistFiles();
     renderFileList();
-    status.set(`Moved ${total} files to Trash`);
-    logger.append("system", [`Moved ${total} files to Trash. Reset to ${fallback.name}. Undo available for 15s.`]);
-    recordFileHistory(`Delete all files (${total})`, before);
+    const folderLabel = folderCount ? ` and removed ${folderCount} folder${folderCount === 1 ? "" : "s"}` : "";
+    status.set(`Moved ${total} files to Trash${folderCount ? ` + removed ${folderCount} folders` : ""}`);
+    logger.append("system", [`Moved ${total} files to Trash${folderLabel}. Reset to ${fallback.name}. Undo available for 15s.`]);
+    recordFileHistory(
+        folderCount
+            ? `Delete all files (${total}) + folders (${folderCount})`
+            : `Delete all files (${total})`,
+        before
+    );
     editor.focus();
 }
 
@@ -9722,6 +13636,26 @@ function setRootDropHover(active = false) {
 }
 
 function onFileListDragStart(event) {
+    const sectionHandle = resolveFilesSectionDragHandle(event.target);
+    if (sectionHandle) {
+        const { handle, sectionId } = sectionHandle;
+        dragFilesSectionId = sectionId;
+        dragFilesSectionDropId = null;
+        dragFilesSectionDropAfter = false;
+        handle.setAttribute("data-dragging-section", "true");
+        clearFilesSectionDropIndicators();
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", `section:${sectionId}`);
+        }
+        return;
+    }
+
+    if (dragFilesSectionId) {
+        event.preventDefault();
+        return;
+    }
+
     const folderRow = event.target?.closest?.(FILE_FOLDER_ROW_SELECTOR);
     if (folderRow && folderRow.dataset.editing !== "true") {
         const folderPath = normalizeFolderPath(folderRow.dataset.folderToggle || "", { allowEmpty: true });
@@ -9794,6 +13728,24 @@ function onFileListDragStart(event) {
 }
 
 function onFileListDragOver(event) {
+    if (dragFilesSectionId) {
+        const target = resolveFilesSectionDropTarget(event);
+        if (!target || target.sectionId === dragFilesSectionId) {
+            dragFilesSectionDropId = null;
+            dragFilesSectionDropAfter = false;
+            clearFilesSectionDropIndicators();
+            return;
+        }
+        event.preventDefault();
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = "move";
+        }
+        dragFilesSectionDropId = target.sectionId;
+        dragFilesSectionDropAfter = target.placeAfter;
+        updateFilesSectionDropIndicator(target.sectionId, { placeAfter: target.placeAfter });
+        return;
+    }
+
     const payload = getDragMovePayload();
     if (!payload.folderPaths.length && !payload.fileIds.length) return;
 
@@ -9844,6 +13796,15 @@ function onFileListDragOver(event) {
 }
 
 function onFileListDragLeave(event) {
+    if (dragFilesSectionId) {
+        const nextTarget = event.relatedTarget;
+        if (nextTarget instanceof Node && el.fileList?.contains(nextTarget)) return;
+        dragFilesSectionDropId = null;
+        dragFilesSectionDropAfter = false;
+        clearFilesSectionDropIndicators();
+        return;
+    }
+
     const payload = getDragMovePayload();
     if (!payload.fileIds.length && !payload.folderPaths.length) return;
     const nextTarget = event.relatedTarget;
@@ -9853,6 +13814,18 @@ function onFileListDragLeave(event) {
 }
 
 function onFileListDrop(event) {
+    if (dragFilesSectionId) {
+        event.preventDefault();
+        const target = resolveFilesSectionDropTarget(event);
+        const targetId = target?.sectionId || dragFilesSectionDropId;
+        const placeAfter = target ? target.placeAfter : dragFilesSectionDropAfter;
+        if (targetId && targetId !== dragFilesSectionId) {
+            moveFilesSection(dragFilesSectionId, targetId, { placeAfter });
+        }
+        clearFilesSectionDragState();
+        return;
+    }
+
     const payload = getDragMovePayload();
     if (!payload.fileIds.length && !payload.folderPaths.length) return;
 
@@ -9887,11 +13860,19 @@ function onFileListDrop(event) {
 }
 
 function onFileListDragEnd() {
+    if (dragFilesSectionId) {
+        clearFilesSectionDragState();
+        return;
+    }
     clearFileDragState();
 }
 
 function onGlobalDragCleanup(event) {
     const target = event?.target;
+    if (dragFilesSectionId) {
+        if (target instanceof Node && el.fileList?.contains(target)) return;
+        clearFilesSectionDragState();
+    }
     if (target instanceof Node && el.fileList?.contains(target)) return;
     if (!dragFileId && !dragFolderPath && !dragFolderHoverPath && !dragFileIds.length && !dragFolderPaths.length) return;
     clearFileDragState();
@@ -9900,6 +13881,19 @@ function onGlobalDragCleanup(event) {
 function onFileListClick(event) {
     if (event.target.closest("[data-file-rename]") || event.target.closest("[data-folder-rename]")) return;
     if (editingFileId || editingFolderPath) return;
+    const trashRow = event.target.closest("[data-trash-id]");
+    if (trashRow) {
+        void confirmRestoreTrashById(trashRow.dataset.trashId);
+        return;
+    }
+    const trashAction = event.target.closest("[data-trash-action]");
+    if (trashAction) {
+        const action = trashAction.dataset.trashAction;
+        if (action === "empty") {
+            emptyTrash();
+        }
+        return;
+    }
     const sectionToggle = event.target.closest("[data-file-section]");
     if (sectionToggle) {
         const section = sectionToggle.dataset.fileSection;
@@ -9959,6 +13953,8 @@ function onFileListDblClick(event) {
 }
 
 function onFileListContextMenu(event) {
+    const templateSection = event.target instanceof Element ? event.target.closest("#filesGames, #filesApps") : null;
+    if (templateSection) return;
     const folderRow = event.target.closest(FILE_FOLDER_ROW_SELECTOR);
     const row = event.target.closest("[data-file-id]");
     if (editingFileId || editingFolderPath) return;
@@ -9966,7 +13962,7 @@ function onFileListContextMenu(event) {
     if (folderRow) {
         const folderPath = normalizeFolderPath(folderRow.dataset.folderToggle || "", { allowEmpty: true });
         if (!folderPath) return;
-        if (!selectedFolderPaths.has(folderPath)) {
+        if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
             setSingleFolderSelection(folderPath);
             renderFileList();
         }
@@ -9977,20 +13973,22 @@ function onFileListContextMenu(event) {
         openFilesMenuAt(event.clientX, event.clientY);
         return;
     }
-    if (row.dataset.fileRowSection === "files" && !selectedFileIds.has(row.dataset.fileId)) {
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
         setSingleSelection(row.dataset.fileId);
         renderFileList();
     }
     openFileRowMenuAt(row.dataset.fileId, event.clientX, event.clientY);
 }
 
-function ensureUniqueName(name, excludeId, { ignoreCase = false } = {}) {
-    const normalized = collapseDuplicateTerminalExtension(normalizeFileName(name));
+function ensureUniqueName(name, excludeId, { ignoreCase = false, preserveExtensionless = false } = {}) {
+    const normalized = preserveExtensionless
+        ? normalizeLooseFileName(name, FILE_DEFAULT_NAME)
+        : collapseDuplicateTerminalExtension(normalizeFileName(name));
     const segments = splitPathSegments(normalized);
-    const leaf = segments.pop() || FILE_DEFAULT_NAME;
+    const leaf = segments.pop() || (preserveExtensionless ? "untitled" : FILE_DEFAULT_NAME);
     const parsed = splitLeafExtension(leaf);
     const baseStem = parsed.stem || leaf || "file";
-    const extension = parsed.extension || getFallbackFileExtension(leaf);
+    const extension = parsed.extension || (preserveExtensionless ? "" : getFallbackFileExtension(leaf));
     const prefix = segments.length ? `${buildPathFromSegments(segments)}/` : "";
     let candidate = normalized;
     let i = 2;
@@ -10000,7 +13998,9 @@ function ensureUniqueName(name, excludeId, { ignoreCase = false } = {}) {
         const fileName = normalizePathSlashes(String(f.name ?? "")).toLowerCase();
         return fileName === candidate.toLowerCase();
     })) {
-        candidate = collapseDuplicateTerminalExtension(`${prefix}${baseStem}(${i})${extension}`);
+        candidate = extension
+            ? collapseDuplicateTerminalExtension(`${prefix}${baseStem}(${i})${extension}`)
+            : collapseDuplicateTerminalExtension(`${prefix}${baseStem}(${i})`);
         i += 1;
     }
     return collapseDuplicateTerminalExtension(candidate);
@@ -10046,7 +14046,7 @@ function startRename(fileId) {
     pendingNewFileRenameId = null;
     clearFolderRenameState();
     editingFileId = fileId;
-    editingDraft = file ? file.name : "";
+    editingDraft = file ? getFileBaseName(file.name) : "";
     editingError = "";
     renderFileList();
 }
@@ -10069,14 +14069,38 @@ function commitRename(fileId, value, { cancel = false, reason = "manual" } = {})
         return;
     }
     const normalizedValue = normalizePathSlashes(String(value ?? "").trim());
-    if (reason === "blur" && pendingNewFileRenameId === fileId && normalizedValue === file.name) {
+    const currentLeafName = getFileBaseName(file.name);
+    const isPendingNewFileRename = pendingNewFileRenameId === fileId;
+    const currentExt = splitLeafExtension(currentLeafName).extension;
+    const shouldPreserveExtensionless = isPendingNewFileRename || !currentExt;
+    if (reason === "blur" && isPendingNewFileRename && normalizedValue === currentLeafName) {
         editingFileId = fileId;
-        editingDraft = file.name;
+        editingDraft = currentLeafName;
         editingError = "";
         renderFileList();
         return;
     }
-    const check = validateFileName(value, { currentFile: file });
+    const valueSegments = splitPathSegments(normalizedValue);
+    if (valueSegments.length > 1) {
+        editingFileId = fileId;
+        editingDraft = value;
+        editingError = "Use file name only (folder path is kept).";
+        renderFileList();
+        return;
+    }
+    const leafName = valueSegments[0] || normalizedValue;
+    let nextLeaf = leafName;
+    if (nextLeaf) {
+        const parsedNextLeaf = splitLeafExtension(nextLeaf);
+        if (!parsedNextLeaf.extension && !shouldPreserveExtensionless) {
+            if (currentExt) {
+                nextLeaf = `${nextLeaf}${currentExt}`;
+            }
+        }
+    }
+    const fileDir = getFileDirectory(file.name);
+    const nextPath = fileDir ? `${fileDir}/${nextLeaf}` : nextLeaf;
+    const check = validateFileName(nextPath, { currentFile: file });
     if (!check.valid) {
         editingFileId = fileId;
         editingDraft = value;
@@ -10084,7 +14108,9 @@ function commitRename(fileId, value, { cancel = false, reason = "manual" } = {})
         renderFileList();
         return;
     }
-    const next = collapseDuplicateTerminalExtension(ensureUniqueName(value, fileId));
+    const next = collapseDuplicateTerminalExtension(
+        ensureUniqueName(nextPath, fileId, { preserveExtensionless: shouldPreserveExtensionless })
+    );
     const changed = next !== file.name;
     file.name = next;
     if (changed) {
@@ -10562,10 +14588,35 @@ function exposeDebug() {
                 folder: game.folder,
                 entryFile: game.entryFile,
                 files: game.files.map((file) => ({ path: file.path, src: file.src })),
+                iconSources: [...(game.iconSources || [])],
             }));
         },
         loadGame(id, { run = false } = {}) {
             return loadGameById(id, { runAfter: run });
+        },
+        listApplications() {
+            return applications.map((app) => ({
+                id: app.id,
+                name: app.name,
+                folder: app.folder,
+                entryFile: app.entryFile,
+                files: app.files.map((file) => ({ path: file.path, src: file.src })),
+                iconSources: [...(app.iconSources || [])],
+            }));
+        },
+        loadApplication(id, { run = false } = {}) {
+            return loadApplicationById(id, { runAfter: run });
+        },
+        listFilesSectionOrder() {
+            return getFilesSectionOrder();
+        },
+        setFilesSectionOrder(order = []) {
+            setFilesSectionOrder(order, { persist: true, render: true });
+            return getFilesSectionOrder();
+        },
+        moveFilesSection(sourceId, targetId, { placeAfter = false } = {}) {
+            moveFilesSection(sourceId, targetId, { placeAfter });
+            return getFilesSectionOrder();
         },
         setCode(code) {
             setEditorValue(String(code ?? ""), { silent: true });
@@ -10598,6 +14649,8 @@ function exposeDebug() {
                 id: file.id,
                 name: file.name,
                 deletedAt: file.deletedAt,
+                deletedFolderPath: file.deletedFolderPath || "",
+                deletedGroupId: file.deletedGroupId || "",
             }));
         },
         saveFile() {
@@ -10694,7 +14747,7 @@ function exposeDebug() {
             const before = snapshotWorkspaceState();
             queueDeleteUndo("Deleted all files");
             pushFilesToTrash(files);
-            const fallback = makeFile(FILE_DEFAULT_NAME, "");
+            const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
             files = [fallback];
             activeFileId = fallback.id;
             openTabIds = [fallback.id];
@@ -10866,7 +14919,7 @@ function exposeDebug() {
             return applyEditorProfile(profile, { persist: true });
         },
         setEditorOption(key, value) {
-            if (!["tabSize", "fontSize", "fontFamily", "lineWrapping", "lintEnabled", "errorLensEnabled", "snippetEnabled", "autosaveMs", "formatterMode"].includes(key)) {
+            if (!["tabSize", "fontSize", "fontFamily", "syntaxTheme", "lineWrapping", "lintEnabled", "errorLensEnabled", "snippetEnabled", "autosaveMs", "formatterMode"].includes(key)) {
                 return false;
             }
             editorSettings = sanitizeEditorSettings({ ...editorSettings, [key]: value });
@@ -10875,6 +14928,12 @@ function exposeDebug() {
         },
         runTask(taskId) {
             return runTaskRunnerTask(taskId);
+        },
+        openDevTerminal() {
+            return focusDevTerminalInput({ openLog: true });
+        },
+        runDevTerminal(command) {
+            return executeDevTerminalCommand(command);
         },
         clearTaskOutput() {
             clearTaskRunnerOutput();
@@ -10922,7 +14981,7 @@ function exposeDebug() {
                 "fazide.setPanelOrder('log'|'editor'|'files'|'sandbox'|'tools', 0..3)",
                 "fazide.dockPanel('log'|'editor'|'files'|'sandbox'|'tools', 'top'|'bottom')",
                 "fazide.setCode('...') / fazide.getCode()",
-                "fazide.setTheme('dark'|'light'|'purple') / fazide.getTheme()",
+                "fazide.setTheme('dark'|'light'|'purple'|'retro'|'temple') / fazide.getTheme()",
                 "fazide.listFiles() / fazide.listTrash() / fazide.createFile('name.js', 'code') / fazide.createFolder('src')",
                 "fazide.listFolders() / fazide.renameFolder('src','core') / fazide.deleteFolder('src') / fazide.moveFileToFolder('main.js','core')",
                 "fazide.deleteFile('name.js') / fazide.deleteAllFiles() / fazide.undoDelete()",
@@ -10938,14 +14997,16 @@ function exposeDebug() {
                 "fazide.snapshotCode() / fazide.listCodeSnapshots()",
                 "fazide.setEditorProfile('balanced'|'focus'|'presentation')",
                 "fazide.runTask('run-all'|'run-app'|'lint-workspace'|'format-active'|'save-all') / fazide.listTaskOutput()",
+                "fazide.openDevTerminal() / fazide.runDevTerminal('help')",
                 "fazide.registerCommand({ id, label, run, keywords, shortcut }) / fazide.unregisterCommand(id)",
                 "fazide.registerSnippet({ trigger, template, scope }) / fazide.unregisterSnippet(trigger, scope?)",
                 "fazide.setDebugMode(true) / fazide.addBreakpoint(12) / fazide.addWatch('someVar')",
                 "fazide.listGames() / fazide.loadGame('click-counter', { run: true })",
+                "fazide.listApplications() / fazide.loadApplication('calculator-app', { run: true })",
                 "fazide.setLogWidth(px) / fazide.setSidebarWidth(px) / fazide.setSandboxWidth(px) / fazide.setToolsWidth(px)",
                 "fazide.setSizes({ logWidth, sidebarWidth, sandboxWidth, toolsWidth })",
                 "fazide.setPanelGap(px) / fazide.setCornerRadius(px) / fazide.setBottomHeight(px)",
-                "fazide.applyPreset('studio'|'focus'|'review'|'wide')",
+                "fazide.applyPreset('studio'|'focus'|'review'|'wide'|'debug'|'zen'|'sandbox'|'diagnostics')",
                 "fazide.resetLayout()",
                 "fazide.runSample('basic'|'error'|'async'|'inspect')",
             ];
@@ -11095,11 +15156,13 @@ function exitRunnerFullscreen() {
 
 async function boot() {
     loadEditorSettings();
+    renderEditorSyntaxThemeSelectOptions();
     loadSnippetRegistry();
     loadCodeHistory();
     wireDiagnostics();
     wireProblemsPanel();
     wireTaskRunner();
+    wireDevTerminal();
     registerServiceWorker();
     checkStorageHealth();
     setDiagnosticsVerbose(false);
@@ -11118,6 +15181,8 @@ async function boot() {
     wireEditorHistory();
     wireEditorSettings();
     wireDebugger();
+    wireHorizontalHeaderScroll();
+    wireFooterMiddleMouseScroll();
     setLayoutPanelOpen(false);
     setShortcutHelpOpen(false);
     setEditorSearchOpen(false);
@@ -11154,6 +15219,12 @@ async function boot() {
 
     const rawLayout = load(STORAGE.LAYOUT);
     layoutState = loadLayout(rawLayout);
+    layoutState.filesFiltersOpen = false;
+    layoutState.filesOpenEditorsOpen = false;
+    layoutState.filesListOpen = false;
+    layoutState.filesTrashOpen = false;
+    gamesSelectorOpen = false;
+    applicationsSelectorOpen = false;
     applyLayout();
     if (!rawLayout) {
         requestAnimationFrame(() => syncDefaultEditorSandboxWidth({ persist: true }));
@@ -11180,7 +15251,8 @@ async function boot() {
     }
     renderFileList();
     renderEditorMirror();
-    syncGamesUI({ force: true });
+    syncGamesUI();
+    syncApplicationsUI();
     persistFiles("boot");
     setSessionState(true);
 
@@ -11214,9 +15286,11 @@ async function boot() {
         status.set("Unsaved");
         renderFileList();
         renderEditorMirror();
+        syncEditorStatusBar();
     });
 
     editor.onCursorActivity?.(() => {
+        syncEditorStatusBar();
         if (!snippetSession) return;
         const current = editor.getSelections?.()[0];
         if (!current) return;
@@ -11395,15 +15469,6 @@ async function boot() {
         });
     }
     if (el.filesMenu) {
-        if (el.newFileTypeSelect) {
-            newFileTypePreference = normalizeNewFileTypePreference(el.newFileTypeSelect.value);
-            el.newFileTypeSelect.value = newFileTypePreference;
-            el.newFileTypeSelect.addEventListener("change", (event) => {
-                const next = normalizeNewFileTypePreference(event.target.value);
-                newFileTypePreference = next;
-                event.target.value = next;
-            });
-        }
         el.filesMenu.addEventListener("click", (event) => {
             const toggleBtn = event.target.closest("[data-files-toggle]");
             if (toggleBtn) {
@@ -11413,6 +15478,9 @@ async function boot() {
                 }
                 if (target === "games") {
                     setFilesGamesOpen(!layoutState.filesGamesOpen);
+                }
+                if (target === "applications") {
+                    setFilesAppsOpen(!layoutState.filesAppsOpen);
                 }
                 if (target === "open-editors") {
                     setFilesSectionOpen("open-editors", !layoutState.filesOpenEditorsOpen);
@@ -11442,6 +15510,7 @@ async function boot() {
             if (action === "clear-selection") clearFileSelection({ keepActive: true });
             if (action === "trash-selected") bulkTrashSelectedFiles();
             if (action === "move-selected") promptMoveSelectedEntries();
+            if (action === "duplicate-selected") duplicateSelectedFiles();
             if (action === "pin-selected") bulkSetPinned(true);
             if (action === "unpin-selected") bulkSetPinned(false);
             if (action === "lock-selected") bulkSetLocked(true);
@@ -11509,6 +15578,7 @@ async function boot() {
     if (el.editorTabs) {
         el.editorTabs.addEventListener("click", onEditorTabsClick);
         el.editorTabs.addEventListener("keydown", onEditorTabsKey);
+        el.editorTabs.addEventListener("wheel", onEditorTabsWheel, { passive: false });
     }
     el.fileList.addEventListener("click", onFileListClick);
     el.fileList.addEventListener("dblclick", onFileListDblClick);
@@ -11563,16 +15633,92 @@ async function boot() {
             event.target.value = "";
         });
     }
-    if (el.gameSelect) {
-        el.gameSelect.addEventListener("change", () => {
+    if (el.gamesSelectorToggle) {
+        el.gamesSelectorToggle.addEventListener("click", () => {
+            gamesSelectorOpen = !gamesSelectorOpen;
             syncGamesUI();
+        });
+    }
+    if (el.gamesList) {
+        el.gamesList.addEventListener("click", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-game-id]") : null;
+            if (!target) return;
+            const id = String(target.dataset.gameId || "");
+            if (!id || id === selectedGameId) return;
+            selectedGameId = id;
+            syncGamesUI();
+        });
+        el.gamesList.addEventListener("keydown", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-game-id]") : null;
+            if (!target) return;
+            const options = Array.from(el.gamesList.querySelectorAll("[data-game-id]"));
+            const index = options.indexOf(target);
+            if (index === -1) return;
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const delta = event.key === "ArrowDown" ? 1 : -1;
+                const next = options[(index + delta + options.length) % options.length];
+                next?.focus();
+                return;
+            }
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                const id = String(target.dataset.gameId || "");
+                if (!id || id === selectedGameId) return;
+                selectedGameId = id;
+                syncGamesUI();
+            }
+        });
+    }
+    if (el.appsSelectorToggle) {
+        el.appsSelectorToggle.addEventListener("click", () => {
+            applicationsSelectorOpen = !applicationsSelectorOpen;
+            syncApplicationsUI();
+        });
+    }
+    if (el.applicationsList) {
+        el.applicationsList.addEventListener("click", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-application-id]") : null;
+            if (!target) return;
+            const id = String(target.dataset.applicationId || "");
+            if (!id || id === selectedApplicationId) return;
+            selectedApplicationId = id;
+            syncApplicationsUI();
+        });
+        el.applicationsList.addEventListener("keydown", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-application-id]") : null;
+            if (!target) return;
+            const options = Array.from(el.applicationsList.querySelectorAll("[data-application-id]"));
+            const index = options.indexOf(target);
+            if (index === -1) return;
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const delta = event.key === "ArrowDown" ? 1 : -1;
+                const next = options[(index + delta + options.length) % options.length];
+                next?.focus();
+                return;
+            }
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                const id = String(target.dataset.applicationId || "");
+                if (!id || id === selectedApplicationId) return;
+                selectedApplicationId = id;
+                syncApplicationsUI();
+            }
         });
     }
     if (el.gameLoad) {
         el.gameLoad.addEventListener("click", async () => {
-            const id = el.gameSelect?.value;
+            const id = selectedGameId;
             if (!id) return;
             await loadGameById(id, { runAfter: false });
+        });
+    }
+    if (el.appLoad) {
+        el.appLoad.addEventListener("click", async () => {
+            const id = selectedApplicationId;
+            if (!id) return;
+            await loadApplicationById(id, { runAfter: false });
         });
     }
     el.btnRunnerFull.addEventListener("click", toggleRunnerFullscreen);
@@ -11588,11 +15734,6 @@ async function boot() {
     el.btnToggleSandbox.addEventListener("click", () => togglePanel("sandbox"));
     if (el.btnToggleTools) {
         el.btnToggleTools.addEventListener("click", () => togglePanel("tools"));
-    }
-    el.btnCloseLog.addEventListener("click", () => setPanelOpen("log", false));
-    el.btnCloseSandbox.addEventListener("click", () => setPanelOpen("sandbox", false));
-    if (el.btnCloseTools) {
-        el.btnCloseTools.addEventListener("click", () => setPanelOpen("tools", false));
     }
     if (el.btnToggleHeader) {
         el.btnToggleHeader.addEventListener("click", () => {
@@ -11938,8 +16079,7 @@ async function boot() {
     });
 
     window.addEventListener("resize", () => {
-        normalizeLayoutWidths();
-        syncLayoutControls();
+        queueLayoutResizeSync();
     });
     window.addEventListener("beforeunload", (event) => {
         flushEditorAutosave();
@@ -11966,10 +16106,36 @@ function run() {
     const activeFile = getActiveFile();
     const activeLanguage = detectLanguageFromFileName(activeFile?.name || "");
     const entryName = activeFile?.name || FILE_DEFAULT_NAME;
+    let workspaceFileMap = null;
+    let fromDirSegmentsCache = null;
+    let resolvedAssetFileCache = null;
+    let sourceLanguageCache = null;
+    const ensureWorkspaceResolverState = () => {
+        if (workspaceFileMap && fromDirSegmentsCache && resolvedAssetFileCache && sourceLanguageCache) return;
+        workspaceFileMap = new Map(
+            files.map((file) => [
+                normalizePathSlashes(String(file.name || "")).toLowerCase(),
+                file,
+            ])
+        );
+        fromDirSegmentsCache = new Map();
+        resolvedAssetFileCache = new Map();
+        sourceLanguageCache = new Map();
+    };
     const resolveWorkspaceFile = (filePath = "") => {
+        ensureWorkspaceResolverState();
         const normalized = normalizePathSlashes(String(filePath || "")).toLowerCase();
         if (!normalized) return null;
-        return files.find((file) => normalizePathSlashes(String(file.name || "")).toLowerCase() === normalized) || null;
+        return workspaceFileMap.get(normalized) || null;
+    };
+    const getSourceLanguage = (fileName = "") => {
+        ensureWorkspaceResolverState();
+        const key = String(fileName || "").toLowerCase();
+        if (!key) return "";
+        if (sourceLanguageCache.has(key)) return sourceLanguageCache.get(key);
+        const language = detectLanguageFromFileName(key);
+        sourceLanguageCache.set(key, language);
+        return language;
     };
     const isExternalAssetRef = (value = "") => {
         const normalized = String(value || "").trim().toLowerCase();
@@ -11977,23 +16143,80 @@ function run() {
         return /^[a-z][a-z0-9+.-]*:/.test(normalized);
     };
     const stripAssetDecorators = (value = "") => String(value || "").split("#")[0].split("?")[0];
-    const resolveWorkspaceAssetPath = (fromFileName, assetRef) => {
-        if (isExternalAssetRef(assetRef)) return "";
-        const clean = normalizePathSlashes(stripAssetDecorators(assetRef));
-        if (!clean) return "";
-        const rootRelative = clean.startsWith("/");
-        const baseSegments = rootRelative ? [] : splitPathSegments(getFileDirectory(fromFileName));
-        const refSegments = splitPathSegments(rootRelative ? clean.slice(1) : clean);
-        if (!refSegments.length) return "";
-        refSegments.forEach((segment) => {
+    const resolveWorkspacePath = (baseSegments = [], refValue = "") => {
+        const segments = Array.isArray(baseSegments) ? [...baseSegments] : [];
+        splitPathSegments(refValue).forEach((segment) => {
             if (segment === ".") return;
             if (segment === "..") {
-                if (baseSegments.length) baseSegments.pop();
+                if (segments.length) segments.pop();
                 return;
             }
-            baseSegments.push(segment);
+            segments.push(segment);
         });
-        return buildPathFromSegments(baseSegments);
+        return buildPathFromSegments(segments);
+    };
+    const dedupeWorkspacePaths = (values = []) => {
+        const seen = new Set();
+        return (Array.isArray(values) ? values : [])
+            .map((value) => normalizePathSlashes(String(value || "")).replace(/^\/+/, ""))
+            .filter((value) => {
+                const normalized = value.trim();
+                if (!normalized) return false;
+                const key = normalized.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+    };
+    const resolveWorkspaceAssetPaths = (fromFileName, assetRef) => {
+        ensureWorkspaceResolverState();
+        if (isExternalAssetRef(assetRef)) return [];
+        const clean = normalizePathSlashes(stripAssetDecorators(assetRef));
+        if (!clean) return [];
+        const rootRelative = clean.startsWith("/");
+        const refValue = rootRelative ? clean.slice(1) : clean;
+        const fromKey = normalizePathSlashes(String(fromFileName || "")).toLowerCase();
+        const fromDirSegments = fromDirSegmentsCache.has(fromKey)
+            ? fromDirSegmentsCache.get(fromKey)
+            : splitPathSegments(getFileDirectory(fromKey));
+        if (!fromDirSegmentsCache.has(fromKey)) {
+            fromDirSegmentsCache.set(fromKey, fromDirSegments);
+        }
+        const directPath = resolveWorkspacePath(rootRelative ? [] : fromDirSegments, refValue);
+        if (rootRelative) return dedupeWorkspacePaths([directPath]);
+
+        // Compatibility: users often author refs like "./assets/..." from nested files while
+        // expecting workspace-root resolution, so keep relative-first and fallback to root.
+        const rootFallbackPath = resolveWorkspacePath([], refValue);
+        const looksRootAnchored =
+            refValue.startsWith("./") ||
+            refValue.startsWith("../") ||
+            refValue.startsWith("assets/") ||
+            refValue.startsWith("apps/") ||
+            refValue.startsWith("games/");
+        return dedupeWorkspacePaths(
+            looksRootAnchored || directPath !== rootFallbackPath
+                ? [directPath, rootFallbackPath]
+                : [directPath]
+        );
+    };
+    const resolveWorkspaceAssetFile = (fromFileName, assetRef) => {
+        ensureWorkspaceResolverState();
+        const cacheKey = `${normalizePathSlashes(String(fromFileName || "")).toLowerCase()}::${normalizePathSlashes(String(assetRef || "")).trim().toLowerCase()}`;
+        if (resolvedAssetFileCache.has(cacheKey)) {
+            return resolvedAssetFileCache.get(cacheKey);
+        }
+        const candidates = resolveWorkspaceAssetPaths(fromFileName, assetRef);
+        let resolved = null;
+        for (let i = 0; i < candidates.length; i += 1) {
+            const sourceFile = resolveWorkspaceFile(candidates[i]);
+            if (sourceFile) {
+                resolved = sourceFile;
+                break;
+            }
+        }
+        resolvedAssetFileCache.set(cacheKey, resolved);
+        return resolved;
     };
     const sanitizeStyleForHtml = (value = "") => String(value ?? "").replace(/<\/style>/gi, "<\\/style>");
     const buildHtmlFromWorkspace = (htmlSource, fromFileName) => {
@@ -12004,10 +16227,8 @@ function run() {
             const rel = String(link.getAttribute("rel") || "").toLowerCase();
             if (rel && !rel.split(/\s+/).includes("stylesheet")) return;
             const href = link.getAttribute("href") || "";
-            const resolvedPath = resolveWorkspaceAssetPath(fromFileName, href);
-            if (!resolvedPath) return;
-            const sourceFile = resolveWorkspaceFile(resolvedPath);
-            if (!sourceFile || detectLanguageFromFileName(sourceFile.name) !== "css") return;
+            const sourceFile = resolveWorkspaceAssetFile(fromFileName, href);
+            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "css") return;
             const style = doc.createElement("style");
             style.setAttribute("data-fazide-source", sourceFile.name);
             style.textContent = sanitizeStyleForHtml(sourceFile.code);
@@ -12016,10 +16237,8 @@ function run() {
 
         Array.from(doc.querySelectorAll("script[src]")).forEach((script) => {
             const src = script.getAttribute("src") || "";
-            const resolvedPath = resolveWorkspaceAssetPath(fromFileName, src);
-            if (!resolvedPath) return;
-            const sourceFile = resolveWorkspaceFile(resolvedPath);
-            if (!sourceFile || detectLanguageFromFileName(sourceFile.name) !== "javascript") return;
+            const sourceFile = resolveWorkspaceAssetFile(fromFileName, src);
+            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "javascript") return;
             const inline = doc.createElement("script");
             Array.from(script.attributes).forEach((attr) => {
                 if (String(attr.name || "").toLowerCase() === "src") return;
@@ -12072,15 +16291,14 @@ function run() {
     }
 
     try {
+        clearSandboxReadyTimer();
         // This resets iframe document + runs bridge + user code.
         runInSandbox(getRunnerFrame(), runnableSource, currentToken, { mode: sandboxMode });
         const tokenAtRun = currentToken;
-        setTimeout(() => {
+        sandboxRunReadyTimer = setTimeout(() => {
             if (currentToken !== tokenAtRun) return;
-            if (health.sandbox && health.sandbox.dataset.state === "warn") {
-                setHealth(health.sandbox, "ok", "Sandbox: Ready");
-            }
-        }, 300);
+            markSandboxReady();
+        }, SANDBOX_READY_FALLBACK_MS);
         ensureSandboxOpen("Sandbox opened for run.");
 
         if (inspectEnabled) {
@@ -12096,6 +16314,7 @@ function run() {
         status.set("Ran");
     } catch (err) {
         // If writing the iframe fails (rare), surface it in the log.
+        clearSandboxReadyTimer();
         setHealth(health.sandbox, "error", "Sandbox: Failed");
         pushDiag("error", "Sandbox failed to load.");
         logger.append("error", [String(err)]);
@@ -12111,6 +16330,7 @@ function onSandboxMessage(event) {
     // Notes:
     // - Source tag prevents other postMessage traffic from being handled.
     if (!data || data.source !== "fazide") return;
+    if (!isTrustedSandboxMessageEvent(event)) return;
 
     // Token gate: ignore older runs/noise
     // Notes:
@@ -12118,12 +16338,22 @@ function onSandboxMessage(event) {
     // - Token gating keeps the console panel "current run only".
     if (!data.token || data.token !== currentToken) return;
 
+    if (data.type === "bridge_ready") {
+        markSandboxReady();
+        return;
+    }
+
+    if (data.type === "bridge_error") {
+        const message = String(data?.payload?.message || "Unknown bridge error");
+        logger.append("warn", [`Sandbox bridge warning: ${message}`]);
+        return;
+    }
+
     // Console forwarding
     if (data.type === "console") {
         // payload: { level, args }
-        setHealth(health.sandbox, "ok", "Sandbox: Ready");
-        ensureLogOpen("Console opened for new logs.");
-        logger.append(data.payload.level, data.payload.args);
+        const safeConsole = normalizeSandboxConsolePayload(data.payload);
+        queueSandboxConsoleLog(safeConsole.level, safeConsole.args);
         return;
     }
 
@@ -12158,35 +16388,43 @@ function onSandboxMessage(event) {
     if (data.type === "runtime_error") {
         // payload: { message , filename, lineno, colno }
         const e = data.payload;
+        const message = truncateText(String(e?.message || "Runtime error"), SANDBOX_RUNTIME_MESSAGE_MAX_CHARS);
+        const fileNameLabel = truncateText(String(e?.filename || "unknown"), 180, { suffix: "..." });
+        const lineNo = Number.isFinite(Number(e?.lineno)) ? Number(e.lineno) : 0;
+        const colNo = Number.isFinite(Number(e?.colno)) ? Number(e.colno) : 0;
+        const formatted = `${message} (${fileNameLabel}:${lineNo}:${colNo})`;
         ensureLogOpen("Console opened for runtime error.");
-        logger.append("error", [`${e.message} (${e.filename}:${e.lineno}:${e.colno})`]);
+        logger.append("error", [formatted]);
         const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
         pushRuntimeProblem({
-            message: `${e.message} (${e.filename}:${e.lineno}:${e.colno})`,
+            message: formatted,
             fileId: currentRunFileId,
             fileName,
-            line: Number.isFinite(Number(e?.lineno)) ? Number(e.lineno) - 1 : null,
-            ch: Number.isFinite(Number(e?.colno)) ? Number(e.colno) - 1 : null,
-            endCh: Number.isFinite(Number(e?.colno)) ? Number(e.colno) : null,
+            line: lineNo > 0 ? lineNo - 1 : null,
+            ch: colNo > 0 ? colNo - 1 : null,
+            endCh: colNo > 0 ? colNo : null,
             level: "error",
             kind: "runtime",
         });
+        clearSandboxReadyTimer();
         status.set("Error");
         return;
     }
 
     // Async errors (unhandled promise rejection)
     if (data.type === "promise_rejection") {
+        const reason = truncateText(String(data?.payload?.reason || "Unknown rejection"), SANDBOX_PROMISE_REASON_MAX_CHARS);
         ensureLogOpen("Console opened for promise rejection.");
-        logger.append("error", [`Unhandled promise rejection: ${data.payload.reason}`]);
+        logger.append("error", [`Unhandled promise rejection: ${reason}`]);
         const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
         pushRuntimeProblem({
-            message: `Unhandled promise rejection: ${data.payload.reason}`,
+            message: `Unhandled promise rejection: ${reason}`,
             fileId: currentRunFileId,
             fileName,
             level: "error",
             kind: "promise",
         });
+        clearSandboxReadyTimer();
         status.set("Error");
         return;
     }
