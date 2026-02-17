@@ -6,8 +6,6 @@
    - layout and components live elsewhere
 */
 
-@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Inconsolata:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Ubuntu+Mono:wght@400;700&display=swap");
-
 :root {
     color-scheme: dark;
 
@@ -75,6 +73,8 @@
     --btn-pressed-border: rgba(56, 189, 248, 0.6);
     --btn-pressed-text: rgba(56, 189, 248, 0.95);
     --btn-pressed-shadow: rgba(56, 189, 248, 0.2);
+    --theme-select-pulse-start: rgba(56, 189, 248, 0);
+    --theme-select-pulse-end: var(--ring-focus-soft);
     --select-arrow-color: rgba(148, 163, 184, 0.88);
 
     /* Section + menu surfaces */
@@ -228,16 +228,20 @@
     --motion-slow: 0.24s;
     --motion-ease: ease;
     --motion-ease-emphasized: cubic-bezier(0.2, 0.7, 0.15, 1);
-    --control-height-compact: 22px;
-    --control-height-xs: 26px;
-    --control-height-sm: 28px;
-    --control-height-md: 30px;
-    --control-height-lg: 32px;
-    --control-height-xl: 38px;
+    --control-height-compact: 24px;
+    --control-height-xs: 28px;
+    --control-height-sm: 30px;
+    --control-height-md: 32px;
+    --control-height-lg: 34px;
+    --control-height-xl: 40px;
     --control-size-xs: 18px;
     --control-size-sm: 26px;
     --control-size-md: 28px;
     --control-size-lg: 30px;
+    --field-pad-y: 7px;
+    --field-pad-x: 10px;
+    --text-size-2xs: 12px;
+    --text-size-xs: 13px;
     --top-theme-width: 126px;
     --panel-min-width: 180px;
     --panel-min-width-editor: 180px;
@@ -249,6 +253,19 @@
     --footer-chip-height: 22px;
     --splitter-hit-area: 16px;
     --splitter-overlap: 8px;
+    --modal-radius: var(--radius-sm);
+    --modal-padding: 10px;
+    --modal-gap: 8px;
+    --modal-border-color: var(--border-control);
+    --modal-surface: var(--menu-bg);
+    --modal-shadow: var(--menu-shadow);
+    --modal-max-height: 88vh;
+    --modal-header-min-height: 58px;
+    --modal-header-padding-y: 8px;
+    --modal-header-border: var(--border-soft);
+    --modal-width-sm: min(520px, calc(100vw - 20px));
+    --modal-width-md: min(680px, calc(100vw - 20px));
+    --modal-width-lg: min(700px, calc(100vw - 24px));
 
     /* Scrollbars */
     --scrollbar-size: 4px;
@@ -256,15 +273,26 @@
     --scrollbar-thumb: rgba(148, 163, 184, 0.28);
     --scrollbar-thumb-hover: rgba(148, 163, 184, 0.45);
 
+    /* Tools panel layout tokens */
+    --tools-gap: 6px;
+    --tools-pad: 6px;
+    --tools-section-pad: 8px;
+    --tools-section-gap: 6px;
+    --tools-header-gap: 6px;
+    --tools-action-gap: 6px;
+    --tools-action-min-height: var(--control-height-sm);
+    --tools-action-font-size: var(--text-size-2xs);
+    --tools-section-min-height: 110px;
+
     /* Radius + shadow */
-    --radius-xxs: 4px;
-    --radius-xs: 6px;
-    --radius-md: 8px;
-    --radius-lg: 9px;
-    --radius-xl: 10px;
-    --radius-2xl: 12px;
-    --radius-3xl: 14px;
-    --radius-pill: 999px;
+    --radius-xxs: 0px;
+    --radius-xs: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    --radius-xl: 0px;
+    --radius-2xl: 0px;
+    --radius-3xl: 0px;
+    --radius-pill: 0px;
     --radius: 0px;
     --radius-sm: 0px;
     --shadow: none;
@@ -279,8 +307,8 @@
 /* Reset */
 * {
     box-sizing: border-box;
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) transparent;
+    /* scrollbar-width: thin;  // Not fully supported, see compatibility notes */
+    /* scrollbar-color: var(--scrollbar-thumb) transparent;  // Not fully supported, see compatibility notes */
 }
 html, body { height: 100%; }
 html {

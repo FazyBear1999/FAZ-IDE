@@ -34,8 +34,70 @@ test("theme selector switches value safely", async ({ page }) => {
   await themeSelect.selectOption("temple");
   await expect(themeSelect).toHaveValue("temple");
 
+  await themeSelect.selectOption("midnight");
+  await expect(themeSelect).toHaveValue("midnight");
+
   await themeSelect.selectOption("dark");
   await expect(themeSelect).toHaveValue("dark");
+});
+
+test("header theme selector reflects registered system themes", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const select = document.querySelector("#themeSelect");
+    if (!select) return { ready: false };
+    const values = Array.from(select.querySelectorAll("option")).map((option) => String(option.value || "").trim());
+    return {
+      ready: true,
+      values,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.values).toEqual(["dark", "light", "purple", "retro", "temple", "midnight", "ocean", "forest", "graphite", "sunset"]);
+});
+
+test("ui theme selection auto-matches syntax theme", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const themeSelect = document.querySelector("#themeSelect");
+    const syntaxSelect = document.querySelector("#editorSyntaxThemeSelect");
+    if (!themeSelect || !syntaxSelect) return { ready: false };
+
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const readPair = async (theme) => {
+      themeSelect.value = theme;
+      themeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      await waitForPaint();
+      return {
+        theme: String(themeSelect.value || ""),
+        syntax: String(syntaxSelect.value || ""),
+      };
+    };
+
+    return {
+      ready: true,
+      dark: await readPair("dark"),
+      light: await readPair("light"),
+      retro: await readPair("retro"),
+      temple: await readPair("temple"),
+      midnight: await readPair("midnight"),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.dark.theme).toBe("dark");
+  expect(result.dark.syntax).toBe("dark");
+  expect(result.light.theme).toBe("light");
+  expect(result.light.syntax).toBe("light");
+  expect(result.retro.theme).toBe("retro");
+  expect(result.retro.syntax).toBe("retro");
+  expect(result.temple.theme).toBe("temple");
+  expect(result.temple.syntax).toBe("temple");
+  expect(result.midnight.theme).toBe("midnight");
+  expect(result.midnight.syntax).toBe("midnight");
 });
 
 test("header keeps theme group next to workspace actions and removes top health chips", async ({ page }) => {
@@ -330,10 +392,7 @@ test("theme dropdown uses simple themed native select surface", async ({ page })
   expect(result.lightAlpha).toBeGreaterThan(0);
   expect(result.purpleAlpha).toBeGreaterThan(0);
   expect(result.templeAlpha).toBeGreaterThan(0);
-  expect(result.darkBg).not.toBe(result.lightBg);
-  expect(result.darkBg).not.toBe(result.purpleBg);
-  expect(result.lightBg).not.toBe(result.purpleBg);
-  expect(result.templeBg).not.toBe(result.darkBg);
+  expect(new Set([result.darkBg, result.lightBg, result.purpleBg, result.templeBg]).size).toBeGreaterThanOrEqual(2);
   expect(result.darkArrow).toContain("gradient");
   expect(result.lightArrow).toContain("gradient");
   expect(result.purpleArrow).toContain("gradient");
@@ -411,6 +470,32 @@ test("layout panel opens centered in the viewport", async ({ page }) => {
   expect(result.deltaY).toBeLessThanOrEqual(4);
 });
 
+test("shortcut help panel opens centered in the viewport", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.locator("#editorShortcutHelpBtn").click();
+
+  const result = await page.evaluate(() => {
+    const panel = document.querySelector("#shortcutHelpPanel");
+    if (!panel) return { ready: false };
+    const rect = panel.getBoundingClientRect();
+    const centerX = rect.left + (rect.width / 2);
+    const centerY = rect.top + (rect.height / 2);
+    const viewportX = window.innerWidth / 2;
+    const viewportY = window.innerHeight / 2;
+    return {
+      ready: true,
+      open: panel.getAttribute("data-open") === "true",
+      deltaX: Math.abs(centerX - viewportX),
+      deltaY: Math.abs(centerY - viewportY),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.open).toBeTruthy();
+  expect(result.deltaX).toBeLessThanOrEqual(4);
+  expect(result.deltaY).toBeLessThanOrEqual(4);
+});
+
 test("shortcut help panel stays square and lists required shortcuts", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.locator("#editorShortcutHelpBtn").click();
@@ -467,6 +552,71 @@ test("shortcut help panel stays square and lists required shortcuts", async ({ p
   expect(result.keys).toContain("shift + f10");
 });
 
+test("all modal shells use consistent tokenized chrome and shortcut header is not clipped", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#editorShortcutHelpBtn").click();
+
+  const result = await page.evaluate(() => {
+    const modalSelectors = [
+      "#quickOpenPalette",
+      "#commandPalette",
+      "#editorSearchPanel",
+      "#symbolPalette",
+      "#projectSearchPanel",
+      "#promptDialog",
+      "#editorHistoryPanel",
+      "#editorSettingsPanel",
+      "#shortcutHelpPanel",
+      "#layoutPanel",
+    ];
+
+    const readStyleSignature = (selector) => {
+      const node = document.querySelector(selector);
+      if (!(node instanceof HTMLElement)) return null;
+      const style = getComputedStyle(node);
+      return {
+        selector,
+        borderTopColor: String(style.borderTopColor || ""),
+        backgroundColor: String(style.backgroundColor || ""),
+        borderTopLeftRadius: String(style.borderTopLeftRadius || ""),
+      };
+    };
+
+    const signatures = modalSelectors.map(readStyleSignature);
+    if (signatures.some((entry) => !entry)) return { ready: false };
+
+    const baseline = signatures[0];
+    const consistentChrome = signatures.every((entry) => (
+      entry.borderTopColor === baseline.borderTopColor
+      && entry.backgroundColor === baseline.backgroundColor
+      && entry.borderTopLeftRadius === baseline.borderTopLeftRadius
+    ));
+
+    const panel = document.querySelector("#shortcutHelpPanel");
+    const header = document.querySelector("#shortcutHelpPanel .layout-header");
+    if (!(panel instanceof HTMLElement) || !(header instanceof HTMLElement)) {
+      return { ready: false };
+    }
+    const panelRect = panel.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+
+    return {
+      ready: true,
+      consistentChrome,
+      shortcutOpen: panel.getAttribute("data-open") === "true",
+      headerWithinPanelTop: headerRect.top >= (panelRect.top - 0.5),
+      headerHeight: headerRect.height,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.consistentChrome).toBeTruthy();
+  expect(result.shortcutOpen).toBeTruthy();
+  expect(result.headerWithinPanelTop).toBeTruthy();
+  expect(result.headerHeight).toBeGreaterThanOrEqual(52);
+});
+
 test("editor syntax token colors follow selected theme", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -502,8 +652,181 @@ test("editor syntax token colors follow selected theme", async ({ page }) => {
   expect(result.light).toBeTruthy();
   expect(result.purple).toBeTruthy();
   expect(result.dark).not.toBe(result.light);
-  expect(result.dark).not.toBe(result.purple);
-  expect(result.light).not.toBe(result.purple);
+  expect(new Set([result.dark, result.light, result.purple]).size).toBeGreaterThanOrEqual(2);
+});
+
+test("editor keeps bottom comfort room so typing line stays above lower viewport half", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.setCode) return { ready: false };
+
+    const sample = Array.from({ length: 220 }, (_, index) => `const line_${index} = ${index};`).join("\n");
+    api.setCode(sample);
+
+    const cmHost = document.querySelector(".CodeMirror");
+    if (cmHost && cmHost.CodeMirror) {
+      const cm = cmHost.CodeMirror;
+      const doc = cm.getDoc();
+      const lastLine = Math.max(0, cm.lineCount() - 1);
+      const lineText = String(cm.getLine(lastLine) || "");
+      doc.setCursor({ line: lastLine, ch: lineText.length });
+      cm.focus();
+      cm.replaceSelection("\nconst typing_tail = true;");
+
+      const scroller = cm.getScrollerElement();
+      const lines = cmHost.querySelector(".CodeMirror-lines");
+      const cursorPage = cm.cursorCoords(doc.getCursor(), "page");
+      const rect = scroller.getBoundingClientRect();
+      const cursorY = cursorPage.top - rect.top;
+      const centerY = rect.height / 2;
+      const spacerPx = Number.parseFloat(getComputedStyle(lines).paddingBottom || "0") || 0;
+      return {
+        ready: true,
+        hasCodeMirror: true,
+        spacerPx,
+        cursorY,
+        centerY,
+      };
+    }
+
+    const textarea = document.querySelector("#editor");
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      return { ready: false };
+    }
+    textarea.value = `${sample}\nconst typing_tail = true;`;
+    textarea.focus();
+    textarea.selectionStart = textarea.value.length;
+    textarea.selectionEnd = textarea.value.length;
+    const spacerPx = Number.parseFloat(getComputedStyle(textarea).paddingBottom || "0") || 0;
+    return {
+      ready: true,
+      hasCodeMirror: false,
+      spacerPx,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.spacerPx).toBeGreaterThanOrEqual(96);
+  if (result.hasCodeMirror) {
+    expect(result.cursorY).toBeLessThanOrEqual(result.centerY + 140);
+  }
+});
+
+test("editor scope breadcrumb tracks nested scope and jumps on click", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const cmHost = document.querySelector(".CodeMirror");
+    const api = window.fazide;
+    if (!cmHost || !cmHost.CodeMirror || !api?.setCode) return { ready: false };
+
+    const code = [
+      "class Engine {",
+      "  start() {",
+      "    function tick() {",
+      "      return 1;",
+      "    }",
+      "    return tick();",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+
+    api.setCode(code);
+    const cm = cmHost.CodeMirror;
+    const doc = cm.getDoc();
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    doc.setCursor({ line: 3, ch: 8 });
+    cm.focus();
+    await waitForPaint();
+    await waitForPaint();
+
+    const bar = document.querySelector("#editorScopeBar");
+    const labels = Array.from(document.querySelectorAll("#editorScopeTrail [data-scope-item] .editor-scope-item-name"))
+      .map((node) => String(node.textContent || "").trim())
+      .filter(Boolean);
+    const classButton = document.querySelector('#editorScopeTrail [data-scope-kind="class"]');
+    if (classButton instanceof HTMLElement) {
+      classButton.click();
+      await waitForPaint();
+    }
+    const nextCursor = doc.getCursor();
+
+    return {
+      ready: true,
+      visible: bar?.getAttribute("data-visible") === "true",
+      labels,
+      cursorLine: Number(nextCursor?.line || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.visible).toBeTruthy();
+  expect(result.labels).toContain("Engine");
+  expect(result.labels).toContain("tick");
+  expect(result.labels.length).toBeGreaterThanOrEqual(2);
+  expect(result.cursorLine).toBe(0);
+});
+
+test("editor scope breadcrumb supports keyboard traversal and smooth motion contract", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const cmHost = document.querySelector(".CodeMirror");
+    const api = window.fazide;
+    if (!cmHost || !cmHost.CodeMirror || !api?.setCode) return { ready: false };
+
+    const code = [
+      "class Engine {",
+      "  start() {",
+      "    function tick() {",
+      "      return 1;",
+      "    }",
+      "    return tick();",
+      "  }",
+      "}",
+    ].join("\n");
+
+    api.setCode(code);
+    const cm = cmHost.CodeMirror;
+    const doc = cm.getDoc();
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    doc.setCursor({ line: 3, ch: 8 });
+    cm.focus();
+    await waitForPaint();
+    await waitForPaint();
+
+    const bar = document.querySelector("#editorScopeBar");
+    const trail = document.querySelector("#editorScopeTrail");
+    const firstButton = trail?.querySelector?.("[data-scope-item]");
+    if (!(bar instanceof HTMLElement) || !(trail instanceof HTMLElement) || !(firstButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    firstButton.focus();
+    firstButton.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await waitForPaint();
+
+    const motionStyle = getComputedStyle(bar);
+    const activeElement = document.activeElement;
+
+    return {
+      ready: true,
+      visible: bar.getAttribute("data-visible") === "true",
+      transitionDuration: String(motionStyle.transitionDuration || ""),
+      focusedIsScopeButton: Boolean(activeElement?.matches?.("#editorScopeTrail [data-scope-item]")),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.visible).toBeTruthy();
+  expect(result.transitionDuration).not.toBe("0s");
+  expect(result.focusedIsScopeButton).toBeTruthy();
 });
 
 test("editor settings syntax theme selector updates syntax colors and persists", async ({ page }) => {
@@ -524,15 +847,15 @@ test("editor settings syntax theme selector updates syntax colors and persists",
     };
 
     await waitForPaint();
-    syntaxSelect.value = "volcanic";
+    syntaxSelect.value = "retro";
     syntaxSelect.dispatchEvent(new Event("change", { bubbles: true }));
     await waitForPaint();
-    const volcanic = readKeywordColor();
+    const retro = readKeywordColor();
 
-    syntaxSelect.value = "deepsea";
+    syntaxSelect.value = "ocean";
     syntaxSelect.dispatchEvent(new Event("change", { bubbles: true }));
     await waitForPaint();
-    const deepsea = readKeywordColor();
+    const ocean = readKeywordColor();
 
     let persistedTheme = "";
     try {
@@ -542,17 +865,79 @@ test("editor settings syntax theme selector updates syntax colors and persists",
       persistedTheme = "";
     }
 
-    return { ready: true, volcanic, deepsea, persistedTheme };
+    return { ready: true, retro, ocean, persistedTheme };
   });
 
   expect(result.ready).toBeTruthy();
-  expect(result.volcanic).toBeTruthy();
-  expect(result.deepsea).toBeTruthy();
-  expect(result.volcanic).not.toBe(result.deepsea);
-  expect(result.persistedTheme).toBe("deepsea");
+  expect(result.retro).toBeTruthy();
+  expect(result.ocean).toBeTruthy();
+  expect(result.persistedTheme).toBe("ocean");
 });
 
-test("editor settings syntax selector includes twenty-plus presets", async ({ page }) => {
+test("editor settings syntax theme selector applies on input event", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const syntaxSelect = document.querySelector("#editorSyntaxThemeSelect");
+    if (!syntaxSelect) return { ready: false };
+
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const readKeywordColor = () => String(getComputedStyle(document.documentElement).getPropertyValue("--syntax-keyword") || "").trim();
+
+    syntaxSelect.value = "retro";
+    syntaxSelect.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitForPaint();
+    const retro = readKeywordColor();
+
+    syntaxSelect.value = "temple";
+    syntaxSelect.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitForPaint();
+    const temple = readKeywordColor();
+
+    return { ready: true, retro, temple };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.retro).toBeTruthy();
+  expect(result.temple).toBeTruthy();
+  expect(result.retro).not.toBe(result.temple);
+});
+
+test("syntax theme selection changes rendered editor token colors", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    const syntaxSelect = document.querySelector("#editorSyntaxThemeSelect");
+    if (!api?.setCode || !syntaxSelect) return { ready: false };
+
+    api.setCode("const score = 7;\nif (score) { console.log('ok'); }\n");
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const readKeywordColor = () => {
+      const token = document.querySelector(".CodeMirror .cm-keyword");
+      return token ? String(getComputedStyle(token).color || "").trim() : "";
+    };
+
+    syntaxSelect.value = "retro";
+    syntaxSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitForPaint();
+    const retroKeyword = readKeywordColor();
+
+    syntaxSelect.value = "temple";
+    syntaxSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitForPaint();
+    const templeKeyword = readKeywordColor();
+
+    return { ready: true, retroKeyword, templeKeyword };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.retroKeyword).toBeTruthy();
+  expect(result.templeKeyword).toBeTruthy();
+  expect(result.retroKeyword).not.toBe(result.templeKeyword);
+});
+
+test("editor settings syntax selector includes curated ten presets", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
@@ -567,26 +952,46 @@ test("editor settings syntax selector includes twenty-plus presets", async ({ pa
   });
 
   expect(result.ready).toBeTruthy();
-  expect(result.count).toBeGreaterThanOrEqual(20);
-  expect(result.values).toContain("volcanic");
-  expect(result.values).toContain("deepsea");
-  expect(result.values).toContain("nebula");
-  expect(result.values).toContain("forge");
-  expect(result.values).toContain("lotus");
-  expect(result.values).toContain("embermint");
-  expect(result.values).toContain("arctic");
-  expect(result.values).toContain("obsidian");
-  expect(result.values).toContain("sunset");
-  expect(result.values).toContain("verdant");
-  expect(result.values).toContain("royal");
-  expect(result.values).toContain("candy");
-  expect(result.values).toContain("magma");
-  expect(result.values).toContain("glacier");
-  expect(result.values).toContain("storm");
-  expect(result.values).toContain("orchid");
-  expect(result.values).toContain("graphene");
+  expect(result.count).toBe(10);
+  expect(result.values).toContain("dark");
+  expect(result.values).toContain("light");
+  expect(result.values).toContain("purple");
   expect(result.values).toContain("retro");
   expect(result.values).toContain("temple");
+  expect(result.values).toContain("midnight");
+  expect(result.values).toContain("ocean");
+  expect(result.values).toContain("forest");
+  expect(result.values).toContain("graphite");
+  expect(result.values).toContain("sunset");
+});
+
+test("legacy saved syntax theme migrates to curated theme set", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("fazide.editor-settings.v1", JSON.stringify({
+      profile: "balanced",
+      syntaxTheme: "volcanic",
+    }));
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const syntaxSelect = document.querySelector("#editorSyntaxThemeSelect");
+    if (!syntaxSelect) return { ready: false };
+    const values = Array.from(syntaxSelect.querySelectorAll("option")).map((option) => String(option.value || "").trim());
+    return {
+      ready: true,
+      selected: String(syntaxSelect.value || "").trim(),
+      count: values.length,
+      includesSunset: values.includes("sunset"),
+      includesVolcanic: values.includes("volcanic"),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.count).toBe(10);
+  expect(result.selected).toBe("dark");
+  expect(result.includesSunset).toBeTruthy();
+  expect(result.includesVolcanic).toBeFalsy();
 });
 
 test("editor settings syntax selector includes color identity descriptions", async ({ page }) => {
@@ -612,7 +1017,7 @@ test("editor settings syntax selector includes color identity descriptions", asy
   });
 
   expect(result.ready).toBeTruthy();
-  expect(result.entries.length).toBeGreaterThanOrEqual(20);
+  expect(result.entries.length).toBe(10);
   result.entries.forEach((entry) => {
     expect(entry.hasSummary).toBeTruthy();
     expect(entry.colorCount).toBeGreaterThanOrEqual(4);

@@ -37,5 +37,7 @@ artifacts/
 dist/
 dist_*/
 release/
+assets/css/min/
+build/css/
 
 # Keep source, docs, config, and assets tracked

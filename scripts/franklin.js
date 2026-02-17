@@ -1,6 +1,7 @@
 ﻿const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
+const crypto = require("node:crypto");
 
 const root = process.cwd();
 const packageJsonPath = path.join(root, "package.json");
@@ -13,6 +14,7 @@ const doctorRequiredScripts = [
   "test:memory",
   "test:frank:safety",
   "test:integrity",
+  "test:privacy",
   "test:desktop:icon",
   "test:desktop:pack",
   "test:desktop:dist",
@@ -37,6 +39,7 @@ const fullGateSteps = [
   { script: "test:desktop:dist", label: "Build Windows installer" },
   { script: "deploy:siteground", label: "Prepare SiteGround package" },
   { script: "verify:siteground", label: "Verify SiteGround package" },
+  { script: "test:privacy", label: "Validate public privacy boundaries" },
 ];
 const memoryPaths = {
   decisions: path.join(memoryRoot, "decisions.md"),
@@ -62,6 +65,11 @@ const guardianSnapshotTargets = [
   ".htaccess",
 ];
 const guardianSnapshotLimit = 25;
+const observabilityPaths = {
+  root: path.join(root, "artifacts", "frankleen", "observability"),
+  historyJsonl: path.join(root, "artifacts", "frankleen", "observability", "history.jsonl"),
+  flakeJsonl: path.join(root, "artifacts", "frankleen", "observability", "flake-history.jsonl"),
+};
 
 function runNpmScript(name, { captureOutput = false, printOutput = true, silentNpm = false } = {}) {
   const stdioMode = captureOutput ? "pipe" : "inherit";
@@ -665,7 +673,36 @@ function runSnapshotCommand(subcommandRaw, args = []) {
     throw new Error("Snapshot verification failed.");
   }
 
-  throw new Error("Usage: npm run frank -- snapshot <create [label] | list | restore <id|latest> | verify <id|latest|all>>");
+  if (subcommand === "diff") {
+    const leftSelector = args[0] || "latest";
+    const rightSelector = String(args[1] || "workspace").trim().toLowerCase();
+    const left = buildSnapshotManifest(leftSelector);
+    const right = rightSelector === "workspace"
+      ? buildWorkspaceManifest()
+      : buildSnapshotManifest(rightSelector);
+    const diff = diffManifests(left, right);
+
+    console.log(`FRANKLIN SNAPSHOT DIFF: ${diff.left} -> ${diff.right}`);
+    console.log(`- Added: ${diff.addedCount}`);
+    console.log(`- Removed: ${diff.removedCount}`);
+    console.log(`- Changed: ${diff.changedCount}`);
+
+    const previewLimit = 12;
+    const preview = [
+      ...diff.added.slice(0, Math.max(0, previewLimit - 4)).map((item) => `+ ${item}`),
+      ...diff.removed.slice(0, Math.max(0, previewLimit - 4)).map((item) => `- ${item}`),
+      ...diff.changed.slice(0, Math.max(0, previewLimit - 4)).map((item) => `~ ${item}`),
+    ].slice(0, previewLimit);
+
+    if (preview.length) {
+      console.log("- Preview:");
+      preview.forEach((line) => console.log(`  ${line}`));
+    }
+
+    return diff;
+  }
+
+  throw new Error("Usage: npm run frank -- snapshot <create [label] | list | restore <id|latest> | verify <id|latest|all> | diff <left-id|latest> [right-id|workspace]>");
 }
 
 function writeRescueReport(scriptName, failure) {
@@ -726,12 +763,23 @@ function printHelp() {
   console.log("- npm run frank -- help");
   console.log("- npm run frank -- check");
   console.log("- npm run frank -- full");
+  console.log("- npm run frank -- full from <stage-script>");
+  console.log("- npm run frank -- full until <stage-script>");
+  console.log("- npm run frank -- full from <stage-script> until <stage-script>");
+  console.log("- npm run frank -- resume");
+  console.log("- npm run frank -- retry-last-failed");
+  console.log("- npm run frank -- smart");
+  console.log("- npm run frank -- parallel");
+  console.log("- npm run frank -- flake");
+  console.log("- npm run frank -- observability [limit]");
+  console.log("- npm run frank -- retention <preview|apply>");
   console.log("- npm run frank -- guardian");
   console.log("- npm run frank -- doctor");
   console.log("- npm run frank -- snapshot create [label]");
   console.log("- npm run frank -- snapshot list");
   console.log("- npm run frank -- snapshot restore <id|latest>");
   console.log("- npm run frank -- snapshot verify <id|latest|all>");
+  console.log("- npm run frank -- snapshot diff <left-id|latest> [right-id|workspace]");
   console.log("- npm run frank -- rescue <script>");
   console.log("- npm run frank -- note \"message\"");
   console.log("- npm run frank -- error \"message\"");
@@ -740,6 +788,14 @@ function printHelp() {
   console.log("Shortcuts:");
   console.log("- npm run frank:check");
   console.log("- npm run frank:all");
+  console.log("- npm run frank:resume");
+  console.log("- npm run frank:retry");
+  console.log("- npm run frank:smart");
+  console.log("- npm run frank:parallel");
+  console.log("- npm run frank:flake");
+  console.log("- npm run frank:observability");
+  console.log("- npm run frank:retention:preview");
+  console.log("- npm run frank:retention");
   console.log("- npm run frank:guardian");
   console.log("- npm run frank:full");
   console.log("- npm run frank:doctor");
@@ -896,6 +952,210 @@ function ensureFrankleenReportsRoot() {
   fs.mkdirSync(frankleenReportsRoot, { recursive: true });
 }
 
+function ensureObservabilityRoot() {
+  fs.mkdirSync(observabilityPaths.root, { recursive: true });
+}
+
+function appendJsonLine(filePath, payload) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.appendFileSync(filePath, `${JSON.stringify(payload)}\n`, "utf8");
+}
+
+function getGitChangedFiles() {
+  const result = spawnSync("git", ["status", "--porcelain"], {
+    cwd: root,
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.error || result.status !== 0) return [];
+  return String(result.stdout || "")
+    .split(/\r?\n/)
+    .filter((line) => line && line.length > 3)
+    .map((line) => line.slice(3).trim())
+    .filter(Boolean)
+    .map((value) => value.replace(/\\/g, "/"));
+}
+
+function classifySmartGate(changedFiles = []) {
+  const files = Array.isArray(changedFiles) ? changedFiles : [];
+  const hasRuntimeChange = files.some((file) => {
+    const lower = String(file || "").toLowerCase();
+    return lower.startsWith("assets/") || lower === "index.html" || lower === "manifest.webmanifest";
+  });
+  const hasInfraChange = files.some((file) => {
+    const lower = String(file || "").toLowerCase();
+    return lower.startsWith("scripts/") || lower.startsWith("config/") || lower === "package.json" || lower === "package-lock.json";
+  });
+  const hasTestChange = files.some((file) => String(file || "").toLowerCase().startsWith("tests/"));
+
+  const plan = [
+    "test:all:contract",
+    "sync:dist-site",
+    "test:sync:dist-site",
+    "test:memory",
+    "test:frank:safety",
+    "test:integrity",
+  ];
+
+  if (hasRuntimeChange || hasInfraChange || hasTestChange) {
+    plan.push("test:changed");
+  } else {
+    plan.push("test:smoke");
+  }
+
+  return {
+    changedCount: files.length,
+    hasRuntimeChange,
+    hasInfraChange,
+    hasTestChange,
+    plan,
+  };
+}
+
+function writeRunObservability({ mode, startedAt, stageResults, logRunDirRel = "", extra = {} }) {
+  ensureObservabilityRoot();
+  const finishedAt = Date.now();
+  const durationMs = Math.max(0, finishedAt - startedAt);
+  const stages = Array.isArray(stageResults) ? stageResults : [];
+  const failed = stages.filter((entry) => entry.status !== "passed");
+  const slowest = stages.length
+    ? stages.reduce((prev, next) => (next.durationMs > prev.durationMs ? next : prev))
+    : null;
+
+  const payload = {
+    id: `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+    mode,
+    startedAt: new Date(startedAt).toISOString(),
+    finishedAt: new Date(finishedAt).toISOString(),
+    durationMs,
+    totalStages: stages.length,
+    passedStages: stages.filter((entry) => entry.status === "passed").length,
+    failedStages: failed.map((entry) => entry.script),
+    slowestStage: slowest ? { script: slowest.script, durationMs: slowest.durationMs } : null,
+    logRunDirRel,
+    extra,
+  };
+
+  appendJsonLine(observabilityPaths.historyJsonl, payload);
+
+  if (logRunDirRel) {
+    const runDirAbs = path.join(root, logRunDirRel.split("/").join(path.sep));
+    if (fs.existsSync(runDirAbs)) {
+      const summaryJsonPath = path.join(runDirAbs, "frankleen-summary.json");
+      const summaryMdPath = path.join(runDirAbs, "frankleen-summary.md");
+      fs.writeFileSync(summaryJsonPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      const md = [
+        "# Frankleen Observability Summary",
+        "",
+        `- Mode: ${payload.mode}`,
+        `- Started: ${payload.startedAt}`,
+        `- Finished: ${payload.finishedAt}`,
+        `- Duration: ${formatDuration(payload.durationMs)}`,
+        `- Stages: ${payload.passedStages}/${payload.totalStages} passed`,
+        `- Failed stages: ${payload.failedStages.length ? payload.failedStages.join(", ") : "none"}`,
+        `- Slowest: ${payload.slowestStage ? `${payload.slowestStage.script} (${formatDuration(payload.slowestStage.durationMs)})` : "n/a"}`,
+      ].join("\n");
+      fs.writeFileSync(summaryMdPath, `${md}\n`, "utf8");
+    }
+  }
+
+  return payload;
+}
+
+function buildFileManifest(rootDirAbs) {
+  const manifest = new Map();
+  if (!fs.existsSync(rootDirAbs)) return manifest;
+
+  const rootStats = fs.statSync(rootDirAbs);
+  if (rootStats.isFile()) {
+    const sig = `${rootStats.size}:${rootStats.mtimeMs}`;
+    manifest.set(path.basename(rootDirAbs), sig);
+    return manifest;
+  }
+
+  function walk(currentAbs) {
+    const entries = fs.readdirSync(currentAbs, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryAbs = path.join(currentAbs, entry.name);
+      const rel = path.relative(rootDirAbs, entryAbs).replace(/\\/g, "/");
+      if (entry.isDirectory()) {
+        walk(entryAbs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const stats = fs.statSync(entryAbs);
+      manifest.set(rel, `${stats.size}:${stats.mtimeMs}`);
+    }
+  }
+
+  walk(rootDirAbs);
+  return manifest;
+}
+
+function buildSnapshotManifest(selectorRaw) {
+  const entry = resolveSnapshotEntry(selectorRaw);
+  const snapshotDir = path.join(guardianPaths.snapshots, entry.id);
+  const payloadRoot = path.join(snapshotDir, "payload");
+  if (!fs.existsSync(payloadRoot)) {
+    throw new Error(`Snapshot payload missing for: ${entry.id}`);
+  }
+  return {
+    label: entry.id,
+    manifest: buildFileManifest(payloadRoot),
+  };
+}
+
+function buildWorkspaceManifest() {
+  const manifest = new Map();
+  for (const target of guardianSnapshotTargets) {
+    const targetAbs = path.join(root, target.split("/").join(path.sep));
+    const targetExists = fs.existsSync(targetAbs);
+    const targetIsFile = targetExists && fs.statSync(targetAbs).isFile();
+    const targetManifest = buildFileManifest(targetAbs);
+    for (const [rel, sig] of targetManifest.entries()) {
+      const key = targetIsFile ? target : `${target}/${rel}`;
+      manifest.set(key.replace(/\\/g, "/"), sig);
+    }
+  }
+  return {
+    label: "workspace",
+    manifest,
+  };
+}
+
+function diffManifests(left, right) {
+  const added = [];
+  const removed = [];
+  const changed = [];
+
+  for (const [rel, sig] of right.manifest.entries()) {
+    if (!left.manifest.has(rel)) {
+      added.push(rel);
+      continue;
+    }
+    if (left.manifest.get(rel) !== sig) {
+      changed.push(rel);
+    }
+  }
+
+  for (const rel of left.manifest.keys()) {
+    if (!right.manifest.has(rel)) {
+      removed.push(rel);
+    }
+  }
+
+  return {
+    left: left.label,
+    right: right.label,
+    added,
+    removed,
+    changed,
+    addedCount: added.length,
+    removedCount: removed.length,
+    changedCount: changed.length,
+  };
+}
+
 function createStageLogRun(label = "full-gate") {
   ensureFrankleenReportsRoot();
   const runId = `run-${Date.now()}-${sanitizeFileToken(label, "full-gate")}`;
@@ -1021,6 +1281,103 @@ function printStageFlowIntro(totalSteps) {
   console.log("");
 }
 
+function resolveFullGateStartIndex(startAtScriptRaw) {
+  const startAtScript = String(startAtScriptRaw || "").trim();
+  if (!startAtScript) return 0;
+  const idx = fullGateSteps.findIndex((step) => step.script === startAtScript);
+  if (idx < 0) {
+    const valid = fullGateSteps.map((step) => step.script).join(", ");
+    throw new Error(`Unknown full-gate stage: ${startAtScript}. Valid stages: ${valid}`);
+  }
+  return idx;
+}
+
+function resolveFullGateEndIndex(endAtScriptRaw) {
+  const endAtScript = String(endAtScriptRaw || "").trim();
+  if (!endAtScript) return fullGateSteps.length - 1;
+  const idx = fullGateSteps.findIndex((step) => step.script === endAtScript);
+  if (idx < 0) {
+    const valid = fullGateSteps.map((step) => step.script).join(", ");
+    throw new Error(`Unknown full-gate stage: ${endAtScript}. Valid stages: ${valid}`);
+  }
+  return idx;
+}
+
+function parseFullGateBoundsArgs(rawArgs = []) {
+  const args = Array.isArray(rawArgs) ? rawArgs.map((value) => String(value || "").trim()).filter(Boolean) : [];
+  if (!args.length) {
+    return { startAtScript: "", endAtScript: "" };
+  }
+  if (args.length % 2 !== 0) {
+    throw new Error("Usage: npm run frank -- full [from <stage-script>] [until <stage-script>]");
+  }
+
+  let startAtScript = "";
+  let endAtScript = "";
+
+  for (let i = 0; i < args.length; i += 2) {
+    const keyword = String(args[i] || "").toLowerCase();
+    const value = String(args[i + 1] || "").trim();
+    if (!value) {
+      throw new Error("Usage: npm run frank -- full [from <stage-script>] [until <stage-script>]");
+    }
+
+    if (keyword === "from") {
+      if (startAtScript) {
+        throw new Error("Duplicate 'from' argument. Use: npm run frank -- full [from <stage-script>] [until <stage-script>]");
+      }
+      startAtScript = value;
+      continue;
+    }
+
+    if (keyword === "until") {
+      if (endAtScript) {
+        throw new Error("Duplicate 'until' argument. Use: npm run frank -- full [from <stage-script>] [until <stage-script>]");
+      }
+      endAtScript = value;
+      continue;
+    }
+
+    throw new Error("Usage: npm run frank -- full [from <stage-script>] [until <stage-script>]");
+  }
+
+  return { startAtScript, endAtScript };
+}
+
+function readLatestFailedScriptFromFixRequest() {
+  if (!fs.existsSync(memoryPaths.fixRequest)) {
+    throw new Error("No Franklin fix request found. Run full gate first or use: npm run frank -- full from <stage>");
+  }
+
+  const text = fs.readFileSync(memoryPaths.fixRequest, "utf8");
+  const match = text.match(/-\s*Failing command:\s*npm run\s+([^\s`]+)/i);
+  const scriptName = String(match?.[1] || "").trim();
+  if (!scriptName) {
+    throw new Error("Could not read failing script from docs/ai-memory/franklin-fix-request.md");
+  }
+
+  const existsInFullGate = fullGateSteps.some((step) => step.script === scriptName);
+  if (!existsInFullGate) {
+    throw new Error(`Failing script '${scriptName}' is not a full-gate stage. Use: npm run frank -- full from <stage>`);
+  }
+
+  return scriptName;
+}
+
+function readLatestFailingScriptNameFromFixRequest() {
+  if (!fs.existsSync(memoryPaths.fixRequest)) {
+    throw new Error("No Franklin fix request found. Run a failing stage first.");
+  }
+
+  const text = fs.readFileSync(memoryPaths.fixRequest, "utf8");
+  const match = text.match(/-\s*Failing command:\s*npm run\s+([^\s`]+)/i);
+  const scriptName = String(match?.[1] || "").trim();
+  if (!scriptName) {
+    throw new Error("Could not read failing script from docs/ai-memory/franklin-fix-request.md");
+  }
+  return scriptName;
+}
+
 function printStageStart(index, total, step) {
   const bar = buildProgressBar(index - 1, total);
   const line = `${bar} [${String(index).padStart(2, "0")}/${String(total).padStart(2, "0")}] START ${step.script}  (${step.label})`;
@@ -1039,6 +1396,10 @@ function printStageDigest(index, total, step, status, output, logPath) {
   const statusLabel = status === "passed" ? "PASS" : "FAIL";
   const rows = collectOutputHighlights(step.script, output).map((line) => `- ${line}`);
   rows.push(`- Log file: ${logPath}`);
+  if (status !== "passed") {
+    rows.push(`- Re-run stage: npm run ${step.script}`);
+    rows.push(`- Capture rescue report: npm run frank -- rescue ${step.script}`);
+  }
   const lines = renderBox(`STAGE ${String(index).padStart(2, "0")}/${String(total).padStart(2, "0")} ${statusLabel} DIGEST (${step.script})`, rows);
   for (const line of lines) {
     if (line.startsWith("+-")) {
@@ -1097,19 +1458,32 @@ function printStageRecap(stages, logRunDirRel = "") {
   }
 }
 
-async function runFullGateSequence() {
+async function runFullGateSequence({ startAtScript = "", endAtScript = "" } = {}) {
   const startedAt = Date.now();
   const stageResults = [];
-  const totalStages = fullGateSteps.length;
+  const startIndex = resolveFullGateStartIndex(startAtScript);
+  const endIndex = resolveFullGateEndIndex(endAtScript);
+  if (startIndex > endIndex) {
+    throw new Error(`Invalid stage range: start '${startAtScript}' occurs after end '${endAtScript}'`);
+  }
+  const stepsToRun = fullGateSteps.slice(startIndex, endIndex + 1);
+  const totalStages = stepsToRun.length;
   const logRun = createStageLogRun("full-gate");
 
   printStageFlowIntro(totalStages);
+  if (startIndex > 0) {
+    console.log(styleText(`Resume mode: starting at stage ${startIndex + 1}/${fullGateSteps.length} (${startAtScript})`, ansiStyles.yellow));
+  }
+  if (endIndex < fullGateSteps.length - 1) {
+    console.log(styleText(`Bounded mode: ending at stage ${endIndex + 1}/${fullGateSteps.length} (${fullGateSteps[endIndex].script})`, ansiStyles.yellow));
+  }
   console.log(styleText(`Stage logs: ${logRun.runDirRel}`, ansiStyles.dim));
   console.log("");
 
-  for (let i = 0; i < fullGateSteps.length; i += 1) {
+  for (let i = 0; i < stepsToRun.length; i += 1) {
     const index = i + 1;
-    const step = fullGateSteps[i];
+    const absoluteIndex = startIndex + index;
+    const step = stepsToRun[i];
     const stepStartedAt = Date.now();
 
     printStageStart(index, totalStages, step);
@@ -1126,7 +1500,7 @@ async function runFullGateSequence() {
         });
       const combinedOutput = `${result.stdout || ""}${result.stderr || ""}`;
       const durationMs = Date.now() - stepStartedAt;
-      const logPath = writeStageLog(logRun.runDir, index, step.script, "pass", combinedOutput);
+      const logPath = writeStageLog(logRun.runDir, absoluteIndex, step.script, "pass", combinedOutput);
       stageResults.push({
         script: step.script,
         label: step.label,
@@ -1139,7 +1513,7 @@ async function runFullGateSequence() {
     } catch (error) {
       const durationMs = Date.now() - stepStartedAt;
       const combinedOutput = `${error?.stdout || ""}${error?.stderr || ""}`;
-      const logPath = writeStageLog(logRun.runDir, index, step.script, "fail", combinedOutput);
+      const logPath = writeStageLog(logRun.runDir, absoluteIndex, step.script, "fail", combinedOutput);
       stageResults.push({
         script: step.script,
         label: step.label,
@@ -1157,11 +1531,305 @@ async function runFullGateSequence() {
   printStageRecap(stageResults, logRun.runDirRel);
   console.log(styleText("ALL GOOD FAZYBEAR - FRANKLEEN ONLINE", ansiStyles.bold, ansiStyles.green));
 
+  writeRunObservability({
+    mode: "full",
+    startedAt,
+    stageResults,
+    logRunDirRel: logRun.runDirRel,
+    extra: {
+      startAtScript: startAtScript || null,
+      endAtScript: endAtScript || null,
+    },
+  });
+
   return {
     durationMs: Date.now() - startedAt,
     stages: stageResults,
     logRunDirRel: logRun.runDirRel,
   };
+}
+
+async function runSmartMode() {
+  const startedAt = Date.now();
+  const stageResults = [];
+  const changedFiles = getGitChangedFiles();
+  const smart = classifySmartGate(changedFiles);
+  const logRun = createStageLogRun("smart-gate");
+
+  console.log(styleText("FRANKLEEN SMART MODE", ansiStyles.bold, ansiStyles.cyan));
+  console.log(styleText(`Changed files: ${smart.changedCount}`, ansiStyles.dim));
+  console.log(styleText(`Plan: ${smart.plan.join(" -> ")}`, ansiStyles.dim));
+
+  for (let i = 0; i < smart.plan.length; i += 1) {
+    const script = smart.plan[i];
+    const label = script;
+    const step = { script, label };
+    const index = i + 1;
+    const stepStartedAt = Date.now();
+    printStageStart(index, smart.plan.length, step);
+    try {
+      const result = runNpmScript(script, {
+        captureOutput: true,
+        printOutput: false,
+        silentNpm: true,
+      });
+      const combinedOutput = `${result.stdout || ""}${result.stderr || ""}`;
+      const durationMs = Date.now() - stepStartedAt;
+      const logPath = writeStageLog(logRun.runDir, index, script, "pass", combinedOutput);
+      stageResults.push({ script, label, status: "passed", durationMs, logPath });
+      printStageEnd(index, smart.plan.length, step, "passed", durationMs);
+      printStageDigest(index, smart.plan.length, step, "passed", combinedOutput, logPath);
+    } catch (error) {
+      const combinedOutput = `${error?.stdout || ""}${error?.stderr || ""}`;
+      const durationMs = Date.now() - stepStartedAt;
+      const logPath = writeStageLog(logRun.runDir, index, script, "fail", combinedOutput);
+      stageResults.push({ script, label, status: "failed", durationMs, logPath });
+      printStageEnd(index, smart.plan.length, step, "failed", durationMs);
+      printStageDigest(index, smart.plan.length, step, "failed", combinedOutput, logPath);
+      printStageRecap(stageResults, logRun.runDirRel);
+      writeRunObservability({
+        mode: "smart",
+        startedAt,
+        stageResults,
+        logRunDirRel: logRun.runDirRel,
+        extra: { changedCount: smart.changedCount, plan: smart.plan },
+      });
+      throw error;
+    }
+  }
+
+  printStageRecap(stageResults, logRun.runDirRel);
+  writeRunObservability({
+    mode: "smart",
+    startedAt,
+    stageResults,
+    logRunDirRel: logRun.runDirRel,
+    extra: { changedCount: smart.changedCount, plan: smart.plan },
+  });
+
+  return {
+    durationMs: Date.now() - startedAt,
+    stages: stageResults,
+    logRunDirRel: logRun.runDirRel,
+  };
+}
+
+async function runParallelMode() {
+  const startedAt = Date.now();
+  const stageResults = [];
+  const logRun = createStageLogRun("parallel-gate");
+
+  const sequentialHead = fullGateSteps.slice(0, 7);
+  console.log(styleText("FRANKLEEN PARALLEL MODE", ansiStyles.bold, ansiStyles.cyan));
+  console.log(styleText("Phase 1: sequential core gate", ansiStyles.dim));
+
+  for (let i = 0; i < sequentialHead.length; i += 1) {
+    const step = sequentialHead[i];
+    const index = i + 1;
+    const stepStartedAt = Date.now();
+    printStageStart(index, fullGateSteps.length, step);
+    try {
+      const result = step.script === "test"
+        ? await runNpmScriptWithLiveProgress(step.script, { silentNpm: true, progressMode: "playwright" })
+        : runNpmScript(step.script, { captureOutput: true, printOutput: false, silentNpm: true });
+      const out = `${result.stdout || ""}${result.stderr || ""}`;
+      const durationMs = Date.now() - stepStartedAt;
+      const logPath = writeStageLog(logRun.runDir, index, step.script, "pass", out);
+      stageResults.push({ script: step.script, label: step.label, status: "passed", durationMs, logPath });
+      printStageEnd(index, fullGateSteps.length, step, "passed", durationMs);
+      printStageDigest(index, fullGateSteps.length, step, "passed", out, logPath);
+    } catch (error) {
+      const out = `${error?.stdout || ""}${error?.stderr || ""}`;
+      const durationMs = Date.now() - stepStartedAt;
+      const logPath = writeStageLog(logRun.runDir, index, step.script, "fail", out);
+      stageResults.push({ script: step.script, label: step.label, status: "failed", durationMs, logPath });
+      printStageEnd(index, fullGateSteps.length, step, "failed", durationMs);
+      printStageDigest(index, fullGateSteps.length, step, "failed", out, logPath);
+      printStageRecap(stageResults, logRun.runDirRel);
+      writeRunObservability({ mode: "parallel", startedAt, stageResults, logRunDirRel: logRun.runDirRel });
+      throw error;
+    }
+  }
+
+  console.log(styleText("Phase 2: parallel release tail", ansiStyles.dim));
+  const branchDesktop = async () => {
+    const branch = [fullGateSteps[7], fullGateSteps[8], fullGateSteps[9]];
+    const results = [];
+    for (const step of branch) {
+      const stepStartedAt = Date.now();
+      const absIndex = fullGateSteps.findIndex((entry) => entry.script === step.script) + 1;
+      try {
+        const result = runNpmScript(step.script, { captureOutput: true, printOutput: false, silentNpm: true });
+        const out = `${result.stdout || ""}${result.stderr || ""}`;
+        const durationMs = Date.now() - stepStartedAt;
+        const logPath = writeStageLog(logRun.runDir, absIndex, step.script, "pass", out);
+        results.push({ script: step.script, label: step.label, status: "passed", durationMs, logPath });
+      } catch (error) {
+        const out = `${error?.stdout || ""}${error?.stderr || ""}`;
+        const durationMs = Date.now() - stepStartedAt;
+        const logPath = writeStageLog(logRun.runDir, absIndex, step.script, "fail", out);
+        results.push({ script: step.script, label: step.label, status: "failed", durationMs, logPath });
+        throw Object.assign(new Error(`Parallel desktop branch failed at ${step.script}`), {
+          code: typeof error?.code === "number" ? error.code : 1,
+          stageResults: results,
+        });
+      }
+    }
+    return results;
+  };
+
+  const branchDeploy = async () => {
+    const branch = [fullGateSteps[10], fullGateSteps[11], fullGateSteps[12]];
+    const results = [];
+    for (const step of branch) {
+      const stepStartedAt = Date.now();
+      const absIndex = fullGateSteps.findIndex((entry) => entry.script === step.script) + 1;
+      try {
+        const result = runNpmScript(step.script, { captureOutput: true, printOutput: false, silentNpm: true });
+        const out = `${result.stdout || ""}${result.stderr || ""}`;
+        const durationMs = Date.now() - stepStartedAt;
+        const logPath = writeStageLog(logRun.runDir, absIndex, step.script, "pass", out);
+        results.push({ script: step.script, label: step.label, status: "passed", durationMs, logPath });
+      } catch (error) {
+        const out = `${error?.stdout || ""}${error?.stderr || ""}`;
+        const durationMs = Date.now() - stepStartedAt;
+        const logPath = writeStageLog(logRun.runDir, absIndex, step.script, "fail", out);
+        results.push({ script: step.script, label: step.label, status: "failed", durationMs, logPath });
+        throw Object.assign(new Error(`Parallel deploy branch failed at ${step.script}`), {
+          code: typeof error?.code === "number" ? error.code : 1,
+          stageResults: results,
+        });
+      }
+    }
+    return results;
+  };
+
+  try {
+    const [desktopResults, deployResults] = await Promise.all([branchDesktop(), branchDeploy()]);
+    stageResults.push(...desktopResults, ...deployResults);
+  } catch (error) {
+    if (Array.isArray(error?.stageResults)) {
+      stageResults.push(...error.stageResults);
+    }
+    writeRunObservability({ mode: "parallel", startedAt, stageResults, logRunDirRel: logRun.runDirRel });
+    throw error;
+  }
+
+  stageResults.sort((a, b) => {
+    const ia = fullGateSteps.findIndex((step) => step.script === a.script);
+    const ib = fullGateSteps.findIndex((step) => step.script === b.script);
+    return ia - ib;
+  });
+
+  printStageRecap(stageResults, logRun.runDirRel);
+  writeRunObservability({ mode: "parallel", startedAt, stageResults, logRunDirRel: logRun.runDirRel });
+
+  return {
+    durationMs: Date.now() - startedAt,
+    stages: stageResults,
+    logRunDirRel: logRun.runDirRel,
+  };
+}
+
+function runFlakeIntel() {
+  const startedAt = Date.now();
+  try {
+    const result = runNpmScript("test:flake:critical", { captureOutput: true, printOutput: true, silentNpm: true });
+    const output = `${result.stdout || ""}${result.stderr || ""}`;
+    const passedMatch = output.match(/(\d+)\s+passed/i);
+    const failedMatch = output.match(/(\d+)\s+failed/i);
+    appendJsonLine(observabilityPaths.flakeJsonl, {
+      at: new Date().toISOString(),
+      status: "passed",
+      durationMs: Date.now() - startedAt,
+      passed: Number(passedMatch?.[1] || 0),
+      failed: Number(failedMatch?.[1] || 0),
+    });
+    console.log("FRANKLEEN FLAKE INTEL: PASS");
+  } catch (error) {
+    appendJsonLine(observabilityPaths.flakeJsonl, {
+      at: new Date().toISOString(),
+      status: "failed",
+      durationMs: Date.now() - startedAt,
+      code: typeof error?.code === "number" ? error.code : 1,
+    });
+    throw error;
+  }
+}
+
+function runRetention(modeRaw) {
+  const mode = String(modeRaw || "preview").trim().toLowerCase();
+  if (mode !== "preview" && mode !== "apply") {
+    throw new Error("Usage: npm run frank -- retention <preview|apply>");
+  }
+
+  if (mode === "preview") {
+    runNpmScript("frank:cleanup:preview");
+    runNpmScript("workspace:cleanup:preview");
+    return;
+  }
+
+  runNpmScript("frank:cleanup");
+  runNpmScript("desktop:artifacts:clean");
+  runNpmScript("workspace:cleanup");
+}
+
+function readJsonLines(filePath) {
+  if (!fs.existsSync(filePath)) return [];
+  const raw = fs.readFileSync(filePath, "utf8");
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function runObservabilityReport(limitRaw) {
+  const parsedLimit = Number.parseInt(String(limitRaw || "10").trim(), 10);
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0
+    ? Math.min(parsedLimit, 50)
+    : 10;
+
+  const history = readJsonLines(observabilityPaths.historyJsonl);
+  const flakeHistory = readJsonLines(observabilityPaths.flakeJsonl);
+  const recent = history.slice(-limit).reverse();
+  const passed = history.filter((entry) => !Array.isArray(entry?.failedStages) || entry.failedStages.length === 0).length;
+  const failed = history.length - passed;
+
+  console.log("FRANKLEEN OBSERVABILITY");
+  console.log(`- History entries: ${history.length}`);
+  console.log(`- Pass: ${passed}`);
+  console.log(`- Fail: ${failed}`);
+  console.log(`- Flake records: ${flakeHistory.length}`);
+
+  if (!history.length) {
+    console.log("- No observability runs yet. Run frank full/smart/parallel first.");
+    return;
+  }
+
+  console.log(`- Showing latest ${Math.min(limit, history.length)} run(s):`);
+  for (const entry of recent) {
+    const mode = String(entry?.mode || "unknown");
+    const startedAt = String(entry?.startedAt || "n/a");
+    const duration = formatDuration(Number(entry?.durationMs || 0));
+    const failedStages = Array.isArray(entry?.failedStages) ? entry.failedStages : [];
+    const status = failedStages.length ? `FAIL (${failedStages.join(", ")})` : "PASS";
+    console.log(`  - ${startedAt} | ${mode} | ${duration} | ${status}`);
+  }
+
+  if (flakeHistory.length) {
+    const latestFlake = flakeHistory[flakeHistory.length - 1] || {};
+    const latestStatus = String(latestFlake.status || "unknown").toUpperCase();
+    const latestAt = String(latestFlake.at || "n/a");
+    console.log(`- Latest flake intel: ${latestStatus} @ ${latestAt}`);
+  }
 }
 
 async function runGuardianMode() {
@@ -1355,8 +2023,68 @@ async function main() {
   }
 
   if (command === "full") {
-    const result = await runFullGateSequence();
+    const { startAtScript, endAtScript } = parseFullGateBoundsArgs(args);
+    const result = await runFullGateSequence({ startAtScript, endAtScript });
     printFrankleenVictoryBanner(result.durationMs, result.stages, { logRunDirRel: result.logRunDirRel });
+    return;
+  }
+
+  if (command === "resume") {
+    const startAtScript = readLatestFailedScriptFromFixRequest();
+    console.log(styleText(`FRANKLEEN RESUME: restarting from '${startAtScript}'`, ansiStyles.cyan));
+    const result = await runFullGateSequence({ startAtScript });
+    printFrankleenVictoryBanner(result.durationMs, result.stages, { logRunDirRel: result.logRunDirRel });
+    return;
+  }
+
+  if (command === "retry-last-failed" || command === "retry") {
+    const scriptName = readLatestFailingScriptNameFromFixRequest();
+    const scripts = readPackageScripts();
+    if (!Object.prototype.hasOwnProperty.call(scripts, scriptName)) {
+      throw new Error(`Latest failing script is not available in package.json: ${scriptName}`);
+    }
+
+    console.log(styleText(`FRANKLEEN RETRY: npm run ${scriptName}`, ansiStyles.cyan));
+    try {
+      runNpmScript(scriptName, { captureOutput: true, printOutput: true });
+      console.log(styleText(`FRANKLEEN RETRY: PASS (${scriptName})`, ansiStyles.green));
+      return;
+    } catch (failure) {
+      writeRescueReport(scriptName, failure);
+      appendMemoryLine(
+        memoryPaths.errors,
+        `Frankleen retry failed again for npm run ${scriptName}; fix request refreshed`,
+      );
+      const retryError = new Error(`Frankleen retry failed: npm run ${scriptName}`);
+      retryError.code = typeof failure?.code === "number" ? failure.code : 1;
+      throw retryError;
+    }
+  }
+
+  if (command === "smart") {
+    const result = await runSmartMode();
+    printFrankleenVictoryBanner(result.durationMs, result.stages, { logRunDirRel: result.logRunDirRel });
+    return;
+  }
+
+  if (command === "parallel") {
+    const result = await runParallelMode();
+    printFrankleenVictoryBanner(result.durationMs, result.stages, { logRunDirRel: result.logRunDirRel });
+    return;
+  }
+
+  if (command === "flake") {
+    runFlakeIntel();
+    return;
+  }
+
+  if (command === "observability") {
+    runObservabilityReport(args[0]);
+    return;
+  }
+
+  if (command === "retention") {
+    runRetention(args[0]);
     return;
   }
 
@@ -1423,7 +2151,12 @@ module.exports = {
   normalizeRescueOutput,
   readPackageScripts,
   restoreGuardianSnapshot,
+  runFlakeIntel,
+  runObservabilityReport,
+  runParallelMode,
   runGuardianMode,
+  runRetention,
+  runSmartMode,
   runDoctor,
   runRescue,
   runSnapshotCommand,

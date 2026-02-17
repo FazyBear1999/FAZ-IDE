@@ -120,6 +120,7 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run test:desktop:pack` validates desktop unpacked build generation.
 - `npm run test:desktop:dist` validates desktop installer generation.
 - `npm run desktop:pack:clean` removes old `dist_pack_check/run-*` folders (skips locked folders safely).
+- `npm run desktop:artifacts:clean` removes old `run-*` folders from desktop artifact dirs (`dist_pack_check`, `dist_release_test`) and skips locked folders safely.
 
 ## Franklin (Terminal AI Ops)
 
@@ -133,6 +134,9 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run frank:snapshot:list` lists recent guardian snapshots.
 - `npm run frank:snapshot:restore` restores the latest guardian snapshot.
 - `npm run frank:snapshot:verify` verifies snapshot payload/metadata integrity for the latest snapshot.
+- `npm run frank:cleanup:preview` previews stale Frankleen report/snapshot cleanup targets.
+- `npm run frank:cleanup` applies stale Frankleen report/snapshot cleanup targets.
+- `npm run frank:cleanup:all` runs Frankleen cleanup and desktop artifact run-folder cleanup in one safe pass.
 - `npm run frank -- rescue <script>` captures a failing `npm run <script>` into `docs/ai-memory/franklin-fix-request.md`.
 - `npm run frank -- note "message"` appends a dated entry to `docs/ai-memory/decisions.md`.
 - `npm run frank -- error "message"` appends a dated entry to `docs/ai-memory/error-catalog.md`.

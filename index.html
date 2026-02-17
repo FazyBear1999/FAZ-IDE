@@ -17,6 +17,9 @@
             <link rel="manifest" href="./manifest.webmanifest" />
             <link rel="icon" href="./favicon.ico" sizes="any" />
             <link rel="apple-touch-icon" href="./assets/icons/faz-192.svg" />
+            <link rel="preconnect" href="https://fonts.googleapis.com" />
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Inconsolata:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Ubuntu+Mono:wght@400;700&display=swap" />
 
             <!-- 
                 CSS order matters:
@@ -269,9 +272,17 @@
                                 <div class="editor-tabs" aria-label="Open files">
                                     <div id="editorTabs" class="editor-tabs-list" role="tablist"></div>
                                 </div>
+                                <div id="editorScopeBar" class="editor-scope-bar" data-visible="false" aria-live="polite" aria-label="Editor scope breadcrumb">
+                                    <span class="editor-scope-label">Scope</span>
+                                    <div id="editorScopeTrail" class="editor-scope-trail" role="navigation" aria-label="Current editor scope"></div>
+                                </div>
                                 <div class="editor-pane">
                                     <textarea id="editor" spellcheck="false" aria-label="Code editor"></textarea>
                                     <pre id="editorMirror" class="editor-mirror" aria-label="Saved version preview"></pre>
+                                    <div id="editorSignatureHint" class="editor-signature-hint" data-visible="false" aria-hidden="true" aria-live="polite"></div>
+                                    <div id="editorCompletion" class="editor-completion" aria-hidden="true">
+                                        <ul id="editorCompletionList" class="editor-completion-list" role="listbox" aria-label="Editor completions"></ul>
+                                    </div>
                                 </div>
                             </div>
                             </section>
@@ -324,7 +335,15 @@
                                     </div>
                                 </div>
                                 <div class="card-bd">
-                                    <section id="taskRunnerPanel" class="diagnostics-panel task-runner-panel" aria-live="polite">
+                                    <div id="toolsTabs" class="tools-tabs" role="tablist" aria-label="Tools tabs">
+                                        <button id="toolsTabTaskRunner" class="tools-tab" type="button" role="tab" data-tools-tab="task-runner" aria-controls="taskRunnerPanel" aria-selected="true" tabindex="0">Task Runner</button>
+                                        <button id="toolsTabDiagnostics" class="tools-tab" type="button" role="tab" data-tools-tab="diagnostics" aria-controls="diagnosticsPanel" aria-selected="false" tabindex="-1">Diagnostics</button>
+                                        <button id="toolsTabInspector" class="tools-tab" type="button" role="tab" data-tools-tab="inspect" aria-controls="inspectPanel" aria-selected="false" tabindex="-1">Inspector</button>
+                                        <button id="toolsTabDebugger" class="tools-tab" type="button" role="tab" data-tools-tab="debug" aria-controls="debugPanel" aria-selected="false" tabindex="-1">Debugger</button>
+                                    </div>
+
+                                    <div class="tools-tab-panels">
+                                    <section id="taskRunnerPanel" class="diagnostics-panel task-runner-panel" aria-live="polite" role="tabpanel" data-tools-panel="task-runner" data-open="true">
                                         <header class="diagnostics-header">
                                             <div>
                                                 <p class="diagnostics-label">Task Runner</p>
@@ -345,21 +364,7 @@
                                         <ul id="taskRunnerOutput" class="diagnostics-list task-runner-output" role="list"></ul>
                                     </section>
 
-                                    <section id="problemsPanel" class="diagnostics-panel problems-panel" aria-live="polite">
-                                        <header class="diagnostics-header">
-                                            <div>
-                                                <p class="diagnostics-label">Problems</p>
-                                                <p class="diagnostics-sub">Lint and runtime issues</p>
-                                            </div>
-                                            <div class="diagnostics-actions">
-                                                <button id="problemsRefresh" type="button">Refresh</button>
-                                                <button id="problemsClear" type="button">Clear</button>
-                                            </div>
-                                        </header>
-                                        <ul id="problemsList" class="diagnostics-list problems-list" role="list"></ul>
-                                    </section>
-
-                                    <section class="diagnostics-panel" aria-live="polite">
+                                    <section id="diagnosticsPanel" class="diagnostics-panel" aria-live="polite" role="tabpanel" data-tools-panel="diagnostics" data-open="false" hidden>
                                         <header class="diagnostics-header">
                                             <div>
                                                 <p class="diagnostics-label">Diagnostics</p>
@@ -373,7 +378,7 @@
                                         <ul id="diagnosticsList" class="diagnostics-list" role="list"></ul>
                                     </section>
 
-                                    <section id="inspectPanel" class="inspect-panel" aria-live="polite">
+                                    <section id="inspectPanel" class="inspect-panel" aria-live="polite" role="tabpanel" data-tools-panel="inspect" data-open="false" hidden>
                                         <header class="inspect-header">
                                             <div>
                                                 <p class="inspect-label">Inspect</p>
@@ -390,7 +395,7 @@
                                         </div>
                                     </section>
 
-                                    <section id="debugPanel" class="diagnostics-panel debug-panel" aria-live="polite">
+                                    <section id="debugPanel" class="diagnostics-panel debug-panel" aria-live="polite" role="tabpanel" data-tools-panel="debug" data-open="false" hidden>
                                         <header class="diagnostics-header">
                                             <div>
                                                 <p class="diagnostics-label">Debugger</p>
@@ -411,6 +416,24 @@
                                         </div>
                                         <ul id="debugWatchList" class="diagnostics-list" role="list"></ul>
                                     </section>
+                                    </div>
+
+                                    <div id="toolsProblemsDock" class="tools-problems-dock" data-open="true">
+                                        <button id="toolsProblemsToggle" class="tools-problems-toggle" type="button" aria-controls="problemsPanel" aria-expanded="true">Hide Problems</button>
+                                        <section id="problemsPanel" class="diagnostics-panel problems-panel" aria-live="polite" data-open="true" aria-hidden="false">
+                                            <header class="diagnostics-header">
+                                                <div>
+                                                    <p class="diagnostics-label">Problems</p>
+                                                    <p class="diagnostics-sub">Lint and runtime issues</p>
+                                                </div>
+                                                <div class="diagnostics-actions">
+                                                    <button id="problemsRefresh" type="button">Refresh</button>
+                                                    <button id="problemsClear" type="button">Clear</button>
+                                                </div>
+                                            </header>
+                                            <ul id="problemsList" class="diagnostics-list problems-list" role="list"></ul>
+                                        </section>
+                                    </div>
                                 </div>
                             </section>
                         </div>
@@ -683,6 +706,20 @@
                             <input id="editorSnippetToggle" type="checkbox" />
                             <span>Tab snippets</span>
                         </label>
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-toggle">
+                            <input id="editorSignatureHintToggle" type="checkbox" />
+                            <span>Inline parameter hints</span>
+                        </label>
+                    </div>
+                    <div class="layout-group editor-settings-number-group">
+                        <label class="layout-label" for="editorCompletionMaxItems">Completion max items</label>
+                        <input id="editorCompletionMaxItems" type="number" min="4" max="16" step="1" />
+                    </div>
+                    <div class="layout-group editor-settings-number-group">
+                        <label class="layout-label" for="editorCompletionOpacity">Completion transparency (%)</label>
+                        <input id="editorCompletionOpacity" type="number" min="20" max="100" step="5" />
                     </div>
                     <div class="layout-group snippet-manager-group">
                         <p class="layout-label">Snippet Manager</p>

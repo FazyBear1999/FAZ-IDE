@@ -1,4 +1,4 @@
-export const THEMES = ["dark", "light", "purple", "retro", "temple"];
+export const THEMES = ["dark", "light", "purple", "retro", "temple", "midnight", "ocean", "forest", "graphite", "sunset"];
 export const DEFAULT_THEME = "dark";
 
 export function normalizeTheme(value, allowedThemes = THEMES, fallback = DEFAULT_THEME) {

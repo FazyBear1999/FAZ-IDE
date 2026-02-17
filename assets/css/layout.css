@@ -237,9 +237,6 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     font-size: 13px;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb-hover) transparent;
-    -webkit-overflow-scrolling: touch;
 }
 
 .top::-webkit-scrollbar,
@@ -325,7 +322,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 .brand p {
     margin: 6px 0 0;
     color: var(--muted);
-    font-size: 12px;
+    font-size: var(--text-size-xs);
 }
 
 /* Stack header on smaller screens */
@@ -378,25 +375,6 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     position: relative;
 }
 
-.card[data-resize-edge="left"]::after,
-.card[data-resize-edge="right"]::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--btn-pressed-border);
-    pointer-events: none;
-}
-
-.card[data-resize-edge="left"]::after {
-    left: -1px;
-}
-
-.card[data-resize-edge="right"]::after {
-    right: -1px;
-}
-
 .workspace {
     --resize-guide-color: var(--border-focus);
 }
@@ -442,9 +420,6 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     box-sizing: border-box;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb-hover) transparent;
-    -webkit-overflow-scrolling: touch;
 }
 
 .card-hd > * {
@@ -477,7 +452,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 .card-title p {
     margin: 6px 0 0;
     color: var(--muted);
-    font-size: 12px;
+    font-size: var(--text-size-xs);
     line-height: 1.35;
 }
 
@@ -501,11 +476,6 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     flex-wrap: nowrap;
 }
 
-.log-panel .row[aria-label="Console actions"] {
-    justify-content: flex-start;
-    gap: 2px;
-}
-
 .log-panel .card-hd {
     justify-content: flex-start;
     gap: 8px;
@@ -517,7 +487,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     align-items: center;
     gap: 8px;
     color: var(--text-footer);
-    font-size: 11px;
+    font-size: var(--text-size-2xs);
     line-height: 1.2;
     padding-top: var(--footer-pad-block);
     padding-bottom: var(--footer-pad-block);
@@ -529,20 +499,12 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     overflow-x: hidden;
     overflow-y: hidden;
     white-space: nowrap;
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .foot,
 .foot * {
-    font-size: 11px;
+    font-size: var(--text-size-2xs);
     line-height: 1.2;
-}
-
-.foot[data-middle-pan-active="true"] {
-    cursor: ew-resize;
-    -webkit-user-select: none;
-    user-select: none;
 }
 
 .foot > span {

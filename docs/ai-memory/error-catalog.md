@@ -46,3 +46,11 @@
 - 2026-02-15: Guardian rollback restored snapshot 1771163555193-guardian-preflight after gate failure
 
 - 2026-02-15: Guardian failure generated docs/ai-memory/franklin-fix-request.md for npm run test
+
+- 2026-02-17: Guardian rollback restored snapshot 1771287434303-guardian-preflight after gate failure
+
+- 2026-02-17: Guardian failure generated docs/ai-memory/franklin-fix-request.md for npm run test
+
+- 2026-02-17: Guardian rollback restored snapshot 1771287502515-guardian-preflight after gate failure
+
+- 2026-02-17: Guardian failure generated docs/ai-memory/franklin-fix-request.md for npm run test
