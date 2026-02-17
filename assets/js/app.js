@@ -16,7 +16,7 @@
 // - Any execution behavior must stay in sandbox/* (isolated + testable).
 // - Keeping IDs centralized + fail-fast checks makes HTML refactors safe.
 
-import { APP, STORAGE, DEFAULT_CODE, GAMES, APPLICATIONS } from "./config.js";
+import { APP, STORAGE, DEFAULT_CODE, DEFAULT_WELCOME_FILES, GAMES, APPLICATIONS } from "./config.js";
 import { getRequiredElements } from "./ui/elements.js";
 import { load, save } from "./ui/store.js";
 import { makeLogger } from "./ui/logger.js";
@@ -31,6 +31,227 @@ import { createRunContext, normalizeRunContext, buildRunContextLabel } from "./s
 import { makeTextareaEditor } from "./editors/textarea.js";
 import { makeCodeMirrorEditor } from "./editors/codemirror5.js";
 import { createCommandRegistry } from "./core/commandRegistry.js";
+
+function sanitizeStyleForHtml(value = "") {
+    return String(value ?? "").replace(/<\/style>/gi, "<\\/style>");
+}
+
+function buildCssPreviewHtml(cssCode) {
+    const safeCss = sanitizeStyleForHtml(cssCode);
+    const shellCss =
+        `:root{` +
+        `--preview-bg:var(--fazide-sandbox-bg,#0b0f14);` +
+        `--preview-fg:var(--fazide-sandbox-fg,#e6edf3);` +
+        `--preview-panel:var(--fazide-sandbox-panel,#111520);` +
+        `--preview-border:var(--fazide-sandbox-border,rgba(148,163,184,.3));` +
+        `--preview-accent:var(--fazide-sandbox-accent,#38bdf8);` +
+        `--preview-muted:var(--fazide-sandbox-muted,rgba(148,163,184,.9));` +
+        `}` +
+        `html,body{margin:0;min-height:100%;}` +
+        `body{padding:20px;background:var(--preview-bg);color:var(--preview-fg);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;}` +
+        `.fazide-css-preview{max-width:760px;margin:0 auto;padding:16px;border:1px solid var(--preview-border);background:var(--preview-panel);}` +
+        `.fazide-css-preview h1{margin:0 0 8px;color:var(--preview-fg);font-size:20px;}` +
+        `.fazide-css-preview p{margin:0 0 12px;color:var(--preview-muted);}` +
+        `.fazide-css-preview button{padding:8px 12px;border:1px solid var(--preview-accent);background:transparent;color:var(--preview-fg);}`;
+    return (
+        `<!doctype html><html><head><meta charset="utf-8" />` +
+        `<style>${shellCss}</style>` +
+        `<style>${safeCss}</style>` +
+        `</head><body>` +
+        `<main class="fazide-css-preview">` +
+        `<h1>CSS Preview</h1>` +
+        `<p>Edit your stylesheet and click Run to refresh this preview.</p>` +
+        `<button type="button">Preview Button</button>` +
+        `</main></body></html>`
+    );
+}
+
+function buildPythonPreviewHtml(fileName = "") {
+    const safeName = escapeHTML(getFileBaseName(fileName || "main.py") || "main.py");
+    const shellCss =
+        `:root{` +
+        `--preview-bg:var(--fazide-sandbox-bg,#0b0f14);` +
+        `--preview-fg:var(--fazide-sandbox-fg,#e6edf3);` +
+        `--preview-panel:var(--fazide-sandbox-panel,#111520);` +
+        `--preview-border:var(--fazide-sandbox-border,rgba(148,163,184,.3));` +
+        `--preview-accent:var(--fazide-sandbox-accent,#38bdf8);` +
+        `--preview-muted:var(--fazide-sandbox-muted,rgba(148,163,184,.9));` +
+        `}` +
+        `html,body{margin:0;min-height:100%;}` +
+        `body{padding:20px;background:var(--preview-bg);color:var(--preview-fg);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;}` +
+        `.fazide-css-preview{max-width:760px;margin:0 auto;padding:16px;border:1px solid var(--preview-border);background:var(--preview-panel);}` +
+        `.fazide-css-preview h1{margin:0 0 8px;font-size:20px;color:var(--preview-fg);}` +
+        `.fazide-css-preview p{margin:0 0 10px;color:var(--preview-muted);}` +
+        `.fazide-css-preview strong{color:var(--preview-accent);}`;
+    return (
+        `<!doctype html><html><head><meta charset="utf-8" /><style>${shellCss}</style></head><body>` +
+        `<main class="fazide-css-preview">` +
+        `<h1>Python Run</h1>` +
+        `<p>Executing <strong>${safeName}</strong> in sandboxed Python worker.</p>` +
+        `<p>Console output appears in the Console panel.</p>` +
+        `</main></body></html>`
+    );
+}
+
+function createWorkspaceAssetResolver(workspaceFiles = []) {
+    let workspaceFileMap = null;
+    let fromDirSegmentsCache = null;
+    let resolvedAssetFileCache = null;
+    let sourceLanguageCache = null;
+
+    const ensureState = () => {
+        if (workspaceFileMap && fromDirSegmentsCache && resolvedAssetFileCache && sourceLanguageCache) return;
+        workspaceFileMap = new Map(
+            workspaceFiles.map((file) => [
+                normalizePathSlashes(String(file.name || "")).toLowerCase(),
+                file,
+            ])
+        );
+        fromDirSegmentsCache = new Map();
+        resolvedAssetFileCache = new Map();
+        sourceLanguageCache = new Map();
+    };
+
+    const resolveWorkspaceFile = (filePath = "") => {
+        ensureState();
+        const normalized = normalizePathSlashes(String(filePath || "")).toLowerCase();
+        if (!normalized) return null;
+        return workspaceFileMap.get(normalized) || null;
+    };
+
+    const getSourceLanguage = (fileName = "") => {
+        ensureState();
+        const key = String(fileName || "").toLowerCase();
+        if (!key) return "";
+        if (sourceLanguageCache.has(key)) return sourceLanguageCache.get(key);
+        const language = detectLanguageFromFileName(key);
+        sourceLanguageCache.set(key, language);
+        return language;
+    };
+
+    const isExternalAssetRef = (value = "") => {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (!normalized || normalized.startsWith("#") || normalized.startsWith("//")) return true;
+        return /^[a-z][a-z0-9+.-]*:/.test(normalized);
+    };
+
+    const stripAssetDecorators = (value = "") => String(value || "").split("#")[0].split("?")[0];
+
+    const resolveWorkspacePath = (baseSegments = [], refValue = "") => {
+        const segments = Array.isArray(baseSegments) ? [...baseSegments] : [];
+        splitPathSegments(refValue).forEach((segment) => {
+            if (segment === ".") return;
+            if (segment === "..") {
+                if (segments.length) segments.pop();
+                return;
+            }
+            segments.push(segment);
+        });
+        return buildPathFromSegments(segments);
+    };
+
+    const dedupeWorkspacePaths = (values = []) => {
+        const seen = new Set();
+        return (Array.isArray(values) ? values : [])
+            .map((value) => normalizePathSlashes(String(value || "")).replace(/^\/+/, ""))
+            .filter((value) => {
+                const normalized = value.trim();
+                if (!normalized) return false;
+                const key = normalized.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+    };
+
+    const resolveWorkspaceAssetPaths = (fromFileName, assetRef) => {
+        ensureState();
+        if (isExternalAssetRef(assetRef)) return [];
+        const clean = normalizePathSlashes(stripAssetDecorators(assetRef));
+        if (!clean) return [];
+        const rootRelative = clean.startsWith("/");
+        const refValue = rootRelative ? clean.slice(1) : clean;
+        const fromKey = normalizePathSlashes(String(fromFileName || "")).toLowerCase();
+        const fromDirSegments = fromDirSegmentsCache.has(fromKey)
+            ? fromDirSegmentsCache.get(fromKey)
+            : splitPathSegments(getFileDirectory(fromKey));
+        if (!fromDirSegmentsCache.has(fromKey)) {
+            fromDirSegmentsCache.set(fromKey, fromDirSegments);
+        }
+        const directPath = resolveWorkspacePath(rootRelative ? [] : fromDirSegments, refValue);
+        if (rootRelative) return dedupeWorkspacePaths([directPath]);
+
+        const rootFallbackPath = resolveWorkspacePath([], refValue);
+        const looksRootAnchored =
+            refValue.startsWith("./") ||
+            refValue.startsWith("../") ||
+            refValue.startsWith("assets/") ||
+            refValue.startsWith("apps/") ||
+            refValue.startsWith("games/");
+        return dedupeWorkspacePaths(
+            looksRootAnchored || directPath !== rootFallbackPath
+                ? [directPath, rootFallbackPath]
+                : [directPath]
+        );
+    };
+
+    const resolveWorkspaceAssetFile = (fromFileName, assetRef) => {
+        ensureState();
+        const cacheKey = `${normalizePathSlashes(String(fromFileName || "")).toLowerCase()}::${normalizePathSlashes(String(assetRef || "")).trim().toLowerCase()}`;
+        if (resolvedAssetFileCache.has(cacheKey)) {
+            return resolvedAssetFileCache.get(cacheKey);
+        }
+        const candidates = resolveWorkspaceAssetPaths(fromFileName, assetRef);
+        let resolved = null;
+        for (let i = 0; i < candidates.length; i += 1) {
+            const sourceFile = resolveWorkspaceFile(candidates[i]);
+            if (sourceFile) {
+                resolved = sourceFile;
+                break;
+            }
+        }
+        resolvedAssetFileCache.set(cacheKey, resolved);
+        return resolved;
+    };
+
+    const buildHtmlFromWorkspace = (htmlSource, fromFileName) => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(String(htmlSource ?? ""), "text/html");
+
+        Array.from(doc.querySelectorAll("link[href]")).forEach((link) => {
+            const rel = String(link.getAttribute("rel") || "").toLowerCase();
+            if (rel && !rel.split(/\s+/).includes("stylesheet")) return;
+            const href = link.getAttribute("href") || "";
+            const sourceFile = resolveWorkspaceAssetFile(fromFileName, href);
+            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "css") return;
+            const style = doc.createElement("style");
+            style.setAttribute("data-fazide-source", sourceFile.name);
+            style.textContent = sanitizeStyleForHtml(sourceFile.code);
+            link.replaceWith(style);
+        });
+
+        Array.from(doc.querySelectorAll("script[src]")).forEach((script) => {
+            const src = script.getAttribute("src") || "";
+            const sourceFile = resolveWorkspaceAssetFile(fromFileName, src);
+            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "javascript") return;
+            const inline = doc.createElement("script");
+            Array.from(script.attributes).forEach((attr) => {
+                if (String(attr.name || "").toLowerCase() === "src") return;
+                inline.setAttribute(attr.name, attr.value);
+            });
+            inline.setAttribute("data-fazide-source", sourceFile.name);
+            inline.textContent = String(sourceFile.code ?? "");
+            script.replaceWith(inline);
+        });
+
+        const root = doc.documentElement;
+        return `<!doctype html>\n${root ? root.outerHTML : String(htmlSource ?? "")}`;
+    };
+
+    return {
+        buildHtmlFromWorkspace,
+    };
+}
 import { createDebouncedTask } from "./core/debounce.js";
 import { createFormatter } from "./core/formatting.js";
 import { createAstClient } from "./core/astClient.js";
@@ -263,6 +484,7 @@ const SANDBOX_CONSOLE_ARG_MAX_CHARS = 1000;
 const SANDBOX_RUNTIME_MESSAGE_MAX_CHARS = 1400;
 const SANDBOX_PROMISE_REASON_MAX_CHARS = 1400;
 const SANDBOX_CONSOLE_QUEUE_LIMIT = 180;
+const SANDBOX_CONSOLE_FLUSH_TIMEOUT_MS = 80;
 const SANDBOX_READY_FALLBACK_MS = 1200;
 const FILE_FILTER_RENDER_DEBOUNCE_MS = 90;
 const PROJECT_SEARCH_SCAN_DEBOUNCE_MS = 140;
@@ -1654,6 +1876,7 @@ let lastRenderedActiveDescendantId = "";
 let lastRenderedEditorTabsMarkup = null;
 let lastRenderedFileListMarkup = null;
 let sandboxConsoleFlushFrame = null;
+let sandboxConsoleFlushTimeout = null;
 let sandboxConsoleQueue = [];
 let sandboxRunReadyTimer = null;
 let taskRunnerEntries = [];
@@ -3160,6 +3383,10 @@ function markSandboxReady() {
 
 function flushSandboxConsoleQueue() {
     sandboxConsoleFlushFrame = null;
+    if (sandboxConsoleFlushTimeout != null) {
+        clearTimeout(sandboxConsoleFlushTimeout);
+        sandboxConsoleFlushTimeout = null;
+    }
     if (!sandboxConsoleQueue.length) return;
     const entries = sandboxConsoleQueue.splice(0, sandboxConsoleQueue.length);
     markSandboxReady();
@@ -3180,14 +3407,24 @@ function queueSandboxConsoleLog(level = "info", args = []) {
     if (sandboxConsoleQueue.length > SANDBOX_CONSOLE_QUEUE_LIMIT) {
         sandboxConsoleQueue.splice(0, sandboxConsoleQueue.length - SANDBOX_CONSOLE_QUEUE_LIMIT);
     }
-    if (sandboxConsoleFlushFrame != null) return;
-    sandboxConsoleFlushFrame = scheduleFrame(() => flushSandboxConsoleQueue());
+    if (sandboxConsoleFlushFrame == null) {
+        sandboxConsoleFlushFrame = scheduleFrame(() => flushSandboxConsoleQueue());
+    }
+    if (sandboxConsoleFlushTimeout == null) {
+        sandboxConsoleFlushTimeout = setTimeout(() => flushSandboxConsoleQueue(), SANDBOX_CONSOLE_FLUSH_TIMEOUT_MS);
+    }
 }
 
 function isTrustedSandboxMessageEvent(event) {
     const source = event?.source;
     const runnerWindow = getRunnerWindow();
-    return Boolean(source && runnerWindow && source === runnerWindow);
+    if (!(source && runnerWindow && source === runnerWindow)) {
+        return false;
+    }
+    const origin = String(event?.origin || "").trim();
+    if (!origin) return false;
+    if (origin === "null") return true;
+    return origin === window.location.origin;
 }
 
 function normalizeProblemDiagnostic(entry = {}) {
@@ -3904,6 +4141,154 @@ function maskDevTerminalCommand(input = "") {
     return String(input || "").trim();
 }
 
+async function probePythonRuntimeConnectivity(timeoutMs = 6000) {
+    const targets = [
+        { label: "local-bundle", url: new URL("./assets/vendor/pyodide/v0.27.2/full/pyodide.js", window.location.href).href },
+        { label: "cdn-jsdelivr", url: "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js" },
+        { label: "cdn-unpkg", url: "https://unpkg.com/pyodide@0.27.2/pyodide.js" },
+    ];
+    if (typeof fetch !== "function") {
+        return { ok: false, results: [], error: "Fetch API unavailable in this browser context." };
+    }
+    if (typeof AbortController !== "function") {
+        return { ok: false, results: [], error: "AbortController unavailable in this browser context." };
+    }
+
+    const results = [];
+    for (let i = 0; i < targets.length; i += 1) {
+        const target = targets[i];
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 6000));
+        try {
+            const response = await fetch(target.url, {
+                method: "GET",
+                mode: "cors",
+                cache: "no-store",
+                signal: controller.signal,
+            });
+            const ok = Boolean(response?.ok);
+            results.push({
+                label: target.label,
+                url: target.url,
+                ok,
+                status: Number(response?.status || 0),
+                error: ok ? "" : `HTTP ${response.status} ${response.statusText || ""}`.trim(),
+            });
+        } catch (err) {
+            results.push({
+                label: target.label,
+                url: target.url,
+                ok: false,
+                status: 0,
+                error: String(err?.message || err || "Unknown network error"),
+            });
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    const ok = results.some((entry) => entry.ok);
+    return {
+        ok,
+        results,
+        error: ok ? "" : "All Python runtime sources unreachable.",
+    };
+}
+
+async function resetAppToFirstLaunchState() {
+    flushEditorAutosave();
+    cancelPythonSandboxRuns("Factory reset requested.");
+
+    const keysToRemove = new Set(
+        Object.values(STORAGE)
+            .map((value) => String(value || "").trim())
+            .filter(Boolean)
+    );
+
+    try {
+        if (typeof localStorage !== "undefined") {
+            for (let i = 0; i < localStorage.length; i += 1) {
+                const key = String(localStorage.key(i) || "");
+                if (key.startsWith("fazide.")) {
+                    keysToRemove.add(key);
+                }
+            }
+        }
+    } catch {
+        // no-op
+    }
+
+    let removedKeys = 0;
+    keysToRemove.forEach((key) => {
+        try {
+            localStorage.removeItem(key);
+            removedKeys += 1;
+        } catch {
+            // no-op
+        }
+    });
+
+    let removedSessionKeys = 0;
+    try {
+        if (typeof sessionStorage !== "undefined") {
+            const sessionKeys = [];
+            for (let i = 0; i < sessionStorage.length; i += 1) {
+                const key = String(sessionStorage.key(i) || "");
+                if (key.startsWith("fazide.")) {
+                    sessionKeys.push(key);
+                }
+            }
+            sessionKeys.forEach((key) => {
+                sessionStorage.removeItem(key);
+                removedSessionKeys += 1;
+            });
+        }
+    } catch {
+        // no-op
+    }
+
+    let serviceWorkersCleared = 0;
+    try {
+        if (typeof navigator !== "undefined" && navigator.serviceWorker?.getRegistrations) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(async (registration) => {
+                try {
+                    const ok = await registration.unregister();
+                    if (ok) serviceWorkersCleared += 1;
+                } catch {
+                    // no-op
+                }
+            }));
+        }
+    } catch {
+        // no-op
+    }
+
+    let cachesCleared = 0;
+    try {
+        if (typeof caches !== "undefined" && typeof caches.keys === "function") {
+            const names = await caches.keys();
+            await Promise.all(names.map(async (name) => {
+                try {
+                    const ok = await caches.delete(name);
+                    if (ok) cachesCleared += 1;
+                } catch {
+                    // no-op
+                }
+            }));
+        }
+    } catch {
+        // no-op
+    }
+
+    return {
+        removedKeys,
+        removedSessionKeys,
+        serviceWorkersCleared,
+        cachesCleared,
+    };
+}
+
 function normalizeTaskRunnerCommand(task = "") {
     const input = String(task || "").trim().toLowerCase();
     if (!input) return "";
@@ -3982,6 +4367,7 @@ async function executeDevTerminalCommand(input = "") {
             "Commands: help, clear, status, run, format, save, save-all",
             "Commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
             `Commands: open <log|editor|files|sandbox|tools>, theme <${getSupportedThemeUsage()}>, files`,
+            "Commands: python-check, fresh-start confirm",
             "Safety: privileged/eval commands are disabled",
         ];
         lines.forEach((line) => appendDevTerminalEntry("info", line));
@@ -4052,6 +4438,48 @@ async function executeDevTerminalCommand(input = "") {
 
     if (command === "files") {
         appendDevTerminalEntry("info", `Workspace files: ${files.length} • folders: ${collectFolderPaths(files, folders).size} • trash: ${trashFiles.length}`);
+        return true;
+    }
+
+    if (command === "python-check") {
+        appendDevTerminalEntry("info", "Checking Python runtime sources (local + CDN fallbacks)...");
+        const result = await probePythonRuntimeConnectivity();
+        if (!Array.isArray(result.results) || !result.results.length) {
+            appendDevTerminalEntry("warn", `Python runtime check unavailable: ${result.error || "No probe data."}`);
+            return false;
+        }
+        result.results.forEach((entry) => {
+            if (entry.ok) {
+                appendDevTerminalEntry("info", `Python source OK: ${entry.label} (HTTP ${entry.status})`);
+            } else {
+                appendDevTerminalEntry("warn", `Python source FAIL: ${entry.label} (${entry.error})`);
+            }
+        });
+        if (result.ok) {
+            appendDevTerminalEntry("info", "Python runtime should be able to start from at least one source.");
+            return true;
+        }
+        appendDevTerminalEntry("warn", "All Python runtime sources unreachable. This is usually network/firewall filtering or missing local bundle.");
+        appendDevTerminalEntry("warn", "Run: npm run python:runtime:setup (project root) to install local Pyodide runtime bundle.");
+        return false;
+    }
+
+    if (["fresh-start", "factory-reset", "reset-all"].includes(command)) {
+        const confirmToken = String(values[0] || "").trim().toLowerCase();
+        if (confirmToken !== "confirm") {
+            appendDevTerminalEntry("warn", "Usage: fresh-start confirm");
+            appendDevTerminalEntry("warn", "This removes FAZ IDE local data (files/layout/settings/history), clears related caches, then reloads.");
+            return false;
+        }
+        appendDevTerminalEntry("info", "Factory reset in progress...");
+        const summary = await resetAppToFirstLaunchState();
+        appendDevTerminalEntry(
+            "info",
+            `Cleared local keys: ${summary.removedKeys}, session keys: ${summary.removedSessionKeys}, service workers: ${summary.serviceWorkersCleared}, caches: ${summary.cachesCleared}. Reloading...`
+        );
+        setTimeout(() => {
+            window.location.reload();
+        }, 80);
         return true;
     }
 
@@ -7510,6 +7938,23 @@ function syncApplicationsUI() {
     }
 }
 
+async function loadTemplateFilesFromSources(templateFiles = [], contextLabel = "Template") {
+    const sourceFiles = Array.isArray(templateFiles) ? templateFiles : [];
+    const loaded = await Promise.all(
+        sourceFiles.map(async (file) => {
+            const response = await fetch(file.src, { cache: "no-store" });
+            if (!response.ok) {
+                throw new Error(`${contextLabel} fetch failed: HTTP ${response.status} ${response.statusText}`);
+            }
+            return {
+                path: file.path,
+                code: await response.text(),
+            };
+        })
+    );
+    return loaded.filter((entry) => entry && entry.path);
+}
+
 async function loadGameById(id, { runAfter = false } = {}) {
     const game = getGameById(id);
     if (!game) {
@@ -7525,18 +7970,7 @@ async function loadGameById(id, { runAfter = false } = {}) {
 
     try {
         const before = snapshotWorkspaceState();
-        const loadedFiles = await Promise.all(
-            game.files.map(async (file) => {
-                const response = await fetch(file.src, { cache: "no-store" });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
-                }
-                return {
-                    path: file.path,
-                    code: await response.text(),
-                };
-            })
-        );
+        const loadedFiles = await loadTemplateFilesFromSources(game.files, "Game template");
         if (!loadedFiles.length) {
             throw new Error("Game template is empty.");
         }
@@ -7604,18 +8038,7 @@ async function loadApplicationById(id, { runAfter = false } = {}) {
 
     try {
         const before = snapshotWorkspaceState();
-        const loadedFiles = await Promise.all(
-            app.files.map(async (file) => {
-                const response = await fetch(file.src, { cache: "no-store" });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
-                }
-                return {
-                    path: file.path,
-                    code: await response.text(),
-                };
-            })
-        );
+        const loadedFiles = await loadTemplateFilesFromSources(app.files, "Application template");
         if (!loadedFiles.length) {
             throw new Error("Application template is empty.");
         }
@@ -12578,6 +13001,13 @@ function detectLanguageFromFileName(fileName = "") {
     return "text";
 }
 
+function looksLikePythonSource(code = "") {
+    const text = String(code || "");
+    if (!text.trim()) return false;
+    const pyHint = /(^|\n)\s*(from\s+[A-Za-z_][\w.]*\s+import\s+|import\s+[A-Za-z_][\w.]*|def\s+[A-Za-z_][\w]*\s*\(|class\s+[A-Za-z_][\w]*\s*[:(]|print\s*\(|if\s+__name__\s*==\s*["']__main__["']\s*:)/;
+    return pyHint.test(text);
+}
+
 function getLanguageLabel(language = "text") {
     if (language === "javascript") return "JavaScript";
     if (language === "typescript") return "TypeScript";
@@ -13930,14 +14360,55 @@ async function hydrateFileState() {
     if (primary) return { ...primary, source: "primary" };
     if (snapshot) return { ...snapshot, source: "snapshot-fallback" };
     const legacy = load(STORAGE.CODE);
-    const defaultFile = makeFile(FILE_DEFAULT_NAME, legacy ?? DEFAULT_CODE);
+    if (legacy != null) {
+        const legacyFile = makeFile(FILE_DEFAULT_NAME, legacy ?? DEFAULT_CODE);
+        return {
+            files: [legacyFile],
+            folders: [],
+            activeId: legacyFile.id,
+            openIds: [legacyFile.id],
+            trash: [],
+            source: "legacy",
+        };
+    }
+
+    const welcomeTemplates = Array.isArray(DEFAULT_WELCOME_FILES) ? DEFAULT_WELCOME_FILES : [];
+    const welcomeFiles = welcomeTemplates
+        .map((entry) => {
+            const rawName = String(entry?.name || "").trim();
+            const rawCode = typeof entry?.code === "string" ? entry.code : "";
+            return rawName ? makeFile(rawName, rawCode) : null;
+        })
+        .filter(Boolean);
+
+    if (welcomeFiles.length) {
+        const preferredActive =
+            welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/app.js")) ||
+            welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/index.html")) ||
+            welcomeFiles[0];
+        const derivedFolders = normalizeFolderList(
+            welcomeFiles
+                .map((file) => getFileDirectory(file.name))
+                .filter(Boolean)
+        );
+        return {
+            files: welcomeFiles,
+            folders: derivedFolders,
+            activeId: preferredActive.id,
+            openIds: [preferredActive.id],
+            trash: [],
+            source: "welcome-default",
+        };
+    }
+
+    const defaultFile = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
     return {
         files: [defaultFile],
         folders: [],
         activeId: defaultFile.id,
         openIds: [defaultFile.id],
         trash: [],
-        source: "legacy",
+        source: "default",
     };
 }
 
@@ -16857,8 +17328,33 @@ function sendSandboxCommand(type, payload = undefined) {
     win.postMessage({ source: "fazide-parent", token: currentToken, type, payload }, "*");
 }
 
+function collectSandboxThemeSurface(themeValue = currentTheme) {
+    const root = document?.documentElement;
+    const styles = root && typeof getComputedStyle === "function" ? getComputedStyle(root) : null;
+    const readToken = (name, fallback = "") => {
+        if (!styles || !name) return fallback;
+        const value = String(styles.getPropertyValue(name) || "").trim();
+        return value || fallback;
+    };
+    const normalizedTheme = String(themeValue || currentTheme || "dark").toLowerCase();
+    const isLight = normalizedTheme === "light";
+    const panelSurface = readToken("--surface-panel", isLight ? "#ffffff" : "#111520");
+    return {
+        background: panelSurface || readToken("--bg", isLight ? "#f8fafc" : "#0b0f14"),
+        foreground: readToken("--text", isLight ? "#0f172a" : "#e6edf3"),
+        panel: panelSurface,
+        border: readToken("--border", isLight ? "rgba(148, 163, 184, 0.42)" : "rgba(148, 163, 184, 0.3)"),
+        accent: readToken("--accent", isLight ? "#0ea5e9" : "#38bdf8"),
+        muted: readToken("--muted", isLight ? "rgba(71, 85, 105, 0.9)" : "rgba(148, 163, 184, 0.9)"),
+        colorScheme: isLight ? "light" : "dark",
+    };
+}
+
 function syncSandboxTheme() {
-    sendSandboxCommand("theme_update", { theme: currentTheme });
+    sendSandboxCommand("theme_update", {
+        theme: currentTheme,
+        surface: collectSandboxThemeSurface(currentTheme),
+    });
 }
 
 function sendInspectCommand(type) {
@@ -17382,6 +17878,12 @@ function exposeDebug() {
         },
         runDevTerminal(command) {
             return executeDevTerminalCommand(command);
+        },
+        async freshStart(confirmReset = false) {
+            if (!confirmReset) return false;
+            await resetAppToFirstLaunchState();
+            window.location.reload();
+            return true;
         },
         clearTaskOutput() {
             clearTaskRunnerOutput();
@@ -18682,188 +19184,96 @@ async function boot() {
     editor.focus();
 }
 
-function run() {
-    // Pull current editor contents and execute inside sandbox iframe.
-    const code = editor.get();
-    updateActiveFileCode(code);
-    const activeFile = getActiveFile();
-    const activeLanguage = detectLanguageFromFileName(activeFile?.name || "");
+function runPythonExecution(runnableSource, entryName = "") {
+    cancelPythonSandboxRuns("Python run superseded by new Python execution.");
+    logger.append("system", ["Python runtime: starting worker execution..."]);
+    runInSandbox(getRunnerFrame(), buildPythonPreviewHtml(entryName), currentToken, {
+        mode: "html",
+        runContext: currentRunContext,
+    });
+    ensureSandboxOpen("Sandbox opened for run.");
+
+    const tokenAtRun = currentToken;
+    const isMockedPython = typeof window !== "undefined" && typeof window.__FAZIDE_PYTHON_EXECUTE__ === "function";
+    let sawPythonConsoleOutput = false;
+    const pythonLoadingNoticeTimer = setTimeout(() => {
+        if (currentToken !== tokenAtRun) return;
+        logger.append("system", ["Python runtime: still loading (first start may take longer on restricted networks)..."]);
+    }, 1800);
+    const pythonProbeTimer = isMockedPython ? null : setTimeout(async () => {
+        if (currentToken !== tokenAtRun) return;
+        logger.append("system", ["Python runtime: running connectivity probe..."]);
+        const probe = await probePythonRuntimeConnectivity(4000);
+        if (currentToken !== tokenAtRun) return;
+        if (probe.ok) {
+            logger.append("system", ["Python runtime: CDN reachable. Startup may still take a bit on first load."]);
+            return;
+        }
+        logger.append("warn", [`Python runtime probe failed: ${probe.error}`]);
+        cancelPythonSandboxRuns("Python runtime blocked: Pyodide CDN is unreachable from this network.");
+    }, 3200);
+    const pythonNetworkHintTimer = setTimeout(() => {
+        if (currentToken !== tokenAtRun) return;
+        logger.append("warn", ["Python runtime still loading. Usually this means Pyodide CDN is blocked/unreachable (not Live Server itself). Dev Terminal: python-check"]);
+    }, 8000);
+
+    void runPythonInSandbox({
+        code: runnableSource,
+        runContext: currentRunContext,
+        timeoutMs: isMockedPython ? 10_000 : 30_000,
+        onConsole(level, args) {
+            if (currentToken !== tokenAtRun) return;
+            sawPythonConsoleOutput = true;
+            queueSandboxConsoleLog(level, args);
+        },
+    }).then((result) => {
+        if (currentToken !== tokenAtRun) return;
+        clearTimeout(pythonLoadingNoticeTimer);
+        if (pythonProbeTimer != null) clearTimeout(pythonProbeTimer);
+        clearTimeout(pythonNetworkHintTimer);
+        const output = String(result?.result || "").trim();
+        if (output) {
+            queueSandboxConsoleLog("info", [output]);
+        }
+        if (!sawPythonConsoleOutput && !output) {
+            queueSandboxConsoleLog("system", ["Python runtime: execution finished (no console output). Add print(...) to see output."]);
+        }
+        markSandboxReady();
+        status.set("Ran");
+    }).catch((err) => {
+        if (currentToken !== tokenAtRun) return;
+        clearTimeout(pythonLoadingNoticeTimer);
+        if (pythonProbeTimer != null) clearTimeout(pythonProbeTimer);
+        clearTimeout(pythonNetworkHintTimer);
+        clearSandboxReadyTimer();
+        setHealth(health.sandbox, "error", "Sandbox: Failed");
+        const message = truncateText(String(err?.message || err || "Python runtime error"), SANDBOX_RUNTIME_MESSAGE_MAX_CHARS);
+        ensureLogOpen("Console opened for runtime error.");
+        logger.append("error", [message]);
+        const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
+        pushRuntimeProblem({
+            message,
+            fileId: currentRunFileId,
+            fileName,
+            level: "error",
+            kind: "runtime",
+        });
+        status.set("Error");
+    });
+
+    status.set("Ran");
+}
+
+function resolveRunSource(code = "", activeFile = null, workspaceResolver = null) {
     const entryName = activeFile?.name || FILE_DEFAULT_NAME;
-    let workspaceFileMap = null;
-    let fromDirSegmentsCache = null;
-    let resolvedAssetFileCache = null;
-    let sourceLanguageCache = null;
-    const ensureWorkspaceResolverState = () => {
-        if (workspaceFileMap && fromDirSegmentsCache && resolvedAssetFileCache && sourceLanguageCache) return;
-        workspaceFileMap = new Map(
-            files.map((file) => [
-                normalizePathSlashes(String(file.name || "")).toLowerCase(),
-                file,
-            ])
-        );
-        fromDirSegmentsCache = new Map();
-        resolvedAssetFileCache = new Map();
-        sourceLanguageCache = new Map();
-    };
-    const resolveWorkspaceFile = (filePath = "") => {
-        ensureWorkspaceResolverState();
-        const normalized = normalizePathSlashes(String(filePath || "")).toLowerCase();
-        if (!normalized) return null;
-        return workspaceFileMap.get(normalized) || null;
-    };
-    const getSourceLanguage = (fileName = "") => {
-        ensureWorkspaceResolverState();
-        const key = String(fileName || "").toLowerCase();
-        if (!key) return "";
-        if (sourceLanguageCache.has(key)) return sourceLanguageCache.get(key);
-        const language = detectLanguageFromFileName(key);
-        sourceLanguageCache.set(key, language);
-        return language;
-    };
-    const isExternalAssetRef = (value = "") => {
-        const normalized = String(value || "").trim().toLowerCase();
-        if (!normalized || normalized.startsWith("#") || normalized.startsWith("//")) return true;
-        return /^[a-z][a-z0-9+.-]*:/.test(normalized);
-    };
-    const stripAssetDecorators = (value = "") => String(value || "").split("#")[0].split("?")[0];
-    const resolveWorkspacePath = (baseSegments = [], refValue = "") => {
-        const segments = Array.isArray(baseSegments) ? [...baseSegments] : [];
-        splitPathSegments(refValue).forEach((segment) => {
-            if (segment === ".") return;
-            if (segment === "..") {
-                if (segments.length) segments.pop();
-                return;
-            }
-            segments.push(segment);
-        });
-        return buildPathFromSegments(segments);
-    };
-    const dedupeWorkspacePaths = (values = []) => {
-        const seen = new Set();
-        return (Array.isArray(values) ? values : [])
-            .map((value) => normalizePathSlashes(String(value || "")).replace(/^\/+/, ""))
-            .filter((value) => {
-                const normalized = value.trim();
-                if (!normalized) return false;
-                const key = normalized.toLowerCase();
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
-    };
-    const resolveWorkspaceAssetPaths = (fromFileName, assetRef) => {
-        ensureWorkspaceResolverState();
-        if (isExternalAssetRef(assetRef)) return [];
-        const clean = normalizePathSlashes(stripAssetDecorators(assetRef));
-        if (!clean) return [];
-        const rootRelative = clean.startsWith("/");
-        const refValue = rootRelative ? clean.slice(1) : clean;
-        const fromKey = normalizePathSlashes(String(fromFileName || "")).toLowerCase();
-        const fromDirSegments = fromDirSegmentsCache.has(fromKey)
-            ? fromDirSegmentsCache.get(fromKey)
-            : splitPathSegments(getFileDirectory(fromKey));
-        if (!fromDirSegmentsCache.has(fromKey)) {
-            fromDirSegmentsCache.set(fromKey, fromDirSegments);
-        }
-        const directPath = resolveWorkspacePath(rootRelative ? [] : fromDirSegments, refValue);
-        if (rootRelative) return dedupeWorkspacePaths([directPath]);
-
-        // Compatibility: users often author refs like "./assets/..." from nested files while
-        // expecting workspace-root resolution, so keep relative-first and fallback to root.
-        const rootFallbackPath = resolveWorkspacePath([], refValue);
-        const looksRootAnchored =
-            refValue.startsWith("./") ||
-            refValue.startsWith("../") ||
-            refValue.startsWith("assets/") ||
-            refValue.startsWith("apps/") ||
-            refValue.startsWith("games/");
-        return dedupeWorkspacePaths(
-            looksRootAnchored || directPath !== rootFallbackPath
-                ? [directPath, rootFallbackPath]
-                : [directPath]
-        );
-    };
-    const resolveWorkspaceAssetFile = (fromFileName, assetRef) => {
-        ensureWorkspaceResolverState();
-        const cacheKey = `${normalizePathSlashes(String(fromFileName || "")).toLowerCase()}::${normalizePathSlashes(String(assetRef || "")).trim().toLowerCase()}`;
-        if (resolvedAssetFileCache.has(cacheKey)) {
-            return resolvedAssetFileCache.get(cacheKey);
-        }
-        const candidates = resolveWorkspaceAssetPaths(fromFileName, assetRef);
-        let resolved = null;
-        for (let i = 0; i < candidates.length; i += 1) {
-            const sourceFile = resolveWorkspaceFile(candidates[i]);
-            if (sourceFile) {
-                resolved = sourceFile;
-                break;
-            }
-        }
-        resolvedAssetFileCache.set(cacheKey, resolved);
-        return resolved;
-    };
-    const sanitizeStyleForHtml = (value = "") => String(value ?? "").replace(/<\/style>/gi, "<\\/style>");
-    const buildHtmlFromWorkspace = (htmlSource, fromFileName) => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(String(htmlSource ?? ""), "text/html");
-
-        Array.from(doc.querySelectorAll("link[href]")).forEach((link) => {
-            const rel = String(link.getAttribute("rel") || "").toLowerCase();
-            if (rel && !rel.split(/\s+/).includes("stylesheet")) return;
-            const href = link.getAttribute("href") || "";
-            const sourceFile = resolveWorkspaceAssetFile(fromFileName, href);
-            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "css") return;
-            const style = doc.createElement("style");
-            style.setAttribute("data-fazide-source", sourceFile.name);
-            style.textContent = sanitizeStyleForHtml(sourceFile.code);
-            link.replaceWith(style);
-        });
-
-        Array.from(doc.querySelectorAll("script[src]")).forEach((script) => {
-            const src = script.getAttribute("src") || "";
-            const sourceFile = resolveWorkspaceAssetFile(fromFileName, src);
-            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "javascript") return;
-            const inline = doc.createElement("script");
-            Array.from(script.attributes).forEach((attr) => {
-                if (String(attr.name || "").toLowerCase() === "src") return;
-                inline.setAttribute(attr.name, attr.value);
-            });
-            inline.setAttribute("data-fazide-source", sourceFile.name);
-            inline.textContent = String(sourceFile.code ?? "");
-            script.replaceWith(inline);
-        });
-
-        const root = doc.documentElement;
-        return `<!doctype html>\n${root ? root.outerHTML : String(htmlSource ?? "")}`;
-    };
-    const buildCssPreviewHtml = (cssCode) => {
-        const safeCss = sanitizeStyleForHtml(cssCode);
-        return (
-            `<!doctype html><html><head><meta charset="utf-8" />` +
-            `<style>${safeCss}</style>` +
-            `</head><body>` +
-            `<main class="fazide-css-preview">` +
-            `<h1>CSS Preview</h1>` +
-            `<p>Edit your stylesheet and click Run to refresh this preview.</p>` +
-            `<button type="button">Preview Button</button>` +
-            `</main></body></html>`
-        );
-    };
-    const buildPythonPreviewHtml = (fileName = "") => {
-        const safeName = escapeHTML(getFileBaseName(fileName || "main.py") || "main.py");
-        return (
-            `<!doctype html><html><head><meta charset="utf-8" /></head><body>` +
-            `<main class="fazide-css-preview">` +
-            `<h1>Python Run</h1>` +
-            `<p>Executing ${safeName} in sandboxed Python worker.</p>` +
-            `<p>Console output appears in the Console panel.</p>` +
-            `</main></body></html>`
-        );
-    };
-
+    const activeLanguage = detectLanguageFromFileName(entryName);
     let runnableSource = applyBreakpointsToCode(code);
     let sandboxMode = "javascript";
+    let pythonLikeWarning = "";
+
     if (activeLanguage === "html") {
-        runnableSource = buildHtmlFromWorkspace(code, entryName);
+        const resolver = workspaceResolver || createWorkspaceAssetResolver(files);
+        runnableSource = resolver.buildHtmlFromWorkspace(code, entryName);
         sandboxMode = "html";
     } else if (activeLanguage === "css") {
         runnableSource = buildCssPreviewHtml(code);
@@ -18871,9 +19281,42 @@ function run() {
     } else if (activeLanguage === "python") {
         runnableSource = String(code ?? "");
         sandboxMode = "python";
+    } else if (looksLikePythonSource(code)) {
+        const languageLabel = normalizeLanguageLabel(activeLanguage);
+        pythonLikeWarning = `Python-like code detected, but this file is running as ${languageLabel}. Rename file to .py to run Python runtime.`;
     }
-    currentRunFileId = activeFileId;
 
+    return {
+        entryName,
+        runnableSource,
+        sandboxMode,
+        pythonLikeWarning,
+    };
+}
+
+function launchStandardSandboxRun(runnableSource, sandboxMode) {
+    runInSandbox(getRunnerFrame(), runnableSource, currentToken, {
+        mode: sandboxMode,
+        runContext: currentRunContext,
+    });
+    const tokenAtRun = currentToken;
+    sandboxRunReadyTimer = setTimeout(() => {
+        if (currentToken !== tokenAtRun) return;
+        markSandboxReady();
+    }, SANDBOX_READY_FALLBACK_MS);
+    ensureSandboxOpen("Sandbox opened for run.");
+
+    if (inspectEnabled) {
+        setTimeout(() => sendInspectCommand("inspect_enable"), 0);
+    }
+    if (debugMode && debugWatches.length) {
+        setTimeout(() => requestDebugWatchValues(), 80);
+    }
+
+    status.set("Ran");
+}
+
+function beginRunSession(sandboxMode) {
     runCount += 1;
     currentRunContext = makeRunContext();
     currentToken = currentRunContext.token;
@@ -18883,8 +19326,6 @@ function run() {
     }
 
     ensureLogOpen("Console opened for new run.");
-
-    // UI feedback first (feels responsive even if execution errors immediately).
     status.set("Running...");
     setHealth(health.sandbox, "warn", "Sandbox: Running");
     logger.append("system", [`-- Run #${runCount} --`]);
@@ -18892,80 +19333,33 @@ function run() {
     if (debugMode) {
         logger.append("system", [`Debug mode on • ${debugBreakpoints.size} breakpoint(s)`]);
     }
+}
+
+function run() {
+    // Pull current editor contents and execute inside sandbox iframe.
+    const code = editor.get();
+    updateActiveFileCode(code);
+    const activeFile = getActiveFile();
+    const entryName = activeFile?.name || FILE_DEFAULT_NAME;
+    const workspaceResolver = createWorkspaceAssetResolver(files);
+    const runPayload = resolveRunSource(code, activeFile, workspaceResolver);
+    const runnableSource = runPayload.runnableSource;
+    const sandboxMode = runPayload.sandboxMode;
+    if (runPayload.pythonLikeWarning) {
+        logger.append("warn", [runPayload.pythonLikeWarning]);
+    }
+    currentRunFileId = activeFileId;
+    beginRunSession(sandboxMode);
 
     try {
         clearSandboxReadyTimer();
 
         if (sandboxMode === "python") {
-            cancelPythonSandboxRuns("Python run superseded by new Python execution.");
-            runInSandbox(getRunnerFrame(), buildPythonPreviewHtml(entryName), currentToken, {
-                mode: "html",
-                runContext: currentRunContext,
-            });
-            ensureSandboxOpen("Sandbox opened for run.");
-
-            const tokenAtRun = currentToken;
-            void runPythonInSandbox({
-                code: runnableSource,
-                runContext: currentRunContext,
-                timeoutMs: 10_000,
-                onConsole(level, args) {
-                    if (currentToken !== tokenAtRun) return;
-                    queueSandboxConsoleLog(level, args);
-                },
-            }).then((result) => {
-                if (currentToken !== tokenAtRun) return;
-                const output = String(result?.result || "").trim();
-                if (output) {
-                    queueSandboxConsoleLog("info", [output]);
-                }
-                markSandboxReady();
-                status.set("Ran");
-            }).catch((err) => {
-                if (currentToken !== tokenAtRun) return;
-                clearSandboxReadyTimer();
-                setHealth(health.sandbox, "error", "Sandbox: Failed");
-                const message = truncateText(String(err?.message || err || "Python runtime error"), SANDBOX_RUNTIME_MESSAGE_MAX_CHARS);
-                ensureLogOpen("Console opened for runtime error.");
-                logger.append("error", [message]);
-                const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
-                pushRuntimeProblem({
-                    message,
-                    fileId: currentRunFileId,
-                    fileName,
-                    level: "error",
-                    kind: "runtime",
-                });
-                status.set("Error");
-            });
-
-            status.set("Ran");
+            runPythonExecution(runnableSource, entryName);
             return;
         }
 
-        // This resets iframe document + runs bridge + user code.
-        runInSandbox(getRunnerFrame(), runnableSource, currentToken, {
-            mode: sandboxMode,
-            runContext: currentRunContext,
-        });
-        const tokenAtRun = currentToken;
-        sandboxRunReadyTimer = setTimeout(() => {
-            if (currentToken !== tokenAtRun) return;
-            markSandboxReady();
-        }, SANDBOX_READY_FALLBACK_MS);
-        ensureSandboxOpen("Sandbox opened for run.");
-
-        if (inspectEnabled) {
-            // Re-arm the sandbox inspector after every fresh document write.
-            setTimeout(() => sendInspectCommand("inspect_enable"), 0);
-        }
-        if (debugMode && debugWatches.length) {
-            setTimeout(() => requestDebugWatchValues(), 80);
-        }
-
-        // We do NOT force "Ready" instantly; we confirm completion visually via the
-        // "Ran" indicates the run was launched successfully (not necessarily error-free).
-        status.set("Ran");
+        launchStandardSandboxRun(runnableSource, sandboxMode);
     } catch (err) {
         // If writing the iframe fails (rare), surface it in the log.
         clearSandboxReadyTimer();

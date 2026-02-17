@@ -1,0 +1,59 @@
+/* Runtime Full Matrix - CSS diagnostic stylesheet */
+:root {
+  color-scheme: dark;
+  --rt-bg: var(--fazide-sandbox-bg, #0b0f14);
+  --rt-fg: var(--fazide-sandbox-fg, #e6edf3);
+  --rt-panel: var(--fazide-sandbox-panel, #111520);
+  --rt-border: var(--fazide-sandbox-border, rgba(148, 163, 184, 0.3));
+  --rt-accent: var(--fazide-sandbox-accent, #38bdf8);
+  --rt-muted: var(--fazide-sandbox-muted, rgba(148, 163, 184, 0.9));
+  --rt-ok: #22c55e;
+}
+
+body {
+  background: var(--rt-bg);
+  color: var(--rt-fg);
+}
+
+.fazide-css-preview {
+  border: 1px solid var(--rt-border);
+  max-width: 860px;
+  margin: 20px auto;
+  padding: 16px;
+  background: var(--rt-panel);
+  box-shadow: none;
+}
+
+.fazide-css-preview::before {
+  content: "runtime-full-matrix:css:step-01:preview-attached";
+  display: block;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 0;
+  border: 1px solid var(--rt-ok);
+  background: color-mix(in srgb, var(--rt-ok) 18%, var(--rt-panel) 82%);
+  color: var(--rt-fg);
+}
+
+.fazide-css-preview::after {
+  content: "runtime-full-matrix:css:step-02:visual-markers-ok";
+  display: block;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 0;
+  border: 1px solid var(--rt-accent);
+  background: color-mix(in srgb, var(--rt-accent) 18%, var(--rt-panel) 82%);
+  color: var(--rt-fg);
+}
+
+.fazide-css-preview h1 {
+  margin-top: 0;
+  color: var(--rt-fg);
+}
+
+.fazide-css-preview button {
+  border: 1px solid var(--rt-accent);
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--rt-fg);
+}

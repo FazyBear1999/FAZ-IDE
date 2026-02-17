@@ -73,6 +73,21 @@ function lineNumberAt(content, index) {
   return content.slice(0, index).split(/\r?\n/).length;
 }
 
+function isAllowedVendorPathMatch(relPath, patternLabel, matchValue) {
+  const rel = String(relPath || "").replace(/\\/g, "/").toLowerCase();
+  const value = String(matchValue || "").toLowerCase();
+  const label = String(patternLabel || "").toLowerCase();
+
+  const isVendoredPyodide = rel.includes("/assets/vendor/pyodide/") || rel.includes("/vendor/pyodide/");
+  if (!isVendoredPyodide) return false;
+
+  if (label === "absolute linux home path" && value.startsWith("/home/")) {
+    return true;
+  }
+
+  return false;
+}
+
 const usernameCandidates = Array.from(
   new Set(
     [
@@ -130,6 +145,10 @@ function scanFile(absPath) {
     pattern.regex.lastIndex = 0;
     const match = pattern.regex.exec(content);
     if (!match) continue;
+
+    if (isAllowedVendorPathMatch(rel, pattern.label, match[0])) {
+      continue;
+    }
 
     const line = lineNumberAt(content, match.index);
     fail(`${rel}:${line} leaked ${pattern.label}: ${match[0]}`);

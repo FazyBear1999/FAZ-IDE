@@ -2,7 +2,8 @@
   "name": "faz-ide",
   "version": "0.2.0",
   "description": "FAZ IDE web project with optional desktop wrapper",
-  "author": "FAZ IDE",
+  "author": "Faz (FazyBear)",
+  "license": "MIT",
   "private": true,
   "main": "desktop/main.js",
   "devDependencies": {
@@ -72,6 +73,8 @@
     "frank:cleanup:all": "npm run frank:cleanup && npm run desktop:artifacts:clean",
     "workspace:cleanup:preview": "node scripts/workspace-cleanup.js",
     "workspace:cleanup": "node scripts/workspace-cleanup.js --apply",
+    "python:runtime:setup": "node scripts/setup-python-runtime.js",
+    "python:runtime:verify": "node scripts/setup-python-runtime.js --verify",
     "frank:doctor": "node scripts/franklin.js doctor",
     "frank:status": "node scripts/franklin.js status",
     "ai": "node scripts/ai-assist.js",

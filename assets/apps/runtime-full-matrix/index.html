@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Runtime Full Matrix Report</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="panel">
+    <h1>
+      <img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f9ea.svg" alt="" aria-hidden="true" />
+      Runtime Full Matrix Report
+    </h1>
+    <p id="status">Starting full matrix test...</p>
+    <p class="note">Simple big test: check JavaScript, HTML, CSS, and Python one by one.</p>
+    <section id="matrixConfirm" class="matrix-confirm" aria-live="polite">
+      <p class="matrix-confirm-title">
+        <img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/23f3.svg" alt="" aria-hidden="true" />
+        Matrix status: Running checks...
+      </p>
+      <p class="matrix-confirm-note">If all checks pass, this will show a green all-systems-go confirmation.</p>
+    </section>
+    <section class="grid" aria-label="Validation matrix">
+      <article>
+        <h2><img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f7e8.svg" alt="" aria-hidden="true" /> JavaScript</h2>
+        <p>Run <strong>app.js</strong>. You should see clear JS done markers in Console.</p>
+      </article>
+      <article>
+        <h2><img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f7e7.svg" alt="" aria-hidden="true" /> HTML</h2>
+        <p>Run <strong>index.html</strong>. You should see HTML + linked JS markers.</p>
+      </article>
+      <article>
+        <h2><img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f7e6.svg" alt="" aria-hidden="true" /> CSS</h2>
+        <p>Run <strong>matrix.css</strong>. You should see style markers in Sandbox.</p>
+      </article>
+      <article>
+        <h2><img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f40d.svg" alt="" aria-hidden="true" /> Python</h2>
+        <p>Run <strong>main.py</strong>. You should see Python stdout/stderr and done marker.</p>
+      </article>
+    </section>
+    <ul class="report matrix-checklist" aria-label="Matrix checklist">
+      <li class="info">STEP 1: JS done marker appears</li>
+      <li class="info">STEP 2: HTML linked JS marker appears</li>
+      <li class="info">STEP 3: CSS visual markers appear</li>
+      <li class="info">STEP 4: Python done marker appears</li>
+    </ul>
+    <ol id="report" class="report" aria-live="polite"></ol>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

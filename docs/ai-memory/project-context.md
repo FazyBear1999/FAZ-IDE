@@ -37,3 +37,7 @@
 - Observability
 - Teachability
 - Portability
+
+## AI Operations References
+- `agent-operations.md` defines the cross-agent safe operating contract.
+- `optimization-map.md` lists prioritized optimization targets with risk levels.

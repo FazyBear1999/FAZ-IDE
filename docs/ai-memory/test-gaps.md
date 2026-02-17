@@ -17,13 +17,23 @@ Prioritize gaps that affect build determinism, privacy, rollback safety, and wor
 
 ## Python Runtime Next Gaps
 
+- Add regression/contract check that validates required local Pyodide bundle files are present when offline-first Python mode is expected.
 - Add timeout-path regression asserting stale worker responses are ignored after forced worker restart.
 - Add CDN-failure regression asserting Python runtime load errors surface clear user-facing diagnostics without breaking subsequent JS/HTML runs.
 - Add `.py` workspace import/export lifecycle test (active tab + status bar language + rerun continuity) for file-system parity confidence.
 - Add Python syntax token granularity checks (comment/string/number classes) across available themes.
+- Add regression that validates long-running Python `time.sleep`/streamed output UX with explicit loading status expectations on first-run Pyodide cold boot.
+- Add regression ensuring Python-like source warnings in non-`.py` files are surfaced consistently in user-visible diagnostics/log channels.
 
 ## Recently Closed
 
+- Added local-first Python runtime provisioning scripts (`python:runtime:setup`, `python:runtime:verify`) and multi-source runtime diagnostics (`local-bundle`, `cdn-jsdelivr`, `cdn-unpkg`) surfaced through Dev Terminal `python-check`.
+- Added regression asserting Python startup log message appears before worker execution output in standard run flow.
+- Added Python lifecycle diagnostics regressions covering delayed startup notice and explicit no-output completion guidance.
+- Added Applications-tab runtime validation coverage: catalog presence + load/run assertions across JS/HTML/CSS/Python runtime probe templates.
+- Added CSS token contract coverage that enforces no raw color literals in component/layout CSS layers.
+- Stabilized run-context regression by asserting deterministic user-visible run-context evidence (seed/dt + marker) instead of flaky cross-window capture timing.
+- Added Python console-channel regression verifying mocked runtime stdout/stderr forwarding and runtime-error surfacing in the virtual console/status flow.
 - Added Python timeout-and-recovery regression ensuring subsequent JS runs still execute after Python timeout errors.
 - Added Python syntax-mode regression verifying CodeMirror emits token classes for `.py` files using current theme token colors.
 - Added deterministic Playwright coverage for Python Phase 1 integration (`.py` filesystem language/icon wiring + safe mocked runtime output path).

@@ -17,33 +17,72 @@ function sanitizeUserCode(code) {
     return String(code ?? "").replace(/<\/script>/gi, "<\\/script>");
 }
 
-const SANDBOX_THEME_SURFACE = {
-    dark: { background: "#0b0f14", foreground: "#e6edf3", colorScheme: "dark" },
-    light: { background: "#f8fafc", foreground: "#0f172a", colorScheme: "light" },
-    purple: { background: "#140b24", foreground: "#f3e8ff", colorScheme: "dark" },
-    retro: { background: "#10150f", foreground: "#e6f1d1", colorScheme: "dark" },
-    temple: { background: "#0f3fc6", foreground: "#fef7e6", colorScheme: "dark" },
+const SANDBOX_FALLBACK_SURFACE = {
+    dark: {
+        background: "#0b0f14",
+        foreground: "#e6edf3",
+        panel: "#111520",
+        border: "rgba(148, 163, 184, 0.3)",
+        accent: "#38bdf8",
+        muted: "rgba(148, 163, 184, 0.9)",
+        colorScheme: "dark",
+    },
+    light: {
+        background: "#f8fafc",
+        foreground: "#0f172a",
+        panel: "#ffffff",
+        border: "rgba(148, 163, 184, 0.42)",
+        accent: "#0ea5e9",
+        muted: "rgba(71, 85, 105, 0.9)",
+        colorScheme: "light",
+    },
 };
 
 function getSandboxTheme() {
     const rawTheme = document?.documentElement?.getAttribute("data-theme");
     const theme = String(rawTheme || "dark").toLowerCase();
-    return SANDBOX_THEME_SURFACE[theme] ? theme : "dark";
+    return theme || "dark";
+}
+
+function readThemeToken(styles, tokenName, fallbackValue = "") {
+    if (!styles || !tokenName) return fallbackValue;
+    const value = String(styles.getPropertyValue(tokenName) || "").trim();
+    return value || fallbackValue;
 }
 
 function getSandboxThemeSurface(theme) {
-    return SANDBOX_THEME_SURFACE[theme] || SANDBOX_THEME_SURFACE.dark;
+    const fallback = theme === "light" ? SANDBOX_FALLBACK_SURFACE.light : SANDBOX_FALLBACK_SURFACE.dark;
+    const root = document?.documentElement || null;
+    const styles = root && typeof getComputedStyle === "function" ? getComputedStyle(root) : null;
+    const panelSurface = readThemeToken(styles, "--surface-panel", fallback.panel);
+    return {
+        background: panelSurface || readThemeToken(styles, "--bg", fallback.background),
+        foreground: readThemeToken(styles, "--text", fallback.foreground),
+        panel: panelSurface,
+        border: readThemeToken(styles, "--border", fallback.border),
+        accent: readThemeToken(styles, "--accent", fallback.accent),
+        muted: readThemeToken(styles, "--muted", fallback.muted),
+        colorScheme: theme === "light" ? "light" : "dark",
+    };
 }
 
 function buildThemeLockScript(surface, theme) {
     const backgroundColor = JSON.stringify(surface.background);
     const foregroundColor = JSON.stringify(surface.foreground);
+    const panelColor = JSON.stringify(surface.panel || surface.background);
+    const borderColor = JSON.stringify(surface.border || "rgba(148, 163, 184, 0.3)");
+    const accentColor = JSON.stringify(surface.accent || "#38bdf8");
+    const mutedColor = JSON.stringify(surface.muted || "rgba(148, 163, 184, 0.9)");
     const colorScheme = JSON.stringify(surface.colorScheme);
     const themeName = JSON.stringify(theme || "dark");
     return (
         `<script>(function __fazLockSandboxBg(){` +
         `const bg=${backgroundColor};` +
         `const fg=${foregroundColor};` +
+        `const panel=${panelColor};` +
+        `const border=${borderColor};` +
+        `const accent=${accentColor};` +
+        `const muted=${mutedColor};` +
         `const scheme=${colorScheme};` +
         `const theme=${themeName};` +
         `const apply=function(){` +
@@ -54,6 +93,12 @@ function buildThemeLockScript(surface, theme) {
         `root.style.setProperty("color-scheme",scheme);` +
         `root.style.setProperty("background",bg,"important");` +
         `root.style.setProperty("background-color",bg,"important");` +
+        `root.style.setProperty("--fazide-sandbox-bg",bg);` +
+        `root.style.setProperty("--fazide-sandbox-fg",fg);` +
+        `root.style.setProperty("--fazide-sandbox-panel",panel);` +
+        `root.style.setProperty("--fazide-sandbox-border",border);` +
+        `root.style.setProperty("--fazide-sandbox-accent",accent);` +
+        `root.style.setProperty("--fazide-sandbox-muted",muted);` +
         `}` +
         `if(body){` +
         `body.setAttribute("data-theme",theme);` +
@@ -67,6 +112,58 @@ function buildThemeLockScript(surface, theme) {
         `apply();` +
         `setTimeout(apply,0);` +
         `if(typeof requestAnimationFrame==="function"){requestAnimationFrame(apply);}` +
+        `})();<\/script>`
+    );
+}
+
+function buildSandboxCspMetaTag() {
+    return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; navigate-to 'none'">`;
+}
+
+function buildSecurityLockScript() {
+    return (
+        `<script>(function __fazSecurityLock(){` +
+        `const messageBase="blocked by FAZ IDE sandbox policy";` +
+        `const warn=function(api,detail){` +
+        `try{` +
+        `if(typeof console!="undefined"&&console&&typeof console.warn==="function"){` +
+        `const suffix=detail?": "+String(detail):"";` +
+        `console.warn("Sandbox security: blocked API "+String(api||"unknown")+suffix);` +
+        `}` +
+        `}catch(_err){}` +
+        `};` +
+        `const defineBlocked=function(host,key,impl){` +
+        `if(!host)return;` +
+        `try{Object.defineProperty(host,key,{configurable:true,writable:true,value:impl});return;}catch(_err){}` +
+        `try{host[key]=impl;}catch(_err2){}` +
+        `};` +
+        `const blockedError=function(api){return new Error(String(api||"API")+" "+messageBase);};` +
+        `defineBlocked(window,"alert",function(){warn("alert");return undefined;});` +
+        `defineBlocked(window,"confirm",function(){warn("confirm");return false;});` +
+        `defineBlocked(window,"prompt",function(){warn("prompt");return null;});` +
+        `defineBlocked(window,"print",function(){warn("print");return undefined;});` +
+        `defineBlocked(window,"open",function(url){warn("window.open",url);return null;});` +
+        `defineBlocked(window,"fetch",function(){warn("fetch");return Promise.reject(blockedError("fetch"));});` +
+        `defineBlocked(window,"XMLHttpRequest",function(){warn("XMLHttpRequest");throw blockedError("XMLHttpRequest");});` +
+        `defineBlocked(window,"WebSocket",function(){warn("WebSocket");throw blockedError("WebSocket");});` +
+        `defineBlocked(window,"EventSource",function(){warn("EventSource");throw blockedError("EventSource");});` +
+        `defineBlocked(window,"Worker",function(){warn("Worker");throw blockedError("Worker");});` +
+        `defineBlocked(window,"SharedWorker",function(){warn("SharedWorker");throw blockedError("SharedWorker");});` +
+        `if(typeof navigator!=="undefined"&&navigator){` +
+        `try{defineBlocked(navigator,"sendBeacon",function(){warn("navigator.sendBeacon");return false;});}catch(_err){}` +
+        `try{if(navigator.serviceWorker){` +
+        `defineBlocked(navigator.serviceWorker,"register",function(){warn("serviceWorker.register");return Promise.reject(blockedError("serviceWorker.register"));});` +
+        `defineBlocked(navigator.serviceWorker,"getRegistrations",function(){warn("serviceWorker.getRegistrations");return Promise.resolve([]);});` +
+        `}}catch(_err2){}` +
+        `try{if(window.Notification&&typeof window.Notification==="function"){` +
+        `defineBlocked(window.Notification,"requestPermission",function(){warn("Notification.requestPermission");return Promise.resolve("denied");});` +
+        `}}catch(_err3){}` +
+        `try{if(navigator.geolocation){` +
+        `defineBlocked(navigator.geolocation,"getCurrentPosition",function(_success,error){warn("geolocation.getCurrentPosition");if(typeof error==="function"){error({code:1,message:messageBase});}});` +
+        `defineBlocked(navigator.geolocation,"watchPosition",function(_success,error){warn("geolocation.watchPosition");if(typeof error==="function"){error({code:1,message:messageBase});}return -1;});` +
+        `defineBlocked(navigator.geolocation,"clearWatch",function(){return undefined;});` +
+        `}}catch(_err4){}` +
+        `}` +
         `})();<\/script>`
     );
 }
@@ -105,11 +202,14 @@ function buildSandboxJsDocument(userCode, token, surface, theme, runContext) {
         `html{color-scheme:${surface.colorScheme};}` +
         `html,body{margin:0;min-height:100%;background:transparent !important;background-image:linear-gradient(${surface.background},${surface.background});color:${surface.foreground};}` +
         `</style>`;
+    const cspTag = buildSandboxCspMetaTag();
     const storageShimScript = buildStorageShimScript();
+    const securityLockScript = buildSecurityLockScript();
     const backgroundLockScript = buildThemeLockScript(surface, theme);
     return (
-        `<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8" />${shellStyle}</head><body>` +
+        `<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8" />${cspTag}${shellStyle}</head><body>` +
         storageShimScript +
+        securityLockScript +
         bridgeScript(token, runContext) +
         `<script>\n${safeCode}\n<\/script>` +
         backgroundLockScript +
@@ -131,6 +231,10 @@ function buildSandboxHtmlDocument(userHtml, token, surface, theme, runContext) {
         head.prepend(meta);
     }
 
+    if (!head.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
+        head.insertAdjacentHTML("afterbegin", buildSandboxCspMetaTag());
+    }
+
     const shellStyle = doc.createElement("style");
     shellStyle.setAttribute("data-fazide-shell", "true");
     shellStyle.textContent =
@@ -139,7 +243,7 @@ function buildSandboxHtmlDocument(userHtml, token, surface, theme, runContext) {
     head.appendChild(shellStyle);
 
     head.insertAdjacentHTML("afterbegin", buildStorageShimScript());
-    body.insertAdjacentHTML("afterbegin", `${bridgeScript(token, runContext)}${buildThemeLockScript(surface, theme)}`);
+    body.insertAdjacentHTML("afterbegin", `${buildSecurityLockScript()}${bridgeScript(token, runContext)}${buildThemeLockScript(surface, theme)}`);
 
     const html = "<!doctype html>\n" + htmlEl.outerHTML;
     if (!/^<!doctype html>/i.test(html.trim())) {

@@ -27,6 +27,17 @@ export function bridgeScript(token, runContext = null) {
     <script>
         const TOKEN = ${JSON.stringify(token)};
         const RUN_CONTEXT = ${JSON.stringify(runContext)};
+        const PARENT_ORIGIN = (() => {
+            try {
+                const referrer = String(document.referrer || "").trim();
+                if (!referrer) return "*";
+                const origin = new URL(referrer).origin;
+                if (!origin || origin === "null") return "*";
+                return origin;
+            } catch {
+                return "*";
+            }
+        })();
         const MAX_CONSOLE_ARGS = 120;
         const MAX_CONSOLE_PART_CHARS = 1600;
         const MAX_CONSOLE_DEPTH = 2;
@@ -34,7 +45,7 @@ export function bridgeScript(token, runContext = null) {
             // Post a structured message to the parent window.
             // Parent should validate: source === "fazide" AND token matches.
             try {
-                parent.postMessage({ source: "fazide", token: TOKEN, type, payload, runContext: RUN_CONTEXT }, "*");
+                parent.postMessage({ source: "fazide", token: TOKEN, type, payload, runContext: RUN_CONTEXT }, PARENT_ORIGIN);
             } catch (err) {
                 if (type === "bridge_error") return;
                 try {
@@ -44,7 +55,7 @@ export function bridgeScript(token, runContext = null) {
                         type: "bridge_error",
                         payload: { message: String(err && err.message ? err.message : err) },
                         runContext: RUN_CONTEXT
-                    }, "*");
+                    }, PARENT_ORIGIN);
                 } catch (_bridgeErr) {}
             }
         };
@@ -164,21 +175,52 @@ export function bridgeScript(token, runContext = null) {
         let pendingNode = null;
         let lastInspectSignature = "";
         const THEME_SURFACE = {
-            dark: { background: "#0b0f14", foreground: "#e6edf3", colorScheme: "dark" },
-            light: { background: "#f8fafc", foreground: "#0f172a", colorScheme: "light" },
-            purple: { background: "#140b24", foreground: "#f3e8ff", colorScheme: "dark" },
-            retro: { background: "#10150f", foreground: "#e6f1d1", colorScheme: "dark" },
-            temple: { background: "#0f3fc6", foreground: "#fef7e6", colorScheme: "dark" }
+            dark: {
+                background: "#0b0f14",
+                foreground: "#e6edf3",
+                panel: "#111520",
+                border: "rgba(148, 163, 184, 0.3)",
+                accent: "#38bdf8",
+                muted: "rgba(148, 163, 184, 0.9)",
+                colorScheme: "dark"
+            },
+            light: {
+                background: "#f8fafc",
+                foreground: "#0f172a",
+                panel: "#ffffff",
+                border: "rgba(148, 163, 184, 0.42)",
+                accent: "#0ea5e9",
+                muted: "rgba(71, 85, 105, 0.9)",
+                colorScheme: "light"
+            }
         };
 
         const normalizeTheme = (value) => {
             const key = String(value || "").toLowerCase();
-            return THEME_SURFACE[key] ? key : "dark";
+            return key || "dark";
         };
 
-        const applyThemeSurface = (themeValue) => {
+        const normalizeSurface = (theme, override = null) => {
+            const fallback = theme === "light" ? THEME_SURFACE.light : THEME_SURFACE.dark;
+            const source = override && typeof override === "object" ? override : {};
+            const pick = (key) => {
+                const value = String(source[key] || "").trim();
+                return value || fallback[key];
+            };
+            return {
+                background: pick("background"),
+                foreground: pick("foreground"),
+                panel: pick("panel"),
+                border: pick("border"),
+                accent: pick("accent"),
+                muted: pick("muted"),
+                colorScheme: pick("colorScheme") || (theme === "light" ? "light" : "dark")
+            };
+        };
+
+        const applyThemeSurface = (themeValue, override = null) => {
             const theme = normalizeTheme(themeValue);
-            const surface = THEME_SURFACE[theme];
+            const surface = normalizeSurface(theme, override);
             const root = document.documentElement;
             const body = document.body;
             if (root) {
@@ -186,6 +228,12 @@ export function bridgeScript(token, runContext = null) {
                 root.style.setProperty("color-scheme", surface.colorScheme);
                 root.style.setProperty("background", surface.background, "important");
                 root.style.setProperty("background-color", surface.background, "important");
+                root.style.setProperty("--fazide-sandbox-bg", surface.background);
+                root.style.setProperty("--fazide-sandbox-fg", surface.foreground);
+                root.style.setProperty("--fazide-sandbox-panel", surface.panel);
+                root.style.setProperty("--fazide-sandbox-border", surface.border);
+                root.style.setProperty("--fazide-sandbox-accent", surface.accent);
+                root.style.setProperty("--fazide-sandbox-muted", surface.muted);
             }
             if (body) {
                 body.setAttribute("data-theme", theme);
@@ -338,6 +386,8 @@ export function bridgeScript(token, runContext = null) {
 
         window.addEventListener("message", (event) => {
             const data = event.data;
+            if (!event || event.source !== parent) return;
+            if (PARENT_ORIGIN !== "*" && event.origin !== PARENT_ORIGIN) return;
             if (!data || data.source !== "fazide-parent" || data.token !== TOKEN) return;
             if (data.type === "inspect_enable") {
                 enableInspect();
@@ -346,7 +396,7 @@ export function bridgeScript(token, runContext = null) {
                 disableInspect();
                 send("inspect_status", { active: false });
             } else if (data.type === "theme_update") {
-                const theme = applyThemeSurface(data.payload?.theme);
+                const theme = applyThemeSurface(data.payload?.theme, data.payload?.surface);
                 send("theme_applied", { theme });
             } else if (data.type === "debug_eval") {
                 const expressions = Array.isArray(data.payload?.expressions) ? data.payload.expressions : [];

@@ -3,11 +3,13 @@
 // Uses a dedicated worker (Pyodide) with safe timeout + token-aware callbacks.
 
 const DEFAULT_TIMEOUT_MS = 8000;
+const PYTHON_COLD_START_TIMEOUT_MS = 60_000;
 const MIN_TIMEOUT_MS = 250;
 
 let pythonWorker = null;
 let nextRequestId = 1;
 const pending = new Map();
+let pythonRuntimeWarm = false;
 
 function getMockPythonExecutor() {
     if (typeof window === "undefined") return null;
@@ -41,6 +43,7 @@ function resetPythonWorker(reason = "Python worker restarted") {
         }
         pythonWorker = null;
     }
+    pythonRuntimeWarm = false;
     rejectAllPending(new Error(reason));
 }
 
@@ -59,6 +62,7 @@ function ensurePythonWorker() {
 
         const type = String(data?.type || "");
         if (type === "console") {
+            pythonRuntimeWarm = true;
             const level = String(data?.level || "info");
             const args = Array.isArray(data?.args) ? data.args : [data?.args];
             entry.onConsole(level, args);
@@ -66,12 +70,14 @@ function ensurePythonWorker() {
         }
 
         if (type === "runtime_error") {
+            pythonRuntimeWarm = true;
             clearPendingEntry(id);
             entry.reject(new Error(String(data?.message || "Python runtime error")));
             return;
         }
 
         if (type === "result") {
+            pythonRuntimeWarm = true;
             clearPendingEntry(id);
             entry.resolve({
                 result: String(data?.result || ""),
@@ -148,12 +154,20 @@ export async function runPythonInSandbox({
     const requestId = nextRequestId;
     nextRequestId += 1;
 
+    const effectiveTimeout = pythonRuntimeWarm
+        ? timeout
+        : Math.max(timeout, PYTHON_COLD_START_TIMEOUT_MS);
+
     return new Promise((resolve, reject) => {
         const timeoutHandle = setTimeout(() => {
             clearPendingEntry(requestId);
-            resetPythonWorker(`Python execution timed out after ${timeout}ms.`);
-            reject(new Error(`Python execution timed out after ${timeout}ms.`));
-        }, timeout);
+            const startupTimedOut = !pythonRuntimeWarm;
+            const timeoutMessage = startupTimedOut
+                ? `Python execution timed out after ${effectiveTimeout}ms (startup blocked or offline Pyodide CDN).`
+                : `Python execution timed out after ${effectiveTimeout}ms.`;
+            resetPythonWorker(timeoutMessage);
+            reject(new Error(timeoutMessage));
+        }, effectiveTimeout);
 
         pending.set(requestId, {
             resolve,

@@ -16,6 +16,97 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-17
+- Summary: Upgraded runtime test UIs with API icon assets and fixed live sandbox theme switching by syncing tokenized surface payloads.
+- Notable safety/infra updates: Replaced JS/HTML runtime title emojis with Twemoji API icons for consistency with matrix styling; added parent-side token surface collection and bridge-side `theme_update` surface application so sandbox can repaint theme safely without requiring a rerun.
+- Validation status: Focused runtime + Python lifecycle regressions passed (`5/5`) after icon + live theme-sync changes.
+- Follow-up actions: Add a focused regression asserting sandbox theme switch updates surface tokens in-place after run.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Reworked runtime test applications to be ultra-clear for beginners while preserving detailed language-path diagnostics.
+- Notable safety/infra updates: Simplified runtime app instructions/copy (JS, HTML, Full Matrix, Python output) into plain step-based wording; retained required runtime markers for regression compatibility; expanded matrix README with direct pass/fail criteria per language path.
+- Validation status: Focused runtime and Python lifecycle regressions passed (`5/5`) after wording/detail updates.
+- Follow-up actions: Add one focused UX assertion that checks beginner step labels are present in runtime test app UIs.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Converted runtime test experience to square-theme styling and expanded token-aware diagnostics across JS/HTML/CSS/matrix validation files.
+- Notable safety/infra updates: Removed rounded visual treatment from runtime validation surfaces and default preview shells; standardized square tokenized styling across runtime app CSS; expanded runtime test scripts with additional token channel/report-count diagnostics while preserving existing verification markers.
+- Validation status: Focused runtime + Python lifecycle regressions passed (`5/5`) after styling and diagnostic updates.
+- Follow-up actions: Optionally add visual snapshot checks to guard square-theme contract (no border-radius) for runtime validation applications.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Updated first-load workspace experience to open a structured Welcome starter folder with HTML/CSS/JS files.
+- Notable safety/infra updates: `hydrateFileState()` now seeds `Welcome/index.html`, `Welcome/styles.css`, and `Welcome/app.js` when no saved workspace/snapshot/legacy code exists; welcome copy explicitly states FAZ IDE is free, ad-free, and will never charge.
+- Validation status: Focused startup/catalog regressions passed (`2/2`) and diagnostics show no errors in modified files.
+- Follow-up actions: Optionally add a dedicated first-run Playwright assertion for the `Welcome/` folder and starter file names.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Cleaned runtime language test applications and unified sandbox background presentation with active theme-aware surfaces.
+- Notable safety/infra updates: Refined runtime app CSS (`runtime-js-check`, `runtime-html-check`, `runtime-css-check`, `runtime-full-matrix`) to use shared sandbox theme variables instead of hard-coded palettes; updated sandbox theme lock to export stable CSS variables (`--fazide-sandbox-*`) for iframe content; improved default CSS/Python preview shells in `app.js`; set runner shell/iframe base backgrounds to theme surfaces for consistent visual fallback.
+- Validation status: Focused runtime app diagnostics passed (`2/2`) and focused Python lifecycle logs tests passed (`3/3`) after styling/background changes.
+- Follow-up actions: Optionally centralize runtime-app shared style contract into a reusable asset to reduce duplication across validation applications.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Tuned Python startup deadlines and stage visibility so slow environments no longer appear frozen during first execution.
+- Notable safety/infra updates: Increased Python cold-start timeout budget in sandbox runner (`20s -> 60s`), increased app-side Python execution wait budget (`10s -> 30s`), and expanded worker lifecycle logs (`initializing core`, `core ready`, `executing code`, `execution complete`) while preserving existing timeout safety boundaries.
+- Validation status: Focused Python lifecycle + terminal safety regressions passed (`4/4`) using `tests/ide.spec.js` grep selection after tuning.
+- Follow-up actions: If user reports startup-only logs again, add a deterministic startup-deadline console message that references `python-check` per-source results and local runtime setup command.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Added local-first Python runtime provisioning path so Python can run reliably without CDN dependency after setup.
+- Notable safety/infra updates: Added `python:runtime:setup`/`python:runtime:verify` scripts and `scripts/setup-python-runtime.js` to provision required local Pyodide assets under `assets/vendor/pyodide/v0.27.2/full/`; upgraded runtime source fallback diagnostics and `python-check` output to probe local bundle + multiple CDN fallbacks with per-source status lines; adjusted privacy verifier allowlist for known upstream synthetic `/home/*` path tokens inside vendored Pyodide runtime files.
+- Validation status: Local runtime setup completed successfully for required files; focused Python/terminal tests passed (`4/4`); `test:privacy` passed; `frank:full` passed (`13/13`) with Playwright `203/203`.
+- Follow-up actions: Add automated CI/doctor signal for local runtime bundle presence and optional pre-cache warming for first-launch offline readiness.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Added explicit Python connectivity diagnostics + first-launch reset command, and hardened cross-agent memory/optimization documentation.
+- Notable safety/infra updates: Dev Terminal now supports `python-check` (Pyodide CDN reachability probe) and guarded `fresh-start confirm` (clears FAZ IDE local state/cache/service-worker then reloads); Python runtime now emits a delayed network hint that blocked CDN is usually the root cause (not Live Server itself); added `agent-operations.md` and `optimization-map.md` to standardize safe AI agent behavior.
+- Validation status: Focused runtime/terminal regressions passed (`4/4`), `test:memory` passed, and `frank:full` passed (`13/13`) with Playwright `203/203`.
+- Follow-up actions: Keep extending run-path decomposition in small helper-focused batches and preserve strict post-batch full-gate cadence.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Continued `app.js` organization by splitting run-source resolution and non-Python launch flow from `run()` into dedicated helpers.
+- Notable safety/infra updates: Added `resolveRunSource(...)` and `launchStandardSandboxRun(...)` to keep run orchestration explicit and reduce branching density in `run()`; retained token-gating, inspect/debug re-arm behavior, and sandbox readiness fallback semantics.
+- Validation status: Focused Python lifecycle regressions passed (`3/3`) including startup/loading/no-output messages; `frank:full` passed all 13 stages with Playwright `203/203`.
+- Follow-up actions: Continue decomposing high-churn orchestration blocks into dedicated runtime helpers while preserving current UX contracts and `window.fazide` API behavior.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Organized `app.js` run pipeline and hardened Python runtime lifecycle diagnostics for blocked/slow startup environments.
+- Notable safety/infra updates: Extracted shared workspace asset resolver and preview builders out of `run()` to reduce per-run closure churn; split Python execution branch into dedicated `runPythonExecution(...)` helper; kept sandbox token gates and cancellation semantics intact while preserving strict runtime limits.
+- Validation status: New focused Python lifecycle regressions passed (`4/4`), full Playwright suite passed (`202/202`), and `frank:full` passed (`13/13`) after the 3-major-change optimization batch.
+- Follow-up actions: Continue incremental `app.js` decomposition into dedicated modules (run-pipeline, resolver, and runtime orchestration) while preserving public `window.fazide` APIs.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Upgraded runtime validation applications with master-grade detailed diagnostics in both Console and Sandbox outputs.
+- Notable safety/infra updates: Reworked JS/HTML/Python validation harnesses to emit structured step markers, timestamps, channel-specific logs, and completion states; upgraded CSS validation preview to render explicit visual diagnostic badges/markers and probe animation for quick sandbox-path verification.
+- Validation status: Playwright suite passed (`199/199`), `frank:full` passed (`13/13`) with all gates green.
+- Follow-up actions: Add exportable diagnostic transcript payload (JSON) from runtime validation apps for issue attachments.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Added Applications-tab runtime validation pack covering JS/HTML/CSS/Python console and sandbox run paths.
+- Notable safety/infra updates: Introduced four professional test applications (`Runtime JS Check`, `Runtime HTML Check`, `Runtime CSS Check`, `Runtime Python Check`) with explicit output probes for manual/automated verification; added micro Playwright coverage that loads and runs each application and asserts language-appropriate console/sandbox signals.
+- Validation status: Focused runtime-app tests passed (`2/2`); full suite passed (`199/199`); `frank:full` passed (`13/13`).
+- Follow-up actions: Add optional one-click "Run All Runtime Checks" command that executes the validation pack sequentially and outputs a summarized health report in Console.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Hardened sandbox isolation and stabilized Python console-connectivity coverage for education-safe deployments.
+- Notable safety/infra updates: Added strict sandbox CSP + blocked browser-interference API shims (`fetch`, `XMLHttpRequest`, `WebSocket`, `window.open`, dialogs, workers, service worker registration), tightened bridge origin checks, and extended Python runner cold-start timeout handling for slow/restricted environments while preserving timeout safety.
+- Validation status: New focused sandbox/Python regressions passed; full suite passed (`197/197`); `frank:full` passed all stages (`13/13`).
+- Follow-up actions: Add optional user-facing "Python runtime loading" status indicator and import policy telemetry counters for blocked APIs/imports.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
 - Summary: Hardened Python Phase 1 runtime reliability and completed local syntax-token integration.
 - Notable safety/infra updates: Added explicit Python run cancellation on superseded runs, timeout enforcement for mock/runtime paths, and local CodeMirror Python mode asset wiring so `.py` uses existing syntax token color system without remote mode dependency.
 - Validation status: Focused Python tests passed (`3/3`) including timeout/recovery + tokenized syntax assertions; suite passed (`194/194`).

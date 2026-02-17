@@ -121,6 +121,60 @@ export const GAMES = [
 // that showcase HTML + CSS + JavaScript working together.
 export const APPLICATIONS = [
     {
+        id: "runtime-full-matrix-app",
+        name: "Runtime Full Matrix Report",
+        icon: buildThemedIcon("1f9ea"),
+        files: [
+            { path: "index.html", src: "./assets/apps/runtime-full-matrix/index.html" },
+            { path: "styles.css", src: "./assets/apps/runtime-full-matrix/styles.css" },
+            { path: "app.js", src: "./assets/apps/runtime-full-matrix/app.js" },
+            { path: "matrix.css", src: "./assets/apps/runtime-full-matrix/matrix.css" },
+            { path: "main.py", src: "./assets/apps/runtime-full-matrix/main.py" },
+            { path: "README.md", src: "./assets/apps/runtime-full-matrix/README.md" },
+        ],
+        entryFile: "index.html",
+    },
+    {
+        id: "runtime-js-check-app",
+        name: "Runtime JS Check",
+        icon: buildThemedIcon("2699"),
+        files: [
+            { path: "index.html", src: "./assets/apps/runtime-js-check/index.html" },
+            { path: "styles.css", src: "./assets/apps/runtime-js-check/styles.css" },
+            { path: "app.js", src: "./assets/apps/runtime-js-check/app.js" },
+        ],
+        entryFile: "app.js",
+    },
+    {
+        id: "runtime-html-check-app",
+        name: "Runtime HTML Check",
+        icon: buildThemedIcon("1f4c4"),
+        files: [
+            { path: "index.html", src: "./assets/apps/runtime-html-check/index.html" },
+            { path: "styles.css", src: "./assets/apps/runtime-html-check/styles.css" },
+            { path: "app.js", src: "./assets/apps/runtime-html-check/app.js" },
+        ],
+        entryFile: "index.html",
+    },
+    {
+        id: "runtime-css-check-app",
+        name: "Runtime CSS Check",
+        icon: buildThemedIcon("1f3a8"),
+        files: [
+            { path: "styles.css", src: "./assets/apps/runtime-css-check/styles.css" },
+        ],
+        entryFile: "styles.css",
+    },
+    {
+        id: "runtime-python-check-app",
+        name: "Runtime Python Check",
+        icon: buildThemedIcon("1f40d"),
+        files: [
+            { path: "main.py", src: "./assets/apps/runtime-python-check/main.py" },
+        ],
+        entryFile: "main.py",
+    },
+    {
         id: "roofing-tools-app",
         name: "Roofing Tools",
         icon: buildThemedIcon("1f6e0"),
@@ -170,3 +224,95 @@ export const APPLICATIONS = [
 export const DEFAULT_CODE = `/* Welcome to FAZ IDE My first big personal project */
 console.log("Hello from FazyBear!");
 `;
+
+export const DEFAULT_WELCOME_FILES = [
+        {
+                name: "Welcome/index.html",
+                code: `<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Welcome to FAZ IDE</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <main class="welcome-card">
+        <h1>Welcome to FAZ IDE</h1>
+        <p id="message">Your free coding workspace is ready.</p>
+        <ul>
+            <li>100% free program</li>
+            <li>No ads</li>
+            <li>Never charging for anything in FAZ IDE</li>
+        </ul>
+        <button id="showPolicy" type="button">Show Promise</button>
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>
+`,
+        },
+        {
+                name: "Welcome/styles.css",
+                code: `:root {
+    color-scheme: dark;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+}
+
+body {
+    font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: #0b0f14;
+    color: #e6edf3;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.welcome-card {
+    width: min(760px, 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: #111520;
+    padding: 20px;
+}
+
+h1 {
+    margin: 0 0 10px;
+}
+
+p,
+li {
+    color: rgba(148, 163, 184, 0.95);
+}
+
+button {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #38bdf8;
+    background: transparent;
+    color: #e6edf3;
+    cursor: pointer;
+}
+`,
+        },
+        {
+                name: "Welcome/app.js",
+                code: `const message = document.getElementById("message");
+const button = document.getElementById("showPolicy");
+
+if (button && message) {
+    button.addEventListener("click", () => {
+        message.textContent = "FAZ IDE is free forever. No ads. No charges. Build anything you want.";
+    });
+}
+
+console.log("Welcome to FAZ IDE: free forever, no ads, never charging for anything.");
+`,
+        },
+];

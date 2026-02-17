@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Runtime HTML Check</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="panel">
+    <h1>
+      <img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f7e7.svg" alt="" aria-hidden="true" />
+      Runtime HTML Check
+    </h1>
+    <p id="status">Starting HTML test...</p>
+    <p class="note">Simple check: HTML loads, CSS is applied, JS runs, and sandbox is ready.</p>
+    <ul class="report" aria-label="What this checks">
+      <li class="info">STEP 1: HTML page loaded</li>
+      <li class="info">STEP 2: CSS border/background detected</li>
+      <li class="info">STEP 3: Linked JavaScript runs</li>
+      <li class="info">STEP 4: Theme tokens are readable</li>
+    </ul>
+    <ul id="report" class="report" aria-live="polite"></ul>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

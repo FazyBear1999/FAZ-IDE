@@ -1,0 +1,77 @@
+/* Runtime CSS Check: use Run from this .css entry to verify sandbox CSS preview path. */
+:root {
+  color-scheme: dark;
+  --rt-bg: var(--fazide-sandbox-bg, #0b0f14);
+  --rt-fg: var(--fazide-sandbox-fg, #e6edf3);
+  --rt-panel: var(--fazide-sandbox-panel, #111520);
+  --rt-border: var(--fazide-sandbox-border, rgba(148, 163, 184, 0.3));
+  --rt-accent: var(--fazide-sandbox-accent, #38bdf8);
+  --rt-muted: var(--fazide-sandbox-muted, rgba(148, 163, 184, 0.9));
+  --rt-ok: #22c55e;
+  --rt-warn: #f59e0b;
+}
+
+body {
+  background: var(--rt-bg);
+  color: var(--rt-fg);
+}
+
+.fazide-css-preview {
+  border: 1px solid var(--rt-border);
+  padding: 16px;
+  max-width: 720px;
+  margin: 24px auto;
+  background: var(--rt-panel);
+  position: relative;
+  box-shadow: none;
+}
+
+.fazide-css-preview h1 {
+  margin-top: 0;
+  color: var(--rt-fg);
+}
+
+.fazide-css-preview button {
+  border: 1px solid var(--rt-accent);
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--rt-fg);
+}
+
+.fazide-css-preview::before {
+  content: "runtime-css-check:step-01 • sandbox style applied";
+  display: block;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 0;
+  border: 1px solid var(--rt-ok);
+  background: color-mix(in srgb, var(--rt-ok) 18%, var(--rt-panel) 82%);
+  color: var(--rt-fg);
+  font-size: 13px;
+}
+
+.fazide-css-preview::after {
+  content: "runtime-css-check:step-02 • visual probe complete";
+  display: block;
+  margin-top: 12px;
+  padding: 6px 10px;
+  border-radius: 0;
+  border: 1px solid var(--rt-accent);
+  background: color-mix(in srgb, var(--rt-accent) 18%, var(--rt-panel) 82%);
+  color: var(--rt-fg);
+  font-size: 13px;
+}
+
+.fazide-css-preview h1 {
+  text-shadow: none;
+}
+
+.fazide-css-preview p {
+  line-height: 1.5;
+  color: var(--rt-muted);
+}
+
+.fazide-css-preview button {
+  box-shadow: none;
+  animation: none;
+}

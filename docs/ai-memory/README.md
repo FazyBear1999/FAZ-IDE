@@ -29,3 +29,8 @@ Treat it as a lightweight runbook for daily development and emergency fixes.
 - `release-notes.md`
 - `handoff-checklist.md`
 
+## Agent orientation (recommended)
+
+- `agent-operations.md` for cross-agent operating contract and safe workflow.
+- `optimization-map.md` for prioritized, risk-aware optimization targets.
+

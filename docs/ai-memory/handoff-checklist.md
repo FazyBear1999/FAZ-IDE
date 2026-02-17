@@ -2,6 +2,7 @@
 
 ## Before You Start
 - Read `project-context.md` and `feature-map.md`.
+- Read `agent-operations.md` and `optimization-map.md`.
 - Read latest entries in `decisions.md` and `known-issues.md`.
 - Confirm target command path (`npm run test:quick` or `npm run test:all`).
 

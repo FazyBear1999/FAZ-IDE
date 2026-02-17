@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Runtime JS Check</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="panel">
+    <h1>
+      <img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f7e8.svg" alt="" aria-hidden="true" />
+      Runtime JS Check
+    </h1>
+    <p id="status">Starting JavaScript test...</p>
+    <p class="note">Simple check: JavaScript works, console works, timer works, and theme tokens are active.</p>
+    <ul class="report" aria-label="What this checks">
+      <li class="info">STEP 1: Basic JS code runs</li>
+      <li class="info">STEP 2: Console messages are captured</li>
+      <li class="info">STEP 3: Async/timer flow works</li>
+      <li class="info">STEP 4: Theme tokens are readable</li>
+    </ul>
+    <button id="runProbe" type="button">Run JS Check</button>
+    <ol id="report" class="report" aria-live="polite"></ol>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
