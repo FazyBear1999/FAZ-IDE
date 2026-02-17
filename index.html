@@ -37,6 +37,7 @@
             <script src="./assets/vendor/codemirror/mode/css/css.min.js"></script>
             <script src="./assets/vendor/codemirror/mode/javascript/javascript.min.js"></script>
             <script src="./assets/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
+            <script src="./assets/vendor/codemirror/mode/python/python.min.js"></script>
 
             <!-- App entry -->
             <script type="module" src="./assets/js/app.js"></script>
@@ -73,7 +74,7 @@
                                     class="editor-shortcut-help-btn top-shortcut-help-btn"
                                     type="button"
                                     aria-label="Editor shortcuts"
-                                    title="Editor shortcuts: Ctrl/Cmd+Enter Run, Ctrl/Cmd+S Save, Ctrl/Cmd+Shift+S Save all, Ctrl/Cmd+F Find, Ctrl/Cmd+H Replace, Ctrl/Cmd+Shift+F Project search, Ctrl/Cmd+Shift+O Symbols. Press F1 for full list."
+                                    title="Editor shortcuts: Ctrl/Cmd+Enter Run, Ctrl/Cmd+S Save, Ctrl/Cmd+Shift+S Save all, Ctrl/Cmd+/ Toggle comment, Alt+ArrowUp/Down Move line, Alt+Shift+ArrowDown Duplicate line, Ctrl/Cmd+F Find, Ctrl/Cmd+H Replace, Ctrl/Cmd+Shift+F Project search, Ctrl/Cmd+Shift+O Symbols. Press F1 for full list."
                                 >
                                     ?
                                 </button>
@@ -733,6 +734,7 @@
                                 <option value="html">HTML</option>
                                 <option value="css">CSS</option>
                                 <option value="markdown">Markdown</option>
+                                <option value="python">Python</option>
                                 <option value="text">Text</option>
                             </select>
                             <button id="snippetAdd" type="button">Add / Update</button>
@@ -771,6 +773,13 @@
                         <ul class="shortcut-help-list" role="list">
                             <li><span>Find</span><kbd>Ctrl/Cmd + F</kbd></li>
                             <li><span>Replace</span><kbd>Ctrl/Cmd + H</kbd></li>
+                            <li><span>Toggle line comment</span><kbd>Ctrl/Cmd + /</kbd></li>
+                            <li><span>Move line down</span><kbd>Alt + ArrowDown</kbd></li>
+                            <li><span>Move line up</span><kbd>Alt + ArrowUp</kbd></li>
+                            <li><span>Duplicate line down</span><kbd>Alt + Shift + ArrowDown</kbd></li>
+                            <li><span>Duplicate line up</span><kbd>Alt + Shift + ArrowUp</kbd></li>
+                            <li><span>Delete line/block</span><kbd>Ctrl/Cmd + Shift + K</kbd></li>
+                            <li><span>Select next occurrence</span><kbd>Ctrl/Cmd + D</kbd></li>
                             <li><span>Project search</span><kbd>Ctrl/Cmd + Shift + F</kbd></li>
                             <li><span>Go to line</span><kbd>Ctrl/Cmd + G</kbd></li>
                             <li><span>Symbols</span><kbd>Ctrl/Cmd + Shift + O</kbd></li>

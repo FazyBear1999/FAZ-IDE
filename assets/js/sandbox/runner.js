@@ -10,6 +10,7 @@
 //   on the HTML side (e.g., sandbox="allow-scripts") to limit capabilities.
 
 import { bridgeScript } from "./bridge.js";
+import { normalizeRunContext } from "./runContext.js";
 
 function sanitizeUserCode(code) {
     // Prevent accidental </script> from terminating our wrapper script tag.
@@ -97,7 +98,7 @@ function buildStorageShimScript() {
     );
 }
 
-function buildSandboxJsDocument(userCode, token, surface, theme) {
+function buildSandboxJsDocument(userCode, token, surface, theme, runContext) {
     const safeCode = sanitizeUserCode(userCode);
     const shellStyle =
         `<style>` +
@@ -109,14 +110,14 @@ function buildSandboxJsDocument(userCode, token, surface, theme) {
     return (
         `<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8" />${shellStyle}</head><body>` +
         storageShimScript +
-        bridgeScript(token) +
+        bridgeScript(token, runContext) +
         `<script>\n${safeCode}\n<\/script>` +
         backgroundLockScript +
         `</body></html>`
     );
 }
 
-function buildSandboxHtmlDocument(userHtml, token, surface, theme) {
+function buildSandboxHtmlDocument(userHtml, token, surface, theme, runContext) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(String(userHtml ?? ""), "text/html");
     const htmlEl = doc.documentElement || doc.appendChild(doc.createElement("html"));
@@ -138,7 +139,7 @@ function buildSandboxHtmlDocument(userHtml, token, surface, theme) {
     head.appendChild(shellStyle);
 
     head.insertAdjacentHTML("afterbegin", buildStorageShimScript());
-    body.insertAdjacentHTML("afterbegin", `${bridgeScript(token)}${buildThemeLockScript(surface, theme)}`);
+    body.insertAdjacentHTML("afterbegin", `${bridgeScript(token, runContext)}${buildThemeLockScript(surface, theme)}`);
 
     const html = "<!doctype html>\n" + htmlEl.outerHTML;
     if (!/^<!doctype html>/i.test(html.trim())) {
@@ -152,10 +153,11 @@ export function runInSandbox(iframeEl, sourceCode, token, options = {}) {
     const mode = String(options?.mode || "javascript").toLowerCase();
     const theme = getSandboxTheme();
     const surface = getSandboxThemeSurface(theme);
+    const runContext = normalizeRunContext(options?.runContext);
 
     const html = mode === "html"
-        ? buildSandboxHtmlDocument(sourceCode, token, surface, theme)
-        : buildSandboxJsDocument(sourceCode, token, surface, theme);
+        ? buildSandboxHtmlDocument(sourceCode, token, surface, theme, runContext)
+        : buildSandboxJsDocument(sourceCode, token, surface, theme, runContext);
 
     // Prefer srcdoc so sandbox can stay same-origin locked.
     if ("srcdoc" in iframeEl) {

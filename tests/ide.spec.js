@@ -543,11 +543,25 @@ test("shortcut help panel stays square and lists required shortcuts", async ({ p
   expect(result.labels).toContain("open this panel");
   expect(result.labels).toContain("close open panel/modal");
   expect(result.labels).toContain("clear console (editor focus)");
+  expect(result.labels).toContain("toggle line comment");
+  expect(result.labels).toContain("move line down");
+  expect(result.labels).toContain("move line up");
+  expect(result.labels).toContain("duplicate line down");
+  expect(result.labels).toContain("duplicate line up");
+  expect(result.labels).toContain("delete line/block");
+  expect(result.labels).toContain("select next occurrence");
   expect(result.labels).toContain("rename file (files panel focus)");
   expect(result.labels).toContain("trash file/selection (files panel focus)");
   expect(result.keys).toContain("f1");
   expect(result.keys).toContain("esc");
   expect(result.keys).toContain("ctrl/cmd + l");
+  expect(result.keys).toContain("ctrl/cmd + /");
+  expect(result.keys).toContain("alt + arrowdown");
+  expect(result.keys).toContain("alt + arrowup");
+  expect(result.keys).toContain("alt + shift + arrowdown");
+  expect(result.keys).toContain("alt + shift + arrowup");
+  expect(result.keys).toContain("ctrl/cmd + shift + k");
+  expect(result.keys).toContain("ctrl/cmd + d");
   expect(result.keys).toContain("f2");
   expect(result.keys).toContain("shift + f10");
 });
@@ -1687,6 +1701,90 @@ test("sandbox ignores spoofed parent-window messages even with a valid token", a
   expect(result.spoofSeen).toBeFalsy();
 });
 
+test("sandbox bridge emits coherent run-context metadata for active runs", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    const clearBtn = document.querySelector("#clearLog");
+    const runBtn = document.querySelector("#run");
+    const logHost = document.querySelector("#log");
+    if (!api?.setCode || !clearBtn || !runBtn || !logHost) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const marker = `ctx-${Date.now().toString(36)}`;
+    let bridgePayload = null;
+    let consolePayload = null;
+
+    const capture = (event) => {
+      const data = event?.data;
+      if (!data || data.source !== "fazide") return;
+      if (data.type === "bridge_ready" && !bridgePayload) {
+        bridgePayload = {
+          token: String(data.token || ""),
+          runContext: data.runContext || data?.payload?.runContext || null,
+        };
+      }
+      if (data.type === "console") {
+        const args = Array.isArray(data?.payload?.args) ? data.payload.args : [];
+        const joined = args.map((entry) => String(entry)).join(" ");
+        if (joined.includes(marker)) {
+          consolePayload = {
+            token: String(data.token || ""),
+            runContext: data.runContext || null,
+          };
+        }
+      }
+    };
+
+    clearBtn.click();
+    window.addEventListener("message", capture);
+    api.setCode(`console.log("${marker}");`);
+    runBtn.click();
+
+    for (let i = 0; i < 30 && (!bridgePayload || !consolePayload); i += 1) {
+      await wait(30);
+    }
+    window.removeEventListener("message", capture);
+
+    const logText = String(logHost.textContent || "");
+    const context = bridgePayload?.runContext || consolePayload?.runContext || null;
+    const seed = Number(context?.seed);
+    const runNumber = Number(context?.runNumber);
+
+    return {
+      ready: true,
+      bridgeSeen: Boolean(bridgePayload),
+      consoleSeen: Boolean(consolePayload),
+      tokenConsistent: Boolean(
+        bridgePayload?.token
+        && consolePayload?.token
+        && bridgePayload.token === consolePayload.token
+        && bridgePayload.token === String(context?.token || "")
+      ),
+      hasContextObject: Boolean(context && typeof context === "object"),
+      hasContextId: typeof context?.id === "string" && context.id.startsWith("run-"),
+      seedFinite: Number.isFinite(seed) && seed > 0,
+      runNumberFinite: Number.isFinite(runNumber) && runNumber >= 1,
+      logShowsContext: logText.includes("Run context: seed="),
+      markerSeen: logText.includes(marker),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.bridgeSeen).toBeTruthy();
+  expect(result.consoleSeen).toBeTruthy();
+  expect(result.tokenConsistent).toBeTruthy();
+  expect(result.hasContextObject).toBeTruthy();
+  expect(result.hasContextId).toBeTruthy();
+  expect(result.seedFinite).toBeTruthy();
+  expect(result.runNumberFinite).toBeTruthy();
+  expect(result.logShowsContext).toBeTruthy();
+  expect(result.markerSeen).toBeTruthy();
+});
+
 test("sandbox console payload applies argument and message truncation limits", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -2297,4 +2395,195 @@ test("sandbox HTML run resolves decorated CSS and JS asset refs from nested file
   expect(result.ok).toBeTruthy();
   expect(result.statusText.toLowerCase()).toContain("ran");
   expect(result.logText).toMatch(new RegExp(`linked-assets:${result.stamp}:rgb\\(12,\\s*34,\\s*56\\)`));
+});
+
+test("python phase-1 run works with filesystem icon/language wiring and safe mocked runtime", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.importWorkspaceData) return { ready: false };
+
+    window.__FAZIDE_PYTHON_EXECUTE__ = async ({ code }) => {
+      const text = String(code || "");
+      const lines = text
+        .split("\n")
+        .filter((line) => line.includes("print"))
+        .map((line) => line.trim());
+      return {
+        stdout: lines.length ? lines : ["python mock: no print statements"],
+        stderr: [],
+        result: "python mock: ok",
+      };
+    };
+
+    const stamp = Date.now().toString(36);
+    const pyId = `py-${stamp}`;
+    const pyName = `games/demo-${stamp}/main.py`;
+    const pyCode = "print('hello from python')\n";
+
+    const ok = api.importWorkspaceData({
+      format: "fazide-workspace",
+      version: 1,
+      data: {
+        files: [
+          { id: pyId, name: pyName, code: pyCode, savedCode: pyCode },
+        ],
+        trash: [],
+        folders: ["games", `games/demo-${stamp}`],
+        activeId: pyId,
+        openIds: [pyId],
+      },
+    });
+    if (!ok) return { ready: true, ok: false };
+
+    document.querySelector("#run")?.click();
+    await new Promise((resolve) => setTimeout(resolve, 320));
+
+    document.querySelector('#fileList [data-file-section="files"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    const iconSrc = String(document.querySelector(`#fileList .file-row[data-file-id="${pyId}"] .file-row-icon`)?.getAttribute("src") || "");
+    const lang = String(document.querySelector("#footerEditorLang")?.textContent || "");
+    const statusText = String(document.querySelector("#statusText")?.textContent || "");
+    const logText = String(document.querySelector("#log")?.textContent || "");
+
+    return {
+      ready: true,
+      ok: true,
+      iconSrc,
+      lang,
+      statusText,
+      logText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.ok).toBeTruthy();
+  expect(result.iconSrc.toLowerCase()).toContain("python.svg");
+  expect(result.lang.toLowerCase()).toContain("python");
+  expect(result.statusText.toLowerCase()).toContain("ran");
+  expect(result.logText.toLowerCase()).toContain("python mock: ok");
+});
+
+test("python phase-1 timeout surfaces error and subsequent js run still works", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.importWorkspaceData) return { ready: false };
+
+    window.__FAZIDE_PYTHON_EXECUTE__ = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 11_500));
+      return { stdout: ["late"], stderr: [], result: "late" };
+    };
+
+    const stamp = Date.now().toString(36);
+    const pyId = `py-timeout-${stamp}`;
+    const jsId = `js-after-py-${stamp}`;
+    const pyName = `games/timeout-${stamp}/main.py`;
+    const jsName = `games/timeout-${stamp}/main.js`;
+    const pyCode = "print('start timeout test')\n";
+    const jsCode = `console.log('js-after-python:${stamp}')`;
+
+    const ok = api.importWorkspaceData({
+      format: "fazide-workspace",
+      version: 1,
+      data: {
+        files: [
+          { id: pyId, name: pyName, code: pyCode, savedCode: pyCode },
+          { id: jsId, name: jsName, code: jsCode, savedCode: jsCode },
+        ],
+        trash: [],
+        folders: ["games", `games/timeout-${stamp}`],
+        activeId: pyId,
+        openIds: [pyId, jsId],
+      },
+    });
+    if (!ok) return { ready: true, ok: false };
+
+    document.querySelector("#run")?.click();
+    await new Promise((resolve) => setTimeout(resolve, 10_600));
+    const afterPythonStatus = String(document.querySelector("#statusText")?.textContent || "");
+    const afterPythonLog = String(document.querySelector("#log")?.textContent || "");
+
+    const switchOk = api.importWorkspaceData({
+      format: "fazide-workspace",
+      version: 1,
+      data: {
+        files: [
+          { id: jsId, name: jsName, code: jsCode, savedCode: jsCode },
+        ],
+        trash: [],
+        folders: ["games", `games/timeout-${stamp}`],
+        activeId: jsId,
+        openIds: [jsId],
+      },
+    });
+    if (!switchOk) {
+      return {
+        ready: true,
+        ok: false,
+        afterPythonStatus,
+        afterPythonLog,
+        afterJsStatus: "",
+        afterJsLog: "",
+        stamp,
+      };
+    }
+
+    document.querySelector("#run")?.click();
+    await new Promise((resolve) => setTimeout(resolve, 320));
+    const afterJsStatus = String(document.querySelector("#statusText")?.textContent || "");
+    const afterJsLog = String(document.querySelector("#log")?.textContent || "");
+
+    return {
+      ready: true,
+      ok: true,
+      afterPythonStatus,
+      afterPythonLog,
+      afterJsStatus,
+      afterJsLog,
+      stamp,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.ok).toBeTruthy();
+  expect(result.afterPythonStatus.toLowerCase()).toContain("error");
+  expect(result.afterPythonLog.toLowerCase()).toContain("python execution timed out");
+  expect(result.afterJsStatus.toLowerCase()).toContain("ran");
+  expect(result.afterJsLog).toContain(`js-after-python:${result.stamp}`);
+});
+
+test("python phase-1 codemirror mode produces syntax tokens for existing theme colors", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    const cmHost = document.querySelector(".CodeMirror");
+    const cm = cmHost?.CodeMirror;
+    if (!api?.createFile || !cm) return { ready: false };
+
+    const stamp = Date.now().toString(36);
+    const file = api.createFile(`python-mode-${stamp}.py`, "def add(a, b):\n    return a + b\n");
+    if (!file?.id) return { ready: true, ok: false };
+
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    cm.refresh();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const hasKeyword = Boolean(document.querySelector(".CodeMirror .cm-keyword"));
+    const hasDef = Boolean(document.querySelector(".CodeMirror .cm-def"));
+    return {
+      ready: true,
+      ok: true,
+      hasKeyword,
+      hasDef,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.ok).toBeTruthy();
+  expect(result.hasKeyword || result.hasDef).toBeTruthy();
 });

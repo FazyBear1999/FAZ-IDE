@@ -102,7 +102,7 @@ test("editor contract: settings panel defaults and option groups are valid", asy
   await expect(page.locator("#editorProfileSelect option")).toHaveCount(3);
   await expect(page.locator("#editorFormatterSelect option")).toHaveCount(3);
   await expect(page.locator("#editorFontFamilySelect option")).toHaveCount(9);
-  await expect(page.locator("#snippetScopeSelect option")).toHaveCount(8);
+  await expect(page.locator("#snippetScopeSelect option")).toHaveCount(9);
 
   await expect(page.locator("#editorTabSize")).toHaveAttribute("min", "2");
   await expect(page.locator("#editorTabSize")).toHaveAttribute("max", "8");

@@ -20,3 +20,13 @@
 - Not documenting new decisions and regressions.
 - Keeping memory docs shallow and losing implementation context.
 - Storing sensitive values in docs.
+
+## Product Direction Mistakes
+- Treating "beginner-friendly" as "remove tools" instead of adding guidance and safer defaults.
+- Shipping destructive file actions without clear undo/trash recovery paths.
+- Adding features that hide state/errors instead of making them observable and teachable.
+
+## Editor QoL Mistakes
+- Adding keyboard actions without focused regression tests for both positive and negative/edge cases.
+- Implementing smart typing behaviors that over-trigger (e.g., invalid auto-closing on void/declaration tags).
+- Introducing power features without shortcut discoverability updates (help panel/title/hints).

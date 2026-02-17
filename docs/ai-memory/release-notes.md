@@ -15,6 +15,69 @@ Entries should make it easy to understand what changed and why validation gates 
 ## Entries
 
 - Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Hardened Python Phase 1 runtime reliability and completed local syntax-token integration.
+- Notable safety/infra updates: Added explicit Python run cancellation on superseded runs, timeout enforcement for mock/runtime paths, and local CodeMirror Python mode asset wiring so `.py` uses existing syntax token color system without remote mode dependency.
+- Validation status: Focused Python tests passed (`3/3`) including timeout/recovery + tokenized syntax assertions; suite passed (`194/194`).
+- Follow-up actions: Add stale post-timeout worker message regression and package-import allowlist controls.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Initiated Python Phase 1 runtime with safe worker execution and filesystem/editor integration.
+- Notable safety/infra updates: Added sandboxed Python worker runtime (`pythonRunner` + `pythonWorker`) with timeout reset behavior, bounded console forwarding, and deterministic mock runtime hook for tests; wired `.py` language detection, editor mode/labels, snippet scope, starter template, and run dispatch into existing pipeline.
+- Validation status: Focused Python integration test passed (`1/1`) and full test suite passed (`267/267`).
+- Follow-up actions: Add Python package policy controls and optional graphics bridge for beginner game workflows in Phase 2.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Expanded editor power shortcuts with duplicate-up, delete-line/block, and deterministic select-next-occurrence behavior.
+- Notable safety/infra updates: Added `Alt+Shift+ArrowUp` duplicate-up and `Ctrl/Cmd+Shift+K` delete line/block transforms with stable selection landing; added `Ctrl/Cmd+D` next-occurrence selection with guarded multi-cursor support and safe no-op fallback where unsupported.
+- Validation status: `tests/editor-pro-editing-micro.spec.js` passed (`32/32`) and shortcut-help contract in `tests/ide.spec.js` passed (`1/1`).
+- Follow-up actions: Add textarea fallback parity coverage and multi-cursor edge tests for overlapping/partial selections.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Added HTML smart-enter between paired tags and optimized paired-tag rename synchronization path.
+- Notable safety/infra updates: Pressing `Enter` between matching HTML tags now creates an indented middle line; paired-tag rename sync now applies fast cursor-context guards before full token parsing to reduce editor overhead.
+- Validation status: Focused new HTML tests passed (`4/4`) and full `tests/editor-pro-editing-micro.spec.js` passed (`28/28`).
+- Follow-up actions: Add malformed HTML + multi-cursor edge tests and migrate behavior to CM6 extension model.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Added serious HTML editing ergonomics with close-tag completion and paired tag rename synchronization.
+- Notable safety/infra updates: Typing `/` after `<` now completes nearest unclosed HTML tag safely; opening-tag renames now synchronize paired structural closing tags; duplicate close-tag insertion edge case is guarded when matching close tag already exists.
+- Validation status: New focused HTML editor tests passed (`3/3`), full `tests/editor-pro-editing-micro.spec.js` passed (`26/26`), and shortcut-help contract check passed (`1/1`).
+- Follow-up actions: Migrate these behaviors to CM6 extension primitives and add deeper malformed-markup edge tests.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Added core professional editor QoL actions while keeping beginner-safe behavior and clean UI.
+- Notable safety/infra updates: Introduced keyboard editor actions for duplicate line/block (`Alt+Shift+ArrowDown`), move line up/down (`Alt+ArrowUp/Down`), and language-aware toggle comments (`Ctrl/Cmd+/`); updated shortcut affordance copy/help without adding persistent UI chrome.
+- Validation status: New focused editor tests passed (`5/5`) and full `tests/editor-pro-editing-micro.spec.js` passed (`23/23`).
+- Follow-up actions: Continue with paired-tag rename and close-tag completion hints as next editor-power phase.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Improved HTML editing power with safe auto-close tag generation on `>`.
+- Notable safety/infra updates: Editor now auto-inserts matching close tags for HTML opening tags (`<html>` -> `<html></html>`) and keeps cursor between tags; excludes void/declaration/closing/self-closing contexts to avoid invalid insertions.
+- Validation status: Focused editor tests passed (`2/2`) for positive + void-tag cases, and full `tests/editor-pro-editing-micro.spec.js` passed (`18/18`).
+- Follow-up actions: Add paired-tag rename ergonomics and close-tag completion during CM6 editor migration phase.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Reinforced beginner-safe workspace guardrails and added deterministic run-context regression coverage.
+- Notable safety/infra updates: Added `tests/ide.spec.js` regression (`sandbox bridge emits coherent run-context metadata for active runs`) validating token/run-context coherence and logged run-context visibility; expanded memory guardrails in `feature-map.md` and anti-patterns in `common-mistakes.md` to enforce guided-power UX and reversible operations.
+- Validation status: Focused new test passed (`1/1`) and full `tests/ide.spec.js` passed (`52/52`).
+- Follow-up actions: Apply the same safety-test pattern to upcoming filesystem adapter and action-journal work.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-17
+- Summary: Added deterministic run-context metadata plumbing across app sandbox execution as a foundation for replayable runs and bug bundles.
+- Notable safety/infra updates: Introduced `assets/js/sandbox/runContext.js` for run-context creation/normalization (`id`, `token`, `seed`, optional fixed timestep); wired run context through `app.js` run launch, `sandbox/runner.js` document generation, and `sandbox/bridge.js` postMessage payloads while preserving current token-gate behavior.
+- Validation status: `npm run test:smoke` passed (`7/7`), then `npm run test:quick` passed (including all contracts, memory/integrity checks, and Playwright `169/169`).
+- Follow-up actions: Connect run-context seed/fixed timestep controls to user-facing deterministic mode and include run-context metadata in future bug-bundle export payloads.
+
+- Version: 0.2.0
 - Date (UTC): 2026-02-16
 - Summary: Sharpened completion suggestion rows to match the clean Files-panel style and upgraded semantic kind badges to real SVG pictogram icons.
 - Notable safety/infra updates: Completion rows use lightweight row-highlight behavior (not button-like blocks) and attach kind metadata/icons from the existing symbol pipeline cache (AST results when available, fallback parser otherwise); symbol badges now render actual inline SVG icons for function/method/arrow/class/variable/keyword/snippet kinds.

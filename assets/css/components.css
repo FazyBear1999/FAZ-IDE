@@ -387,10 +387,15 @@ button:focus-visible {
 
     font-family: var(--editor-font-family, var(--mono));
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.55;
     tab-size: 2;
     scrollbar-gutter: stable both-edges;
     overflow-anchor: none;
+    text-rendering: optimizeLegibility;
+    font-kerning: normal;
+    font-variant-ligatures: none;
+    -webkit-font-smoothing: antialiased;
+    caret-color: var(--syntax-cursor);
 }
 
 #editor:focus {
@@ -408,11 +413,15 @@ button:focus-visible {
     background: var(--editor-surface);
     font-family: var(--editor-font-family, var(--mono));
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.55;
     flex: 1;
     padding: 0;
     box-sizing: border-box;
     overflow: hidden;
+    text-rendering: optimizeLegibility;
+    font-kerning: normal;
+    font-variant-ligatures: none;
+    -webkit-font-smoothing: antialiased;
 }
 
 .CodeMirror.cm-s-default,
@@ -507,6 +516,7 @@ button:focus-visible {
     background: var(--editor-surface);
     scrollbar-gutter: stable both-edges;
     overflow-anchor: none;
+    text-rendering: optimizeLegibility;
 }
 
 .CodeMirror-selected {

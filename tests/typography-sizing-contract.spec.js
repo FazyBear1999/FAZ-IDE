@@ -25,6 +25,27 @@ test("typography/sizing: editor font size defaults remain readable", async ({ pa
   expect(numeric).toBeLessThanOrEqual(22);
 });
 
+test("typography/sizing: editor surface keeps readability-focused rendering hints", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const node = document.querySelector(".CodeMirror") || document.querySelector("#editor");
+    if (!(node instanceof HTMLElement)) return { ready: false };
+    const styles = getComputedStyle(node);
+    return {
+      ready: true,
+      lineHeight: Number.parseFloat(styles.lineHeight || "0"),
+      textRendering: String(styles.textRendering || "").toLowerCase(),
+      ligatures: String(styles.fontVariantLigatures || "").toLowerCase(),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.lineHeight).toBeGreaterThanOrEqual(18);
+  expect(["optimizelegibility", "auto", "geometricprecision"]).toContain(result.textRendering);
+  expect(["none", "normal"]).toContain(result.ligatures);
+});
+
 test("typography/sizing: editor tab size defaults are within guardrails", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

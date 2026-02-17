@@ -84,3 +84,32 @@ export function isAddCursorDownShortcut(e) {
 export function isAddCursorUpShortcut(e) {
     return isModKey(e) && e.altKey && !e.shiftKey && e.key === "ArrowUp";
 };
+
+export function isToggleCommentShortcut(e) {
+    const key = String(e.key || "");
+    return isModKey(e) && !e.shiftKey && !e.altKey && (key === "/" || key === "?");
+};
+
+export function isMoveLineDownShortcut(e) {
+    return !isModKey(e) && e.altKey && !e.shiftKey && e.key === "ArrowDown";
+};
+
+export function isMoveLineUpShortcut(e) {
+    return !isModKey(e) && e.altKey && !e.shiftKey && e.key === "ArrowUp";
+};
+
+export function isDuplicateLineDownShortcut(e) {
+    return !isModKey(e) && e.altKey && e.shiftKey && e.key === "ArrowDown";
+};
+
+export function isDuplicateLineUpShortcut(e) {
+    return !isModKey(e) && e.altKey && e.shiftKey && e.key === "ArrowUp";
+};
+
+export function isDeleteLineShortcut(e) {
+    return isModKey(e) && e.shiftKey && !e.altKey && (e.key === "k" || e.key === "K");
+};
+
+export function isSelectNextOccurrenceShortcut(e) {
+    return isModKey(e) && !e.shiftKey && !e.altKey && (e.key === "d" || e.key === "D");
+};

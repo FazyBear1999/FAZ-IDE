@@ -93,6 +93,10 @@ Project memory for future updates lives in `docs/ai-memory/`:
 - `release-notes.md` for deployment-impacting notes
 - `handoff-checklist.md` for session start/end quality checklist
 
+Master product direction and phased implementation plan:
+
+- `docs/MASTER_ROADMAP.md` for strategic constraints, phased build order, and immediate execution queue
+
 ## Release Checklist
 
 See `docs/RELEASE_CHECKLIST.md` for the safe pre-upload and deployment flow.

@@ -10,6 +10,22 @@
 
 export function makeTextareaEditor(textareaEl) {
     const markerBuckets = new Map();
+    let cachedValue = null;
+    let cachedLines = [];
+
+    function invalidateLineCache() {
+        cachedValue = null;
+        cachedLines = [];
+    }
+
+    function getCachedLines() {
+        const value = textareaEl.value;
+        if (cachedValue !== value) {
+            cachedValue = value;
+            cachedLines = value.split("\n");
+        }
+        return cachedLines;
+    }
 
     function clampIndex(value) {
         const next = Math.max(0, Number(value) || 0);
@@ -19,7 +35,7 @@ export function makeTextareaEditor(textareaEl) {
     function lineChToIndex(pos = { line: 0, ch: 0 }) {
         const line = Math.max(0, Number(pos.line) || 0);
         const ch = Math.max(0, Number(pos.ch) || 0);
-        const lines = textareaEl.value.split("\n");
+        const lines = getCachedLines();
         let index = 0;
         for (let i = 0; i < line && i < lines.length; i += 1) {
             index += lines[i].length + 1;
@@ -29,7 +45,7 @@ export function makeTextareaEditor(textareaEl) {
 
     function indexToLineCh(index = 0) {
         const target = clampIndex(index);
-        const lines = textareaEl.value.split("\n");
+        const lines = getCachedLines();
         let cursor = 0;
         for (let line = 0; line < lines.length; line += 1) {
             const next = cursor + lines[line].length;
@@ -56,11 +72,13 @@ export function makeTextareaEditor(textareaEl) {
             // Replace editor content.
             // (Caller is responsible for passing a string.)
             textareaEl.value = v;
+            invalidateLineCache();
         },
 
         clear() {
             // Convenience: wipe editor content.
             textareaEl.value = "";
+            invalidateLineCache();
         },
 
         focus() {
@@ -150,10 +168,10 @@ export function makeTextareaEditor(textareaEl) {
             return textareaEl.value.slice(start, end);
         },
         lineCount() {
-            return textareaEl.value.split("\n").length;
+            return getCachedLines().length;
         },
         getLine(line) {
-            return textareaEl.value.split("\n")[Math.max(0, Number(line) || 0)] || "";
+            return getCachedLines()[Math.max(0, Number(line) || 0)] || "";
         },
         indexFromPos(pos) {
             return lineChToIndex(pos);
@@ -191,7 +209,7 @@ export function makeTextareaEditor(textareaEl) {
         },
         getWordAt(pos = null) {
             const cursor = pos || this.getCursor();
-            const lines = textareaEl.value.split("\n");
+            const lines = getCachedLines();
             const lineText = lines[cursor.line] || "";
             const left = lineText.slice(0, cursor.ch);
             const right = lineText.slice(cursor.ch);

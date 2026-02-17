@@ -26,6 +26,8 @@ import { THEMES, normalizeTheme, applyThemeState, DEFAULT_THEME } from "./ui/the
 import { buildExportWorkspaceData, buildWorkspaceExportFilename, triggerWorkspaceExportDownload, normalizeImportedWorkspacePayload, parseWorkspaceImportText, buildImportWorkspaceConfirmMessage } from "./ui/workspaceTransfer.js";
 import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, normalizeFilesSectionOrder, cloneLayoutState } from "./ui/layoutState.js";
 import { runInSandbox } from "./sandbox/runner.js";
+import { runPythonInSandbox, cancelPythonSandboxRuns, disposePythonSandboxRunner } from "./sandbox/pythonRunner.js";
+import { createRunContext, normalizeRunContext, buildRunContextLabel } from "./sandbox/runContext.js";
 import { makeTextareaEditor } from "./editors/textarea.js";
 import { makeCodeMirrorEditor } from "./editors/codemirror5.js";
 import { createCommandRegistry } from "./core/commandRegistry.js";
@@ -49,6 +51,13 @@ import {
     isProjectSearchShortcut,
     isAddCursorDownShortcut,
     isAddCursorUpShortcut,
+    isToggleCommentShortcut,
+    isMoveLineDownShortcut,
+    isMoveLineUpShortcut,
+    isDuplicateLineDownShortcut,
+    isDuplicateLineUpShortcut,
+    isDeleteLineShortcut,
+    isSelectNextOccurrenceShortcut,
 } from "./ui/shortcuts.js";
 
 // DOM references kept centralized (easy maintenance)
@@ -190,6 +199,7 @@ function ensureSandboxOpen(reason) {
 // - Sandbox includes the token in postMessage().
 // - Parent ignores messages that don't match currentToken (prevents stale logs).
 let currentToken = null;
+let currentRunContext = null;
 
 // For master-level readability: show run numbers in the log
 // Notes:
@@ -288,6 +298,7 @@ const LOCAL_FOLDER_IMPORT_EXTENSIONS = new Set([
     "txt",
     "svg",
     "xml",
+    "py",
 ]);
 
 const DEFAULT_SNIPPETS = [
@@ -296,8 +307,10 @@ const DEFAULT_SNIPPETS = [
     { trigger: "afn", template: "const ${1:name} = (${2:params}) => {\n  ${0}\n};", scope: "javascript" },
     { trigger: "fori", template: "for (let ${1:i} = 0; ${1:i} < ${2:count}; ${1:i} += 1) {\n  ${0}\n}", scope: "javascript" },
     { trigger: "if", template: "if (${1:condition}) {\n  ${0}\n}", scope: "javascript" },
+    { trigger: "def", template: "def ${1:name}(${2:args}):\n    ${0}", scope: "python" },
+    { trigger: "fori-py", template: "for ${1:i} in range(${2:n}):\n    ${0}", scope: "python" },
 ];
-const SNIPPET_SCOPE_VALUES = new Set(["*", "javascript", "typescript", "json", "html", "css", "markdown", "text"]);
+const SNIPPET_SCOPE_VALUES = new Set(["*", "javascript", "typescript", "json", "html", "css", "markdown", "python", "text"]);
 const EDITOR_COMPLETION_KEYWORDS = Object.freeze({
     javascript: Object.freeze([
         "const", "let", "var", "function", "return", "if", "else", "for", "while", "switch", "case", "default",
@@ -316,6 +329,10 @@ const EDITOR_COMPLETION_KEYWORDS = Object.freeze({
         "grid", "flex", "align-items", "justify-content", "gap", "z-index", "overflow", "opacity", "transform",
     ]),
     markdown: Object.freeze(["#", "##", "###", "-", "*", "```", "[", "]", "(", ")"]),
+    python: Object.freeze([
+        "def", "class", "import", "from", "as", "if", "elif", "else", "for", "while", "try", "except", "finally", "with", "return",
+        "yield", "lambda", "pass", "break", "continue", "True", "False", "None", "print", "len", "range", "enumerate", "list", "dict",
+    ]),
 });
 const EDITOR_COMPLETION_MIN_PREFIX = 2;
 const EDITOR_COMPLETION_MAX_ITEMS = 8;
@@ -414,6 +431,10 @@ const EDITOR_AUTO_PAIR_CLOSE_TO_OPEN = new Map(
 );
 const EDITOR_AUTO_PAIR_QUOTES = new Set(["\"", "'", "`"]);
 const EDITOR_AUTO_PAIR_SAFE_NEXT = new Set([")", "]", "}", ">", ",", ";", ":"]);
+const EDITOR_LINE_COMMENT_PREFIX_LANGS = new Set(["javascript", "typescript", "json", "css", "python"]);
+const EDITOR_HTML_VOID_TAGS = new Set([
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
+]);
 const EDITOR_SYNTAX_THEME_NAMES = Object.freeze([
     "dark",
     "light",
@@ -1653,6 +1674,7 @@ let editorCompletionGhost = null;
 let editorSignatureHintSyncFrame = null;
 let editorSignatureHintRequestId = 0;
 let suppressEditorCompletionOnNextChange = false;
+let suppressHtmlTagRenameChange = false;
 let snippetSession = null;
 let snippetRegistry = [...DEFAULT_SNIPPETS];
 let fileCodeHistory = {};
@@ -1800,11 +1822,9 @@ let colGuide = null;
 let panelReflowFrame = null;
 const panelReflowCleanupMap = new WeakMap();
 
-function makeToken() {
-    // Simple unique-enough token for a local sandbox run.
-    // Not meant for cryptographic security; it's a run correlator + noise filter.
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-};
+function makeRunContext() {
+    return createRunContext(runCount);
+}
 
 function loadLayout(raw = load(STORAGE.LAYOUT)) {
     if (!raw) return sanitizeLayoutState(layoutState);
@@ -8059,6 +8079,9 @@ function getStarterCodeForFileName(fileName = "") {
     if (leaf.endsWith(".css")) {
         return "/* New stylesheet */\n";
     }
+    if (leaf.endsWith(".py")) {
+        return "# New Python file\nprint(\"Hello from Python\")\n";
+    }
     return "// New JavaScript file\n";
 }
 
@@ -10937,6 +10960,350 @@ function shouldAutoPairQuoteAtCursor(quoteChar, cursorIndex) {
     return false;
 }
 
+function getHtmlAutoCloseTagName(beforeCursorLineText = "") {
+    const line = String(beforeCursorLineText || "");
+    const tagStart = line.lastIndexOf("<");
+    if (tagStart < 0) return "";
+    const segment = line.slice(tagStart + 1);
+    if (!segment) return "";
+    const head = segment.trimStart();
+    if (!head || head.startsWith("/") || head.startsWith("!") || head.startsWith("?")) return "";
+    if (/\/\s*$/.test(segment)) return "";
+    const match = head.match(/^([A-Za-z][A-Za-z0-9:-]*)\b/);
+    if (!match) return "";
+    const tagName = String(match[1] || "");
+    if (!tagName) return "";
+    if (EDITOR_HTML_VOID_TAGS.has(tagName.toLowerCase())) return "";
+    return tagName;
+}
+
+function maskTextRange(value = "", start = 0, end = 0) {
+    const source = String(value || "");
+    const from = Math.max(0, Math.min(source.length, Number(start) || 0));
+    const to = Math.max(from, Math.min(source.length, Number(end) || from));
+    if (to <= from) return source;
+    return `${source.slice(0, from)}${" ".repeat(to - from)}${source.slice(to)}`;
+}
+
+function maskHtmlIgnoredContent(source = "") {
+    let masked = String(source || "");
+
+    const commentPattern = /<!--[\s\S]*?-->/g;
+    masked = masked.replace(commentPattern, (match) => " ".repeat(match.length));
+
+    const blockPattern = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+    masked = masked.replace(blockPattern, (segment) => {
+        const openEnd = segment.indexOf(">");
+        const closeStart = segment.toLowerCase().lastIndexOf("</");
+        if (openEnd < 0 || closeStart <= openEnd) {
+            return " ".repeat(segment.length);
+        }
+        return `${segment.slice(0, openEnd + 1)}${" ".repeat(Math.max(0, closeStart - (openEnd + 1)))}${segment.slice(closeStart)}`;
+    });
+
+    return masked;
+}
+
+function isInsideHtmlCommentAtIndex(source = "", index = 0) {
+    const text = String(source || "");
+    const cursor = Math.max(0, Number(index) || 0);
+    const openIndex = text.lastIndexOf("<!--", cursor);
+    if (openIndex < 0) return false;
+    const closeIndex = text.lastIndexOf("-->", cursor);
+    return closeIndex < openIndex;
+}
+
+function isInsideHtmlRawTagBlockAtIndex(source = "", tagName = "", index = 0) {
+    const text = String(source || "");
+    const cursor = Math.max(0, Number(index) || 0);
+    const name = String(tagName || "").trim();
+    if (!text || !name) return false;
+
+    const openPattern = new RegExp(`<${name}\\b[^>]*>`, "gi");
+    const closePattern = new RegExp(`</${name}\\s*>`, "gi");
+    let lastOpen = -1;
+    let lastClose = -1;
+
+    for (const match of text.matchAll(openPattern)) {
+        const at = Number(match.index);
+        if (!Number.isFinite(at) || at >= cursor) continue;
+        lastOpen = at;
+    }
+    for (const match of text.matchAll(closePattern)) {
+        const at = Number(match.index);
+        if (!Number.isFinite(at) || at >= cursor) continue;
+        lastClose = at;
+    }
+
+    return lastOpen > lastClose;
+}
+
+function isInsideHtmlIgnoredContext(source = "", index = 0) {
+    const text = String(source || "");
+    if (!text) return false;
+    if (isInsideHtmlCommentAtIndex(text, index)) return true;
+    if (isInsideHtmlRawTagBlockAtIndex(text, "script", index)) return true;
+    if (isInsideHtmlRawTagBlockAtIndex(text, "style", index)) return true;
+    return false;
+}
+
+function parseHtmlTagTokens(source = "") {
+    const text = String(source || "");
+    if (!text) return [];
+    const parseSource = maskHtmlIgnoredContent(text);
+    const tokens = [];
+    const pattern = /<\/?([A-Za-z][A-Za-z0-9:-]*)\b[^>]*>/g;
+    let match;
+    while ((match = pattern.exec(parseSource))) {
+        const raw = String(match[0] || "");
+        const name = String(match[1] || "");
+        if (!name) continue;
+        const isClosing = raw.startsWith("</");
+        const isSelfClosing = /\/\s*>$/.test(raw);
+        const nameStart = (Number(match.index) || 0) + (isClosing ? 2 : 1);
+        const nameEnd = nameStart + name.length;
+        tokens.push({
+            index: Number(match.index) || 0,
+            end: (Number(match.index) || 0) + raw.length,
+            raw,
+            name,
+            nameLower: name.toLowerCase(),
+            nameStart,
+            nameEnd,
+            isClosing,
+            isSelfClosing,
+            isVoid: EDITOR_HTML_VOID_TAGS.has(name.toLowerCase()),
+        });
+    }
+    return tokens;
+}
+
+function inferHtmlClosingTagNameBeforeIndex(source = "", index = 0) {
+    const safeSource = String(source || "");
+    const safeIndex = Math.max(0, Number(index) || 0);
+    const tokens = parseHtmlTagTokens(safeSource.slice(0, safeIndex));
+    if (!tokens.length) return "";
+
+    const stack = [];
+    tokens.forEach((token) => {
+        if (!token.isClosing) {
+            if (token.isSelfClosing || token.isVoid) return;
+            stack.push(token.name);
+            return;
+        }
+        const closeName = token.nameLower;
+        for (let i = stack.length - 1; i >= 0; i -= 1) {
+            if (String(stack[i] || "").toLowerCase() === closeName) {
+                stack.splice(i, 1);
+                break;
+            }
+        }
+    });
+
+    return stack.length ? String(stack[stack.length - 1] || "") : "";
+}
+
+function getHtmlOpenTokenAtCursor(source = "", cursorIndex = 0) {
+    const safeSource = String(source || "");
+    const safeCursor = Math.max(0, Number(cursorIndex) || 0);
+    const tokens = parseHtmlTagTokens(safeSource);
+    if (!tokens.length) return { tokens: [], token: null };
+    const token = tokens.find((entry) => {
+        if (!entry || entry.isClosing || entry.isSelfClosing || entry.isVoid) return false;
+        return safeCursor >= entry.nameStart && safeCursor <= entry.nameEnd;
+    }) || null;
+    return { tokens, token };
+}
+
+function findStructuralHtmlClosingToken(tokens = [], openToken = null) {
+    if (!openToken) return null;
+    const openIndex = (Array.isArray(tokens) ? tokens : []).findIndex((entry) => entry === openToken);
+    if (openIndex < 0) return null;
+    let depth = 0;
+    for (let i = openIndex + 1; i < tokens.length; i += 1) {
+        const token = tokens[i];
+        if (!token) continue;
+        if (!token.isClosing) {
+            if (token.isSelfClosing || token.isVoid) continue;
+            depth += 1;
+            continue;
+        }
+        if (depth === 0) return token;
+        depth -= 1;
+    }
+    return null;
+}
+
+function syncHtmlPairedClosingTagName() {
+    const active = getActiveFile();
+    const language = detectLanguageFromFileName(active?.name || "");
+    if (language !== "html") return false;
+
+    const selections = normalizeEditorSelectionInfo();
+    if (selections.length !== 1 || !selections[0].collapsed) return false;
+    const cursorIndex = selections[0].start;
+    const source = String(editor.get?.() || "");
+    if (!source) return false;
+    if (isInsideHtmlIgnoredContext(source, cursorIndex)) return false;
+
+    const { before, after } = getEditorCharsAroundIndex(cursorIndex);
+    if (!/[A-Za-z0-9:-]/.test(`${before}${after}`)) return false;
+    const openBracketIndex = source.lastIndexOf("<", cursorIndex);
+    if (openBracketIndex < 0) return false;
+    const closeBracketIndex = source.indexOf(">", openBracketIndex);
+    if (closeBracketIndex < 0 || cursorIndex <= openBracketIndex || cursorIndex > closeBracketIndex) return false;
+    const shell = source.slice(openBracketIndex, closeBracketIndex + 1);
+    if (!shell || /^<\//.test(shell) || /^<!/.test(shell) || /^<\?/.test(shell) || /\/\s*>$/.test(shell)) return false;
+
+    const { tokens, token: openToken } = getHtmlOpenTokenAtCursor(source, cursorIndex);
+    if (!openToken) return false;
+    const closeToken = findStructuralHtmlClosingToken(tokens, openToken);
+    if (!closeToken || !closeToken.isClosing) return false;
+    if (closeToken.name === openToken.name) return false;
+
+    const from = editor.posFromIndex?.(closeToken.nameStart);
+    const to = editor.posFromIndex?.(closeToken.nameEnd);
+    if (!from || !to) return false;
+
+    suppressHtmlTagRenameChange = true;
+    editor.replaceRange?.(openToken.name, from, to);
+    return true;
+}
+
+function handleEditorHtmlCloseTagCompletion(e) {
+    if (String(e.key || "") !== "/") return false;
+    if (e.altKey || e.ctrlKey || e.metaKey) return false;
+
+    const active = getActiveFile();
+    const language = detectLanguageFromFileName(active?.name || "");
+    if (language !== "html") return false;
+
+    const selections = normalizeEditorSelectionInfo();
+    if (selections.length !== 1 || !selections[0].collapsed) return false;
+    const entry = selections[0];
+    const { before } = getEditorCharsAroundIndex(entry.start);
+    if (before !== "<") return false;
+
+    const source = String(editor.get?.() || "");
+    if (isInsideHtmlIgnoredContext(source, entry.start)) return false;
+    const tagName = inferHtmlClosingTagNameBeforeIndex(source, entry.start - 1);
+    if (!tagName) return false;
+
+    const cursorPos = editor.posFromIndex?.(entry.start);
+    if (!cursorPos) return false;
+    const afterPos = editor.posFromIndex?.(entry.start + tagName.length + 3);
+    const afterText = afterPos ? String(editor.getRange?.(cursorPos, afterPos) || "") : "";
+    const existingCloseTag = `</${tagName}>`;
+
+    if (afterText.startsWith(existingCloseTag)) {
+        editor.operation?.(() => {
+            const dropFrom = editor.posFromIndex?.(Math.max(0, entry.start - 1));
+            const dropTo = editor.posFromIndex?.(entry.start);
+            if (dropFrom && dropTo) {
+                editor.replaceRange?.("", dropFrom, dropTo);
+            }
+            const nextPos = editor.posFromIndex?.(entry.start + tagName.length + 2);
+            if (nextPos) {
+                editor.setSelections?.([{ anchor: nextPos, head: nextPos }]);
+            }
+        });
+        e.preventDefault();
+        return true;
+    }
+
+    editor.operation?.(() => {
+        editor.replaceRange?.(`/${tagName}>`, cursorPos, cursorPos);
+        const nextPos = editor.posFromIndex?.(entry.start + tagName.length + 2);
+        if (nextPos) {
+            editor.setSelections?.([{ anchor: nextPos, head: nextPos }]);
+        }
+    });
+    e.preventDefault();
+    return true;
+}
+
+function handleEditorHtmlSmartEnter(e) {
+    if (String(e.key || "") !== "Enter") return false;
+    if (e.altKey || e.ctrlKey || e.metaKey) return false;
+
+    const active = getActiveFile();
+    const language = detectLanguageFromFileName(active?.name || "");
+    if (language !== "html") return false;
+
+    const selections = normalizeEditorSelectionInfo();
+    if (selections.length !== 1 || !selections[0].collapsed) return false;
+    const entry = selections[0];
+    const source = String(editor.get?.() || "");
+    const cursorIndex = entry.start;
+    if (isInsideHtmlIgnoredContext(source, cursorIndex)) return false;
+    const { before, after } = getEditorCharsAroundIndex(cursorIndex);
+    if (before !== ">" || after !== "<") return false;
+
+    const closingName = inferHtmlClosingTagNameBeforeIndex(source, cursorIndex);
+    if (!closingName) return false;
+
+    const afterSlice = source.slice(cursorIndex);
+    const closeMatch = afterSlice.match(/^<\/([A-Za-z][A-Za-z0-9:-]*)\b[^>]*>/);
+    if (!closeMatch) return false;
+    const closeTagName = String(closeMatch[1] || "");
+    if (!closeTagName || closeTagName.toLowerCase() !== closingName.toLowerCase()) return false;
+
+    const cursorPos = editor.posFromIndex?.(cursorIndex);
+    if (!cursorPos) return false;
+    const lineText = String(editor.getLine?.(cursorPos.line) || "");
+    const baseIndent = (lineText.match(/^\s*/) || [""])[0];
+    const innerIndent = `${baseIndent}${getEditorIndentUnit()}`;
+    const insert = `\n${innerIndent}\n${baseIndent}`;
+
+    editor.operation?.(() => {
+        editor.replaceRange?.(insert, cursorPos, cursorPos);
+        const nextPos = editor.posFromIndex?.(cursorIndex + 1 + innerIndent.length);
+        if (nextPos) {
+            editor.setSelections?.([{ anchor: nextPos, head: nextPos }]);
+        }
+    });
+    e.preventDefault();
+    return true;
+}
+
+function handleEditorHtmlAutoCloseTag(e) {
+    if (String(e.key || "") !== ">") return false;
+    if (e.altKey || e.ctrlKey || e.metaKey) return false;
+
+    const active = getActiveFile();
+    const language = detectLanguageFromFileName(active?.name || "");
+    if (language !== "html") return false;
+
+    const selections = normalizeEditorSelectionInfo();
+    if (selections.length !== 1 || !selections[0].collapsed) return false;
+
+    const entry = selections[0];
+    const source = String(editor.get?.() || "");
+    if (isInsideHtmlIgnoredContext(source, entry.start)) return false;
+    const cursorPos = editor.posFromIndex?.(entry.start);
+    if (!cursorPos) return false;
+    const lineText = String(editor.getLine?.(cursorPos.line) || "");
+    const beforeLineText = lineText.slice(0, cursorPos.ch);
+    const tagName = getHtmlAutoCloseTagName(beforeLineText);
+    if (!tagName) return false;
+
+    const closeTag = `</${tagName}>`;
+    const afterEndPos = editor.posFromIndex?.(entry.start + closeTag.length + 1);
+    const afterSlice = afterEndPos ? String(editor.getRange?.(cursorPos, afterEndPos) || "") : "";
+    const shouldOnlyCloseOpenTag = afterSlice.startsWith(closeTag) || afterSlice.startsWith(`>${closeTag}`);
+    const insertText = shouldOnlyCloseOpenTag ? ">" : `>${closeTag}`;
+
+    editor.operation?.(() => {
+        editor.replaceRange?.(insertText, cursorPos, cursorPos);
+        const nextPos = editor.posFromIndex?.(entry.start + 1);
+        if (nextPos) {
+            editor.setSelections?.([{ anchor: nextPos, head: nextPos }]);
+        }
+    });
+    e.preventDefault();
+    return true;
+}
+
 function handleEditorAutoOpenPair(e) {
     const openChar = String(e.key || "");
     const closeChar = EDITOR_AUTO_PAIR_OPEN_TO_CLOSE.get(openChar);
@@ -11137,6 +11504,315 @@ function getSelectedEditorLines(selectionEntries = []) {
 
 function headIndexIsTail(entry) {
     return entry.headIndex >= entry.anchorIndex;
+}
+
+function getEditorSelectedLineRange() {
+    const selections = normalizeEditorSelectionInfo();
+    if (!selections.length) return null;
+    const selectedLines = getSelectedEditorLines(selections);
+    if (!selectedLines.length) return null;
+    return {
+        selections,
+        startLine: selectedLines[0],
+        endLine: selectedLines[selectedLines.length - 1],
+    };
+}
+
+function buildEditorLineBlockSelection(lines, startLine, endLine) {
+    const safeStart = Math.max(0, Number(startLine) || 0);
+    const safeEnd = Math.max(safeStart, Number(endLine) || safeStart);
+    const endLineText = String(lines[safeEnd] || "");
+    return [{
+        anchor: { line: safeStart, ch: 0 },
+        head: { line: safeEnd, ch: endLineText.length },
+    }];
+}
+
+function applyEditorQolCode(nextCode, nextSelections = null, reason = "editor-qol") {
+    setEditorValue(String(nextCode ?? ""), { silent: true });
+    updateActiveFileCode(editor.get());
+    if (Array.isArray(nextSelections) && nextSelections.length) {
+        editor.setSelections?.(nextSelections);
+    }
+    queueEditorLint(reason);
+    syncEditorStatusBar();
+}
+
+function duplicateEditorSelectedLines(direction = 1) {
+    const step = Number(direction) < 0 ? -1 : 1;
+    const range = getEditorSelectedLineRange();
+    if (!range) return false;
+    const source = String(editor.get?.() || "");
+    const lines = source.split("\n");
+    if (!lines.length) return false;
+
+    const { selections, startLine, endLine } = range;
+    const block = lines.slice(startLine, endLine + 1);
+    let nextStart = startLine;
+    let nextEnd = endLine;
+
+    if (step < 0) {
+        lines.splice(startLine, 0, ...block);
+    } else {
+        lines.splice(endLine + 1, 0, ...block);
+        nextStart = startLine + block.length;
+        nextEnd = endLine + block.length;
+    }
+
+    let nextSelections = buildEditorLineBlockSelection(lines, nextStart, nextEnd);
+    if (selections.length === 1 && selections[0].collapsed) {
+        const anchor = selections[0].anchor || { line: startLine, ch: 0 };
+        const lineOffset = step < 0 ? 0 : block.length;
+        const targetLine = Math.min(lines.length - 1, Math.max(0, anchor.line + lineOffset));
+        const targetCh = Math.min(Math.max(0, anchor.ch), String(lines[targetLine] || "").length);
+        nextSelections = [{
+            anchor: { line: targetLine, ch: targetCh },
+            head: { line: targetLine, ch: targetCh },
+        }];
+    }
+
+    applyEditorQolCode(lines.join("\n"), nextSelections, "editor-duplicate-line");
+    status.set(step < 0 ? "Duplicated line up" : "Duplicated line down");
+    return true;
+}
+
+function duplicateEditorSelectedLinesDown() {
+    return duplicateEditorSelectedLines(1);
+}
+
+function duplicateEditorSelectedLinesUp() {
+    return duplicateEditorSelectedLines(-1);
+}
+
+function moveEditorSelectedLines(direction = 1) {
+    const step = Number(direction) < 0 ? -1 : 1;
+    const range = getEditorSelectedLineRange();
+    if (!range) return false;
+    const source = String(editor.get?.() || "");
+    const lines = source.split("\n");
+    if (!lines.length) return false;
+
+    const { selections, startLine, endLine } = range;
+    if (step < 0 && startLine <= 0) return false;
+    if (step > 0 && endLine >= lines.length - 1) return false;
+
+    const block = lines.slice(startLine, endLine + 1);
+    let nextStart = startLine;
+    let nextEnd = endLine;
+    if (step < 0) {
+        const swapLine = lines[startLine - 1];
+        lines.splice(startLine - 1, block.length + 1, ...block, swapLine);
+        nextStart = startLine - 1;
+        nextEnd = endLine - 1;
+    } else {
+        const swapLine = lines[endLine + 1];
+        lines.splice(startLine, block.length + 1, swapLine, ...block);
+        nextStart = startLine + 1;
+        nextEnd = endLine + 1;
+    }
+
+    let nextSelections = buildEditorLineBlockSelection(lines, nextStart, nextEnd);
+    if (selections.length === 1 && selections[0].collapsed) {
+        const anchor = selections[0].anchor || { line: startLine, ch: 0 };
+        const targetLine = Math.min(lines.length - 1, Math.max(0, anchor.line + step));
+        const targetCh = Math.min(Math.max(0, anchor.ch), String(lines[targetLine] || "").length);
+        nextSelections = [{
+            anchor: { line: targetLine, ch: targetCh },
+            head: { line: targetLine, ch: targetCh },
+        }];
+    }
+
+    applyEditorQolCode(lines.join("\n"), nextSelections, "editor-move-line");
+    status.set(step < 0 ? "Moved line up" : "Moved line down");
+    return true;
+}
+
+function getEditorCommentStyleForLanguage(language = "text") {
+    const normalized = String(language || "text").toLowerCase();
+    if (EDITOR_LINE_COMMENT_PREFIX_LANGS.has(normalized)) {
+        return { kind: "line", prefix: "//" };
+    }
+    if (normalized === "html" || normalized === "markdown") {
+        return { kind: "wrap", open: "<!--", close: "-->" };
+    }
+    return { kind: "line", prefix: "//" };
+}
+
+function toggleEditorComments() {
+    const range = getEditorSelectedLineRange();
+    if (!range) return false;
+    const source = String(editor.get?.() || "");
+    const lines = source.split("\n");
+    const { startLine, endLine } = range;
+    const targetLines = lines.slice(startLine, endLine + 1);
+    if (!targetLines.length) return false;
+
+    const active = getActiveFile();
+    const language = detectLanguageFromFileName(active?.name || "");
+    const style = getEditorCommentStyleForLanguage(language);
+
+    const isCommentedLine = (lineText) => {
+        const text = String(lineText || "");
+        const trimmed = text.trim();
+        if (!trimmed) return true;
+        if (style.kind === "line") {
+            const indent = (text.match(/^\s*/) || [""])[0];
+            return text.slice(indent.length).startsWith(style.prefix);
+        }
+        return trimmed.startsWith(style.open) && trimmed.endsWith(style.close);
+    };
+
+    const uncommentLine = (lineText) => {
+        const text = String(lineText || "");
+        const indent = (text.match(/^\s*/) || [""])[0];
+        const afterIndent = text.slice(indent.length);
+        if (style.kind === "line") {
+            if (!afterIndent.startsWith(style.prefix)) return text;
+            let rest = afterIndent.slice(style.prefix.length);
+            if (rest.startsWith(" ")) rest = rest.slice(1);
+            return `${indent}${rest}`;
+        }
+        const trimmed = text.trim();
+        if (!(trimmed.startsWith(style.open) && trimmed.endsWith(style.close))) return text;
+        const body = trimmed.slice(style.open.length, trimmed.length - style.close.length).trim();
+        return `${indent}${body}`;
+    };
+
+    const commentLine = (lineText) => {
+        const text = String(lineText || "");
+        const indent = (text.match(/^\s*/) || [""])[0];
+        const body = text.slice(indent.length);
+        if (style.kind === "line") {
+            return body.length ? `${indent}${style.prefix} ${body}` : `${indent}${style.prefix}`;
+        }
+        const trimmedBody = body.trim();
+        return trimmedBody
+            ? `${indent}${style.open} ${trimmedBody} ${style.close}`
+            : `${indent}${style.open} ${style.close}`;
+    };
+
+    const nonEmpty = targetLines.filter((line) => String(line || "").trim().length > 0);
+    const allCommented = (nonEmpty.length ? nonEmpty : targetLines).every((line) => isCommentedLine(line));
+
+    for (let line = startLine; line <= endLine; line += 1) {
+        const current = lines[line];
+        lines[line] = allCommented ? uncommentLine(current) : commentLine(current);
+    }
+
+    const nextSelections = buildEditorLineBlockSelection(lines, startLine, endLine);
+    applyEditorQolCode(lines.join("\n"), nextSelections, "editor-toggle-comment");
+    status.set(allCommented ? "Comments removed" : "Comments added");
+    return true;
+}
+
+function deleteEditorSelectedLines() {
+    const range = getEditorSelectedLineRange();
+    if (!range) return false;
+    const source = String(editor.get?.() || "");
+    const lines = source.split("\n");
+    if (!lines.length) return false;
+
+    const { startLine, endLine } = range;
+    const removeCount = Math.max(1, (endLine - startLine) + 1);
+    lines.splice(startLine, removeCount);
+    if (!lines.length) {
+        lines.push("");
+    }
+
+    const targetLine = Math.min(startLine, lines.length - 1);
+    const nextSelections = [{
+        anchor: { line: targetLine, ch: 0 },
+        head: { line: targetLine, ch: 0 },
+    }];
+
+    applyEditorQolCode(lines.join("\n"), nextSelections, "editor-delete-line");
+    status.set(removeCount > 1 ? "Deleted lines" : "Deleted line");
+    return true;
+}
+
+function rangeOverlapsAny(start, end, ranges = []) {
+    const safeStart = Math.max(0, Number(start) || 0);
+    const safeEnd = Math.max(safeStart, Number(end) || safeStart);
+    return (Array.isArray(ranges) ? ranges : []).some((entry) => {
+        const from = Math.max(0, Number(entry?.start) || 0);
+        const to = Math.max(from, Number(entry?.end) || from);
+        return safeStart < to && safeEnd > from;
+    });
+}
+
+function selectEditorNextOccurrence() {
+    const multiCursor = Boolean(editor.supportsMultiCursor);
+
+    const source = String(editor.get?.() || "");
+    if (!source) return false;
+
+    const selections = normalizeEditorSelectionInfo();
+    if (!selections.length) return false;
+    const primary = selections[0];
+    if (!primary) return false;
+
+    if (primary.collapsed) {
+        const word = editor.getWordAt?.(primary.head || primary.anchor);
+        const text = String(word?.word || "");
+        if (!text) return false;
+        const from = word?.from;
+        const to = word?.to;
+        if (!from || !to) return false;
+        editor.setSelections?.([{ anchor: from, head: to }]);
+        status.set("Selected occurrence");
+        return true;
+    }
+
+    const needle = source.slice(primary.start, primary.end);
+    if (!needle) return false;
+
+    const occupiedRanges = selections.map((entry) => ({ start: entry.start, end: entry.end }));
+    const afterStart = Math.max(...occupiedRanges.map((entry) => entry.end));
+    const windows = [
+        { start: Math.max(0, afterStart), end: source.length },
+        { start: 0, end: Math.max(0, primary.start) },
+    ];
+
+    let nextIndex = -1;
+    for (const window of windows) {
+        if (nextIndex >= 0) break;
+        let cursor = Math.max(0, Number(window?.start) || 0);
+        const limit = Math.max(cursor, Number(window?.end) || cursor);
+        while (cursor <= limit) {
+            const found = source.indexOf(needle, cursor);
+            if (found < 0 || found >= limit) break;
+            const nextEnd = found + needle.length;
+            if (!rangeOverlapsAny(found, nextEnd, occupiedRanges)) {
+                nextIndex = found;
+                break;
+            }
+            cursor = found + 1;
+        }
+    }
+
+    if (nextIndex < 0) {
+        status.set("No further occurrence");
+        return false;
+    }
+
+    const nextStartPos = editor.posFromIndex?.(nextIndex);
+    const nextEndPos = editor.posFromIndex?.(nextIndex + needle.length);
+    if (!nextStartPos || !nextEndPos) return false;
+
+    const nextSelections = getUniqueSelections([
+        ...selections.map((entry) => ({ anchor: entry.anchor, head: entry.head })),
+        { anchor: nextStartPos, head: nextEndPos },
+    ]);
+    if (multiCursor) {
+        if (!nextSelections.length) return false;
+        editor.setSelections?.(nextSelections);
+        status.set("Added occurrence");
+        return true;
+    }
+
+    editor.setSelections?.([{ anchor: nextStartPos, head: nextEndPos }]);
+    status.set("Selected next occurrence");
+    return true;
 }
 
 function handleEditorTabIndent(e, { outdent = false } = {}) {
@@ -11898,6 +12574,7 @@ function detectLanguageFromFileName(fileName = "") {
     if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
     if (lower.endsWith(".css")) return "css";
     if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
+    if (lower.endsWith(".py")) return "python";
     return "text";
 }
 
@@ -11908,6 +12585,7 @@ function getLanguageLabel(language = "text") {
     if (language === "html") return "HTML";
     if (language === "css") return "CSS";
     if (language === "markdown") return "Markdown";
+    if (language === "python") return "Python";
     return "Text";
 }
 
@@ -11984,6 +12662,7 @@ function getEditorModeForLanguage(language = "text") {
     if (language === "html") return "text/html";
     if (language === "css") return "css";
     if (language === "markdown") return "markdown";
+    if (language === "python") return "python";
     return "text/plain";
 }
 
@@ -17051,6 +17730,11 @@ async function boot() {
     editor.onChange(() => {
         if (suppressChange) return;
         updateActiveFileCode(editor.get());
+        if (suppressHtmlTagRenameChange) {
+            suppressHtmlTagRenameChange = false;
+        } else {
+            syncHtmlPairedClosingTagName();
+        }
         queueEditorLint("input");
         if (editorSearchOpen) {
             refreshFindResults({ preserveIndex: true, focusSelection: false });
@@ -17118,12 +17802,73 @@ async function boot() {
             return;
         }
 
+        if (handleEditorHtmlSmartEnter(e)) {
+            return;
+        }
+
+        if (handleEditorHtmlCloseTagCompletion(e)) {
+            return;
+        }
+
+        if (handleEditorHtmlAutoCloseTag(e)) {
+            return;
+        }
+
         if (handleEditorAutoPairs(e)) {
             return;
         }
 
         if (handleEditorSmartEnter(e)) {
             return;
+        }
+
+        if (isDuplicateLineDownShortcut(e)) {
+            if (duplicateEditorSelectedLinesDown()) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        if (isDuplicateLineUpShortcut(e)) {
+            if (duplicateEditorSelectedLinesUp()) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        if (isMoveLineDownShortcut(e)) {
+            if (moveEditorSelectedLines(1)) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        if (isMoveLineUpShortcut(e)) {
+            if (moveEditorSelectedLines(-1)) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        if (isToggleCommentShortcut(e)) {
+            if (toggleEditorComments()) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        if (isDeleteLineShortcut(e)) {
+            if (deleteEditorSelectedLines()) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        if (isSelectNextOccurrenceShortcut(e)) {
+            if (selectEditorNextOccurrence()) {
+                e.preventDefault();
+                return;
+            }
         }
 
         if (handleEditorTabIndent(e, { outdent: true })) {
@@ -17919,6 +18664,7 @@ async function boot() {
     });
     window.addEventListener("beforeunload", (event) => {
         flushEditorAutosave();
+        disposePythonSandboxRunner();
         if (hasDirtyFiles()) {
             event.preventDefault();
             event.returnValue = "";
@@ -17926,6 +18672,7 @@ async function boot() {
     });
     window.addEventListener("pagehide", () => {
         flushEditorAutosave();
+        disposePythonSandboxRunner();
         setSessionState(false);
     });
 
@@ -18101,6 +18848,17 @@ function run() {
             `</main></body></html>`
         );
     };
+    const buildPythonPreviewHtml = (fileName = "") => {
+        const safeName = escapeHTML(getFileBaseName(fileName || "main.py") || "main.py");
+        return (
+            `<!doctype html><html><head><meta charset="utf-8" /></head><body>` +
+            `<main class="fazide-css-preview">` +
+            `<h1>Python Run</h1>` +
+            `<p>Executing ${safeName} in sandboxed Python worker.</p>` +
+            `<p>Console output appears in the Console panel.</p>` +
+            `</main></body></html>`
+        );
+    };
 
     let runnableSource = applyBreakpointsToCode(code);
     let sandboxMode = "javascript";
@@ -18110,11 +18868,19 @@ function run() {
     } else if (activeLanguage === "css") {
         runnableSource = buildCssPreviewHtml(code);
         sandboxMode = "html";
+    } else if (activeLanguage === "python") {
+        runnableSource = String(code ?? "");
+        sandboxMode = "python";
     }
     currentRunFileId = activeFileId;
 
     runCount += 1;
-    currentToken = makeToken();
+    currentRunContext = makeRunContext();
+    currentToken = currentRunContext.token;
+
+    if (sandboxMode !== "python") {
+        cancelPythonSandboxRuns("Python run superseded by non-Python execution.");
+    }
 
     ensureLogOpen("Console opened for new run.");
 
@@ -18122,14 +18888,66 @@ function run() {
     status.set("Running...");
     setHealth(health.sandbox, "warn", "Sandbox: Running");
     logger.append("system", [`-- Run #${runCount} --`]);
+    logger.append("system", [`Run context: ${buildRunContextLabel(currentRunContext)}`]);
     if (debugMode) {
         logger.append("system", [`Debug mode on • ${debugBreakpoints.size} breakpoint(s)`]);
     }
 
     try {
         clearSandboxReadyTimer();
+
+        if (sandboxMode === "python") {
+            cancelPythonSandboxRuns("Python run superseded by new Python execution.");
+            runInSandbox(getRunnerFrame(), buildPythonPreviewHtml(entryName), currentToken, {
+                mode: "html",
+                runContext: currentRunContext,
+            });
+            ensureSandboxOpen("Sandbox opened for run.");
+
+            const tokenAtRun = currentToken;
+            void runPythonInSandbox({
+                code: runnableSource,
+                runContext: currentRunContext,
+                timeoutMs: 10_000,
+                onConsole(level, args) {
+                    if (currentToken !== tokenAtRun) return;
+                    queueSandboxConsoleLog(level, args);
+                },
+            }).then((result) => {
+                if (currentToken !== tokenAtRun) return;
+                const output = String(result?.result || "").trim();
+                if (output) {
+                    queueSandboxConsoleLog("info", [output]);
+                }
+                markSandboxReady();
+                status.set("Ran");
+            }).catch((err) => {
+                if (currentToken !== tokenAtRun) return;
+                clearSandboxReadyTimer();
+                setHealth(health.sandbox, "error", "Sandbox: Failed");
+                const message = truncateText(String(err?.message || err || "Python runtime error"), SANDBOX_RUNTIME_MESSAGE_MAX_CHARS);
+                ensureLogOpen("Console opened for runtime error.");
+                logger.append("error", [message]);
+                const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
+                pushRuntimeProblem({
+                    message,
+                    fileId: currentRunFileId,
+                    fileName,
+                    level: "error",
+                    kind: "runtime",
+                });
+                status.set("Error");
+            });
+
+            status.set("Ran");
+            return;
+        }
+
         // This resets iframe document + runs bridge + user code.
-        runInSandbox(getRunnerFrame(), runnableSource, currentToken, { mode: sandboxMode });
+        runInSandbox(getRunnerFrame(), runnableSource, currentToken, {
+            mode: sandboxMode,
+            runContext: currentRunContext,
+        });
         const tokenAtRun = currentToken;
         sandboxRunReadyTimer = setTimeout(() => {
             if (currentToken !== tokenAtRun) return;
@@ -18175,6 +18993,10 @@ function onSandboxMessage(event) {
     if (!data.token || data.token !== currentToken) return;
 
     if (data.type === "bridge_ready") {
+        const bridgeContext = normalizeRunContext(data?.runContext || data?.payload?.runContext);
+        if (bridgeContext && bridgeContext.token === currentToken) {
+            currentRunContext = bridgeContext;
+        }
         markSandboxReady();
         return;
     }
