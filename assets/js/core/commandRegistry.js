@@ -31,6 +31,7 @@ function normalizeCommand(input = {}) {
         keywords: normalizeKeywords(input.keywords),
         shortcut: normalizeText(input.shortcut),
         enabled: typeof input.enabled === "function" ? input.enabled : Boolean(input.enabled ?? true),
+        includeInPalette: input.includeInPalette !== false,
         order,
         source: normalizeText(input.source || "custom"),
         run,
@@ -81,11 +82,41 @@ export function createCommandRegistry({ onChange } = {}) {
         notify();
     }
 
+    function isEnabled(entry) {
+        if (!entry) return false;
+        if (typeof entry.enabled === "function") {
+            try {
+                return Boolean(entry.enabled());
+            } catch {
+                return false;
+            }
+        }
+        return Boolean(entry.enabled ?? true);
+    }
+
+    function execute(id, { allowDisabled = false } = {}) {
+        const entry = get(id);
+        if (!entry) {
+            return { ok: false, reason: "missing", entry: null };
+        }
+        const enabled = isEnabled(entry);
+        if (!allowDisabled && !enabled) {
+            return { ok: false, reason: "disabled", entry: { ...entry, enabled } };
+        }
+        try {
+            const value = entry.run?.();
+            return { ok: true, value, entry: { ...entry, enabled } };
+        } catch (error) {
+            return { ok: false, reason: "error", error, entry: { ...entry, enabled } };
+        }
+    }
+
     return {
         register,
         unregister,
         get,
         list,
         clear,
+        execute,
     };
 }

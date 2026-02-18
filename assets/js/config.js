@@ -29,6 +29,7 @@ export const STORAGE = {
     SESSION: "fazide.session.v1",
     LAYOUT: "fazide.layout.v1",
     THEME: "fazide.theme.v1",
+    UI_ZOOM: "fazide.ui-zoom.v1",
     EDITOR_SETTINGS: "fazide.editor-settings.v1",
     EDITOR_HISTORY: "fazide.editor-history.v1",
     SNIPPETS: "fazide.snippets.v1",

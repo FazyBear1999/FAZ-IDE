@@ -52,11 +52,13 @@ function main() {
   const testAll = assertHasScript(scripts, "test:all");
 
   const requiredScripts = [
+    "test:all:contract",
     "sync:dist-site",
     "test:sync:dist-site",
     "test:memory",
     "test:frank:safety",
     "test:integrity",
+    "test:css",
     "test",
     "test:privacy",
     "test:desktop:icon",
@@ -71,11 +73,13 @@ function main() {
   }
 
   const requiredSteps = [
+    "npm run test:all:contract",
     "npm run sync:dist-site",
     "npm run test:sync:dist-site",
     "npm run test:memory",
     "npm run test:frank:safety",
     "npm run test:integrity",
+    "npm run test:css",
     "npm run test",
     "npm run test:desktop:icon",
     "npm run test:desktop:pack",

@@ -61,7 +61,7 @@
     background: var(--border-soft);
     pointer-events: none;
     transition: background-color var(--splitter-transition), opacity var(--splitter-transition);
-    opacity: 0.72;
+    opacity: 0;
 }
 
 .splitter-vertical::before {
@@ -235,7 +235,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     height: var(--top-height);
     min-height: var(--top-height);
     border-bottom: 1px solid var(--border-soft);
-    border-radius: 0;
+    border-radius: var(--radius);
     background: var(--surface-panel);
     box-shadow: none;
     column-gap: 12px;
@@ -244,27 +244,19 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     overflow-y: hidden;
 }
 
-.top::-webkit-scrollbar,
-.card-hd::-webkit-scrollbar,
-.foot::-webkit-scrollbar {
+:is(.top, .card-hd, .foot)::-webkit-scrollbar {
     height: var(--scrollbar-size);
 }
 
-.top::-webkit-scrollbar-track,
-.card-hd::-webkit-scrollbar-track,
-.foot::-webkit-scrollbar-track {
+:is(.top, .card-hd, .foot)::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.top::-webkit-scrollbar-thumb,
-.card-hd::-webkit-scrollbar-thumb,
-.foot::-webkit-scrollbar-thumb {
+:is(.top, .card-hd, .foot)::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
 }
 
-.top::-webkit-scrollbar-thumb:hover,
-.card-hd::-webkit-scrollbar-thumb:hover,
-.foot::-webkit-scrollbar-thumb:hover {
+:is(.top, .card-hd, .foot)::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
 }
 
@@ -379,7 +371,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .card {
     border: 1px solid var(--border-soft);
-    border-radius: 0;
+    border-radius: var(--radius);
     box-shadow: none;
     overflow: hidden;
     background: var(--surface-panel);
@@ -601,24 +593,15 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     min-width: max-content;
 }
 
-#footerSandbox[data-state="ok"],
-#footerStorage[data-state="ok"],
-#footerProblems[data-state="ok"],
-#footerEditorRuntime[data-state="ok"] {
+:is(#footerSandbox, #footerStorage, #footerProblems, #footerEditorRuntime, #footerZoom)[data-state="ok"] {
     color: var(--status-success-text);
 }
 
-#footerSandbox[data-state="warn"],
-#footerStorage[data-state="warn"],
-#footerProblems[data-state="warn"],
-#footerEditorRuntime[data-state="warn"] {
+:is(#footerSandbox, #footerStorage, #footerProblems, #footerEditorRuntime, #footerZoom)[data-state="warn"] {
     color: var(--status-warn-text);
 }
 
-#footerSandbox[data-state="error"],
-#footerStorage[data-state="error"],
-#footerProblems[data-state="error"],
-#footerEditorRuntime[data-state="error"] {
+:is(#footerSandbox, #footerStorage, #footerProblems, #footerEditorRuntime, #footerZoom)[data-state="error"] {
     color: var(--status-danger-text);
 }
 

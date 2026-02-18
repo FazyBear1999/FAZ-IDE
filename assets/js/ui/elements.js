@@ -30,6 +30,7 @@ export function getRequiredElements() {
         footerSandbox: $("#footerSandbox"),
         footerProblems: $("#footerProblems"),
         footerStorage: $("#footerStorage"),
+        footerZoom: $("#footerZoom"),
         fileList: $("#fileList"),
         fileSearch: $("#fileSearch"),
         fileSearchClear: $("#fileSearchClear"),
@@ -204,9 +205,15 @@ export function getRequiredElements() {
         layoutReset: $("#layoutReset"),
         layoutPreset: $("#layoutPreset"),
         layoutOrderLog: $("#layoutOrderLog"),
+        layoutRowLog: $("#layoutRowLog"),
         layoutOrderEditor: $("#layoutOrderEditor"),
+        layoutRowEditor: $("#layoutRowEditor"),
         layoutOrderFiles: $("#layoutOrderFiles"),
+        layoutRowFiles: $("#layoutRowFiles"),
         layoutOrderSandbox: $("#layoutOrderSandbox"),
+        layoutRowSandbox: $("#layoutRowSandbox"),
+        layoutOrderTools: $("#layoutOrderTools"),
+        layoutRowTools: $("#layoutRowTools"),
         layoutLogWidth: $("#layoutLogWidth"),
         layoutLogWidthInput: $("#layoutLogWidthInput"),
         layoutSidebarWidth: $("#layoutSidebarWidth"),
@@ -219,6 +226,11 @@ export function getRequiredElements() {
         layoutPanelGapInput: $("#layoutPanelGapInput"),
         layoutCornerRadius: $("#layoutCornerRadius"),
         layoutCornerRadiusInput: $("#layoutCornerRadiusInput"),
+        layoutBottomHeight: $("#layoutBottomHeight"),
+        layoutBottomHeightInput: $("#layoutBottomHeightInput"),
+        layoutDockMagnet: $("#layoutDockMagnet"),
+        layoutDockMagnetInput: $("#layoutDockMagnetInput"),
+        layoutPanelAnimation: $("#layoutPanelAnimation"),
         layoutLogOpen: $("#layoutLogOpen"),
         layoutEditorOpen: $("#layoutEditorOpen"),
         layoutFilesOpen: $("#layoutFilesOpen"),
@@ -242,10 +254,7 @@ export function getRequiredElements() {
         promptDialogConfirm: $("#promptDialogConfirm"),
     };
 
-    const optional = new Set([
-        "layoutCornerRadius",
-        "layoutCornerRadiusInput",
-    ]);
+    const optional = new Set([]);
 
     for (const [k, v] of Object.entries(el)) {
         if (!v && !optional.has(k)) throw new Error(`FAZ IDE: Missing required element: ${k}. Check index.html IDs.`);

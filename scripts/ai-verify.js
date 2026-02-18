@@ -51,7 +51,7 @@ function appendReleaseSummary(results, mode) {
 
 function main() {
   const mode = process.argv.includes("--full") ? "full" : "standard";
-  const scripts = ["test:integrity", "test:memory", "test:changed", "test:smoke"];
+  const scripts = ["test:integrity", "test:memory", "test:css", "test:changed", "test:smoke"];
   if (mode === "full") scripts.push("test:quick");
 
   const results = [];

@@ -26,6 +26,27 @@ Every feature must strengthen at least one pillar:
 
 ## Delivery Phases
 
+## Phase 0 — Architecture Spine (Start First)
+
+- Single command registry for all UI actions (menu/buttons/shortcuts/palette use the same action IDs).
+- Explicit state boundaries:
+  - Project state (files/folders/tabs/trash/history).
+  - Workspace state (layout/panels/theme/tool visibility).
+  - Runtime state (run token/process lifecycle/console/diagnostics).
+- Global undo transaction model spanning file ops and structured patches.
+- Atomic file writes with recovery journal replay on boot.
+- Worker-backed indexing/parsing for search/replace/diagnostics to keep UI thread responsive.
+- List virtualization for heavy file trees/search results.
+- Ring-buffer logging for console/runtime events with deterministic truncation.
+- Canonical panel layout engine (columns + stacks) with deterministic solver and hover-only minimal sash visuals.
+
+Exit criteria before broad lesson rollout:
+
+- All primary editor/files/runtime actions resolve through the command registry.
+- Undo/redo safely replays or rejects with explicit diagnostics (no silent state drift).
+- Crash/reload restores last consistent workspace with journal-backed recovery.
+- Large project interactions remain responsive under worker/indexing load.
+
 ## Phase 1 — Real IDE Foundation
 
 - Virtual project filesystem backed by IndexedDB.
@@ -97,12 +118,16 @@ UI rule: keep tools available; reduce clutter through contextual actions and com
 
 ## Immediate Build Queue (Start Here)
 
-1. Create IndexedDB-backed filesystem adapter behind current file store API.
-2. Add filesystem action journal service (undo/redo + operation log).
-3. Add trash metadata model + timed/explicit restore flows.
-4. Add deterministic run context object (seed/timestep/run id) in sandbox pipeline.
-5. Stand up lesson manifest format + marker parser for STEP anchors.
-6. Add CM6 migration spike branch plan and compatibility checklist.
+1. Build command registry baseline and migrate run/files/editor actions to shared command IDs.
+2. Define and enforce project/workspace/runtime state boundaries in orchestration layer.
+3. Add atomic write + recovery journal service and boot-time replay checks.
+4. Create IndexedDB-backed filesystem adapter behind current file store API.
+5. Add filesystem action journal service (undo/redo + operation log).
+6. Add trash metadata model + timed/explicit restore flows.
+7. Add deterministic run context object (seed/timestep/run id) in sandbox pipeline.
+8. Stand up lesson manifest format + marker parser for STEP anchors.
+9. Add CM6 migration spike branch plan and compatibility checklist.
+10. Execute panel engine blueprint slices (A-E) for VS Code-style column/stack layout reliability (`docs/PANEL_ENGINE_BLUEPRINT.md`) — Slice A+B+C complete, continue with Slice D next.
 
 ## Definition of Roadmap Success
 

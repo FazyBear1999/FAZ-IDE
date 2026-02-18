@@ -101,7 +101,8 @@ test("editor contract: settings panel defaults and option groups are valid", asy
 
   await expect(page.locator("#editorProfileSelect option")).toHaveCount(3);
   await expect(page.locator("#editorFormatterSelect option")).toHaveCount(3);
-  await expect(page.locator("#editorFontFamilySelect option")).toHaveCount(9);
+  await expect(page.locator("#editorFontFamilySelect option")).toHaveCount(10);
+  await expect(page.locator('#editorSyntaxThemeSelect option[value="default"]')).toHaveCount(1);
   await expect(page.locator("#snippetScopeSelect option")).toHaveCount(8);
   await expect(page.locator('#snippetScopeSelect option[value="python"]')).toHaveCount(0);
 

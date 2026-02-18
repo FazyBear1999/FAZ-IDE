@@ -167,3 +167,640 @@ Entries should make it easy to understand what changed and why validation gates 
 - Notable safety/infra updates: Added `--json` output modes, `--latest` rollback target support, status buckets in scan output, list limiting (`--limit`), and new npm aliases (`codex:status`, `codex:savepoint`, `codex:rollback:latest`, `codex:rollback:latest:apply`).
 - Validation status: `codex:scan -- --json`, `codex:checkpoint:list -- --limit=1 --json`, `codex:savepoint`, and `codex:rollback:latest` executed successfully; `test:memory` and `test:integrity` passed.
 - Follow-up actions: Keep CLI output contracts backward-compatible so Codex automation scripts remain stable.
+
+
+## 2026-02-18T13:35:16.170Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (266ms)
+  - test:memory: PASS (254ms)
+  - test:changed: PASS (32058ms)
+  - test:smoke: PASS (4190ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Hardened AI command-center startup guidance with auto risk inference and safety alerts.
+- Notable safety/infra updates: `ai:command-center` now infers risk from changed surfaces when risk is not explicitly set, reports risk source, and emits deterministic safety alerts for missing focused tests, missing memory sync, and high-risk handoff requirements.
+- Validation status: `npm run ai:command-center`, `npm run ai:command-center -- --json`, `npm run test:memory`, and `npm run test:integrity` passed.
+- Follow-up actions: Keep risk matcher rules aligned with roadmap checkpoint surfaces and update alerts when session policy evolves.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Hardened workspace import safety for case-insensitive path collisions.
+- Notable safety/infra updates: Import now remaps conflicting file paths to unique safe names before workspace activation, logs remap summaries, and keeps folder metadata aligned after remapping.
+- Validation status: Targeted import regressions in `tests/ide.spec.js` passed (including new case-collision contract), plus `npm run test:integrity` and `npm run test:memory` passed.
+- Follow-up actions: Keep import remap behavior stable and require focused import/export regressions for future filesystem changes.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Enabled direct code-file imports and added workspace import safety preview.
+- Notable safety/infra updates: Import picker now supports workspace JSON plus specific code/text files with multi-select; code-file imports append safely to current workspace with caps and warnings; workspace JSON confirm dialog now includes pre-apply safety preview details.
+- Validation status: `tests/file-contract.spec.js` passed, targeted import tests in `tests/ide.spec.js` passed (including direct code-file import), plus `npm run test:integrity` and `npm run test:memory` passed.
+- Follow-up actions: Keep import input accept list and import safety rules synchronized with filesystem constraints.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Hardened JSON import routing to avoid accidental workspace replacement and unblock normal JSON imports.
+- Notable safety/infra updates: Workspace normalizer now requires explicit workspace shape; single JSON import falls back to code-file import when payload is not a workspace; mixed multi-file selections import as code files with warning guidance.
+- Validation status: Targeted JSON import regressions in `tests/ide.spec.js` passed, `tests/file-contract.spec.js` passed, plus `npm run test:integrity` and `npm run test:memory` passed.
+- Follow-up actions: Keep JSON routing behavior deterministic and preserve safety-first messaging for mixed selections.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Stabilized final import integration assertion and completed full end-to-end certification pass.
+- Notable safety/infra updates: Converted async code-file import assertion to polling in `tests/ide.spec.js` so import completion is observed deterministically before count/presence checks.
+- Validation status: Full Playwright run passed (`222 passed, 0 failed`), with import-focused tests and prior integrity/memory gates remaining green.
+- Follow-up actions: Keep async filesystem assertions poll-based where import flows are event-driven.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Started Phase 0 architecture spine with unified command-routing baseline.
+- Notable safety/infra updates: Added deterministic command-registry execution support and hidden foundation command IDs; routed run/save/new/search/workspace/history actions through shared command dispatch across command palette, shortcuts, run button, and files menu.
+- Validation status: `tests/ide.spec.js` + `tests/file-contract.spec.js` passed (`78 passed, 0 failed`), `npm run test:integrity` passed, and `npm run test:memory` passed.
+- Follow-up actions: Continue with explicit state-boundary slice (project/workspace/runtime) while keeping command-surface parity regressions green.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Added explicit project/workspace/runtime state-boundary snapshots for safe architecture migration.
+- Notable safety/infra updates: Introduced `assets/js/core/stateBoundaries.js`; app now exposes `fazide.getStateBoundaries()` and `fazide.getStateBoundary(name)` with boundary snapshots while preserving existing `getState()` contract.
+- Validation status: `tests/ide.spec.js` passed with new boundary API regression (`70 passed, 0 failed`), `npm run test:integrity` passed, and `npm run test:memory` passed.
+- Follow-up actions: Incrementally move high-churn orchestration reads/writes to boundary accessors before starting journaled atomic-write slice.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Added atomic persistence and storage recovery journal scaffolding for crash-safe write flows.
+- Notable safety/infra updates: `assets/js/ui/store.js` now supports journaled atomic batch writes and pending-journal replay; app persistence for layout/workspace now uses atomic batches with fallback, boot performs recovery replay, and `fazide` API now exposes journal state/recovery helpers.
+- Validation status: `tests/ide.spec.js` + `tests/file-contract.spec.js` passed (`80 passed, 0 failed`), `npm run test:integrity` passed, and `npm run test:memory` passed.
+- Follow-up actions: Expand journaled writes to additional multi-key persistence paths and surface journal health in diagnostics workflows.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Improved global readability defaults and added persistent keyboard zoom controls.
+- Notable safety/infra updates: Global UI font stack moved to clean sans-serif readability default with larger base size; added `Ctrl/Cmd +`, `Ctrl/Cmd -`, and `Ctrl/Cmd 0` zoom handling with persisted zoom state, API access, and shortcut-help updates.
+- Validation status: Focused IDE + file contract suite passed (`81 passed, 0 failed`), `npm run test:all` passed, `npm run ai:verify` passed, and `npm run frank:full` passed.
+- Follow-up actions: Keep zoom shortcuts reserved globally and include zoom-state checks in future keyboard/surface regression batches.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Fixed zoom-induced layout instability (bottom gap on zoom-out and overlap risk at max zoom).
+- Notable safety/infra updates: UI zoom now applies viewport-height compensation to app shell and re-runs layout normalization/apply after zoom changes; max zoom clamp reduced to 160 for panel safety.
+- Validation status: `tests/ide.spec.js` passed with updated zoom regression (`72 passed, 0 failed`), `tests/file-contract.spec.js` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and `npm run ai:verify` passed.
+- Follow-up actions: Keep zoom + layout clamp logic coupled and avoid changing one without the other.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Added footer zoom visibility and expanded diagnostics health signals for zoom/journal events.
+- Notable safety/infra updates: Footer runtime status now shows live `Zoom: N%` with warn state at extreme scales; diagnostics now records storage journal commit/recovery events and non-boot zoom changes, and marks storage health as recovered-warning when journal replay occurs.
+- Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`) and `tests/file-contract.spec.js` passed (`9 passed, 0 failed`).
+- Follow-up actions: Keep event-driven diagnostics signals concise and preserve footer runtime status parity with health panel changes.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Expanded layout customization to behavior-level controls for docking sensitivity and reflow motion.
+- Notable safety/infra updates: Added `dockMagnetDistance` and `panelReflowAnimation` controls in layout settings; integrated bounds sanitization, preset-safe resets, and runtime state sync for deterministic behavior.
+- Validation status: `tests/layout-micro.spec.js` passed (`12 passed, 0 failed`); `tests/ui-contract.spec.js` + `tests/workflow-contract.spec.js` passed (`17 passed, 0 failed`).
+- Follow-up actions: Keep dock-magnet and panel-animation micro contracts mandatory whenever layout state or preset wiring changes.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Hardened layout customization and docking reliability for deploy-safe release readiness.
+- Notable safety/infra updates: Layout radius setting now propagates through shared radius tokens and key shell surfaces; docking drop logic now prevents transient center pass-through from resetting behavior settings; flaky docking-route stress coverage in IDE tests replaced with deterministic route assertions and stable zoom-tier overlap stress checks.
+- Validation status: Focused `layout-micro` and docking contracts passed; full `npm run test:all` passed end-to-end (`240` Playwright tests, desktop icon/pack/dist, SiteGround package verify, privacy checks).
+- Follow-up actions: Keep roadmap C7 active and require full gate for future layout/docking behavior changes.
+
+
+## 2026-02-18T17:02:23.226Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (258ms)
+  - test:memory: PASS (264ms)
+  - test:changed: PASS (39147ms)
+  - test:smoke: PASS (4448ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T17:12:21.572Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (273ms)
+  - test:memory: PASS (260ms)
+  - test:changed: PASS (39463ms)
+  - test:smoke: PASS (4364ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T17:19:19.724Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (270ms)
+  - test:memory: PASS (269ms)
+  - test:changed: PASS (39449ms)
+  - test:smoke: PASS (4354ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Fixed footer zoom refresh reliability and started roadmap item #4 storage-adapter seam.
+- Notable safety/infra updates: Footer zoom chip now syncs directly from every zoom apply path (keyboard/API/reset/boot), eliminating stale footer values; storage module now uses a backend abstraction with exported capability metadata (`getStorageBackendInfo`) and diagnostics visibility for IndexedDB readiness while preserving current sync behavior.
+- Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`) including footer zoom assertions; `tests/file-contract.spec.js` passed (`9 passed, 0 failed`).
+- Follow-up actions: Implement IndexedDB-backed filesystem payload read/write through the new adapter without breaking sync call sites.
+
+
+## 2026-02-18T18:17:06.993Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (265ms)
+  - test:memory: PASS (262ms)
+  - test:changed: PASS (38835ms)
+  - test:smoke: PASS (4457ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T19:18:00.000Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS
+  - test:memory: PASS
+  - test:changed: PASS (130 tests)
+  - test:smoke: PASS (7 tests)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Completed full panel-system no-overlap hardening for splitter interactions under normal and high zoom.
+- Notable safety/infra updates: Added a shared resize commit convergence path so splitter pointer, keyboard, and reset flows always normalize/apply before persistence; removed obsolete resize-preview cursor CSS; added exhaustive splitter stress invariant coverage validating in-bounds, zero-overlap panel geometry across zoom/scenario combinations.
+- Validation status: Focused regressions in `tests/ide.spec.js` passed (splitter high-zoom, modal boundedness, full panel no-overlap stress) and full `npm run ai:verify` passed.
+- Follow-up actions: Keep splitter changes coupled to convergence normalization and preserve exhaustive no-overlap invariant checks as a release gate.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Closed remaining zoom-time out-of-view drift during active splitter dragging.
+- Notable safety/infra updates: Column splitter move paths now normalize the affected row widths on each drag update, preventing transient out-of-view panel geometry before pointer release.
+- Validation status: Zoom/layout focused regressions in `tests/ide.spec.js` passed (`3 passed, 0 failed`) and full `npm run ai:verify` passed (`130 passed changed-suite`, smoke pass).
+- Follow-up actions: Preserve live-drag normalization behavior and keep high-zoom splitter stress tests required.
+
+
+## 2026-02-18T18:22:29.262Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (275ms)
+  - test:memory: PASS (261ms)
+  - test:changed: PASS (38618ms)
+  - test:smoke: PASS (4438ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Closed remaining high-zoom panel overlap that could destabilize splitter resizing.
+- Notable safety/infra updates: Added row width-fit enforcement that reflows overflow panels between top/bottom rows when minimum width budgets exceed row capacity; integrated this guard into both layout normalization and panel ordering so splitter bounds never start from impossible overlap states.
+- Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`) with max-zoom row non-overlap assertions, `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
+- Follow-up actions: Keep width-fit + row-cap enforcement in lockstep and retain max-zoom overlap checks in regression suites.
+
+
+## 2026-02-18T18:47:30.444Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (270ms)
+  - test:memory: PASS (262ms)
+  - test:changed: PASS (39632ms)
+  - test:smoke: PASS (4384ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Prevented max-zoom panel out-of-view regressions by aligning CSS and JS minimum width budgets.
+- Notable safety/infra updates: Added adaptive panel/editor minimum width scaling from zoom + workspace width and synced these values into shell CSS tokens; layout bounds and editor minimum calculations now use the same adaptive model, eliminating mismatched min-width constraints that could force panels outside viewport bounds.
+- Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`) with max-zoom out-of-view checks, `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
+- Follow-up actions: Keep adaptive min-width budget checks and max-zoom viewport assertions active for all future layout/zoom changes.
+
+
+## 2026-02-18T18:51:24.008Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (259ms)
+  - test:memory: PASS (258ms)
+  - test:changed: PASS (39719ms)
+  - test:smoke: PASS (4473ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Fixed panel overlap/resizer failures beginning at 110% zoom.
+- Notable safety/infra updates: Added horizontal shell compensation for UI zoom (`appShell` width/min-width inverse to zoom scale) so workspace geometry remains viewport-aligned; expanded zoom regression checks to validate shell width/height fit plus no overlap/out-of-view panels at 110%, 160%, and 70%.
+- Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`), `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
+- Follow-up actions: Preserve symmetric zoom compensation and first-step zoom geometry assertions in all future layout/zoom changes.
+
+
+## 2026-02-18T19:00:09.010Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (283ms)
+  - test:memory: PASS (277ms)
+  - test:changed: PASS (40796ms)
+  - test:smoke: PASS (4530ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Started the dedicated panel engine program with reusable solver core and VS Code-style architecture blueprint.
+- Notable safety/infra updates: Added `assets/js/core/layoutEngine.js` as reusable row solver; app row-cap and width-fit passes now execute through the engine boundary; splitter visuals simplified to minimal hover/focus/drag-only line; added `docs/PANEL_ENGINE_BLUEPRINT.md` and linked roadmap execution in `docs/MASTER_ROADMAP.md`.
+- Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`), `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
+- Follow-up actions: Introduce dual-state `columns/stacks` model next while preserving `panelRows` compatibility until renderer migration completes.
+
+
+## 2026-02-18T19:15:34.003Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (271ms)
+  - test:memory: PASS (267ms)
+  - test:changed: PASS (39173ms)
+  - test:smoke: PASS (4739ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Completed panel engine Slice B by introducing dual-state layout model compatibility.
+- Notable safety/infra updates: Added `panelLayout` (`columns/stacks`) model adapters in `assets/js/core/panelLayoutModel.js`; app now dual-syncs legacy `panelRows` and model state through sanitize/layout/docking paths; exposed `fazide.getPanelLayout()` for migration inspection and added synchronization regression coverage.
+- Validation status: `tests/ide.spec.js` passed (`73 passed, 0 failed`), `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed (`125 passed changed-suite`, smoke pass).
+- Follow-up actions: Start Slice C with ratio-first persistence and state-upgrade migration while preserving legacy layout snapshot compatibility.
+
+
+## 2026-02-18T19:26:28.992Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (263ms)
+  - test:memory: PASS (262ms)
+  - test:changed: PASS (39537ms)
+  - test:smoke: PASS (4569ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Closed resize-guide overflow behavior and completed panel engine Slice C ratio-first persistence migration.
+- Notable safety/infra updates: Row/column resize guides are now clamped to workspace bounds with legacy long-span rendering removed; layout persistence now stores ratio-first snapshots (`panelRatios`) and restores through a backward-compatible upgrade path for legacy absolute-width snapshots.
+- Validation status: `tests/ide.spec.js` passed (`74 passed, 0 failed`) including new ratio persistence regression, `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed (`126 passed changed-suite`, smoke pass).
+- Follow-up actions: Start Slice D column+stack renderer migration while preserving snapshot compatibility and guide bound invariants.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Stabilized zoom-time panel layout by enforcing a single resize system and deterministic row overflow behavior.
+- Notable safety/infra updates: Row width-fit now moves panels across rows only when total overflow decreases (prevents oscillation/overlap states under zoom); removed unused legacy edge-resize code so splitter interactions are the only resize execution path.
+- Validation status: `tests/ide.spec.js` + `tests/file-contract.spec.js` passed (`83 passed, 0 failed`), and `npm run ai:verify` passed (`126 passed changed-suite`, smoke pass).
+- Follow-up actions: Continue Slice D renderer migration and keep overlap/zoom regressions mandatory on every layout-engine change.
+
+
+## 2026-02-18T19:34:40.737Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (266ms)
+  - test:memory: PASS (271ms)
+  - test:changed: FAIL (code 1) (41582ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T19:35:49.232Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (280ms)
+  - test:memory: PASS (282ms)
+  - test:changed: PASS (40399ms)
+  - test:smoke: PASS (4512ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T19:42:05.198Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (284ms)
+  - test:memory: PASS (300ms)
+  - test:changed: PASS (40179ms)
+  - test:smoke: PASS (4269ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Fixed broken-feeling layout reset and guide-line behavior during panel resizing.
+- Notable safety/infra updates: Preset application now clears stale ratio snapshots before sanitize so layout reset is deterministic and restores intended preset geometry; column resize guides now render only within the active row span instead of stretching across unrelated panels.
+- Validation status: Targeted IDE regressions passed (preset/reset + zoom overlap paths, `3 passed, 0 failed`), and `npm run ai:verify` passed (`127 passed changed-suite`, smoke pass).
+- Follow-up actions: Keep ratio reset behavior and row-scoped guide rendering as non-regression requirements while advancing Slice D.
+
+
+## 2026-02-18T19:50:01.350Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (279ms)
+  - test:memory: PASS (278ms)
+  - test:changed: PASS (40459ms)
+  - test:smoke: PASS (4512ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Fixed editor splitter resizing reliability when UI zoom is increased.
+- Notable safety/infra updates: Splitter drag deltas are now normalized by current UI zoom scale; adaptive panel minimum sizing now enforces feasible budgets with hard floors so editor/file rows do not become width-locked at high zoom.
+- Validation status: Focused IDE regressions passed (`3 passed, 0 failed`) including new 160%-zoom splitter resize test, and `npm run ai:verify` passed (`128 passed changed-suite`, smoke pass).
+- Follow-up actions: Keep zoom-aware splitter math and feasible min-budget checks as required contracts for future layout tuning.
+
+
+## 2026-02-18T19:58:00.663Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (277ms)
+  - test:memory: PASS (276ms)
+  - test:changed: PASS (42770ms)
+  - test:smoke: PASS (4577ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T20:04:50.580Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (265ms)
+  - test:memory: PASS (268ms)
+  - test:changed: PASS (43317ms)
+  - test:smoke: PASS (4254ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T20:07:42.683Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (269ms)
+  - test:memory: PASS (271ms)
+  - test:changed: PASS (45243ms)
+  - test:smoke: PASS (4407ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T20:13:23.330Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (300ms)
+  - test:memory: PASS (293ms)
+  - test:css: PASS (1569ms)
+  - test:changed: PASS (43644ms)
+  - test:smoke: PASS (4266ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Optimized base CSS redundancy and hardened release micro-contracts for CSS verification flow.
+- Notable safety/infra updates: Removed duplicate `body` style block in `assets/css/base.css` (single canonical base-body definition) and added micro release-contract tests in `tests/release.spec.js` to enforce `test:css` ordering in `test:quick`/`test:all` and in `scripts/ai-verify.js` before changed/smoke suites.
+- Validation status: `npm run test:css` passed, `tests/release.spec.js` passed (`4 passed, 0 failed`), and `npm run test:integrity` passed.
+- Follow-up actions: Keep CSS gate contracts synchronized with package/script changes and preserve micro-tests as mandatory for verification-flow edits.
+
+
+## 2026-02-18T20:17:32.915Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (267ms)
+  - test:memory: PASS (258ms)
+  - test:css: PASS (1445ms)
+  - test:changed: FAIL (code 1) (52610ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:18:46.298Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (277ms)
+  - test:memory: PASS (258ms)
+  - test:css: PASS (1401ms)
+  - test:changed: FAIL (code 1) (45711ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:20:05.308Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (281ms)
+  - test:memory: PASS (271ms)
+  - test:css: PASS (1406ms)
+  - test:changed: PASS (43970ms)
+  - test:smoke: PASS (4182ms)
+- Follow-up:
+  - No action required.
+
+
+## 2026-02-18T20:23:10.076Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (263ms)
+  - test:memory: PASS (257ms)
+  - test:css: PASS (1473ms)
+  - test:changed: FAIL (code 1) (44280ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:24:10.729Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (258ms)
+  - test:memory: PASS (252ms)
+  - test:css: PASS (1394ms)
+  - test:changed: FAIL (code 1) (42416ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:25:07.682Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (262ms)
+  - test:memory: PASS (255ms)
+  - test:css: PASS (1410ms)
+  - test:changed: FAIL (code 1) (44523ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:26:19.681Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (266ms)
+  - test:memory: PASS (269ms)
+  - test:css: PASS (1490ms)
+  - test:changed: PASS (45274ms)
+  - test:smoke: PASS (4305ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Applied modal CSS selector deduplication for cleaner and lighter styling surface while keeping UI behavior unchanged.
+- Notable safety/infra updates: Collapsed repeated modal selector chains in `assets/css/components.css` via shared `:is(...)` selectors, removed duplicate history-action button declaration block, added release micro-contract coverage in `tests/release.spec.js` for deduped selector invariants, and stabilized the panel stress invariant test with deterministic post-drag normalization in `tests/ide.spec.js`.
+- Validation status: `npm run test:css` passed, `tests/release.spec.js` passed (`5 passed, 0 failed`), and `npm run ai:verify` passed (integrity/memory/css/changed/smoke all green).
+- Follow-up actions: Keep modal selector dedupe contracts and stress-layout determinism checks mandatory for future CSS/layout optimization waves.
+
+
+## 2026-02-18T20:30:16.580Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (273ms)
+  - test:memory: PASS (261ms)
+  - test:css: PASS (1418ms)
+  - test:changed: FAIL (code 1) (44320ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:31:29.559Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (263ms)
+  - test:memory: PASS (257ms)
+  - test:css: PASS (1415ms)
+  - test:changed: FAIL (code 1) (45756ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:32:46.905Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (264ms)
+  - test:memory: PASS (256ms)
+  - test:css: PASS (1432ms)
+  - test:changed: FAIL (code 1) (46470ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+## 2026-02-18T20:34:59.470Z - AI Verify (standard)
+
+- Status:
+  - FAIL
+- Steps:
+  - test:integrity: PASS (267ms)
+  - test:memory: PASS (265ms)
+  - test:css: PASS (1509ms)
+  - test:changed: FAIL (code 1) (75601ms)
+- Follow-up:
+  - Inspect failing step and rerun ai:verify after fix.
+
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Expanded Layout settings with corner radius and bottom dock height controls.
+- Notable safety/infra updates: Added UI controls and wiring for corner radius and bottom dock height with clamped bounds, persistence, and bottom-row-aware enabled/disabled state; fixed corner-radius bound cap so non-zero radius values are actually reachable.
+- Validation status: `tests/layout-micro.spec.js` and `tests/typography-sizing-contract.spec.js` passed with new control contracts; `tests/ui-contract.spec.js` and `tests/workflow-contract.spec.js` passed for broader shell/layout safety.
+- Follow-up actions: Preserve control-sync and behavior micro-tests whenever layout settings are expanded.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Completed full layout customization pass for panel placement controls.
+- Notable safety/infra updates: Added per-panel row selectors (`top`/`bottom`) and a missing tools position selector so all major dockable panels can be reordered and re-rowed directly from Layout settings; bindings include open-state disable guards and animated row moves.
+- Validation status: `tests/layout-micro.spec.js`, `tests/ui-contract.spec.js`, and `tests/workflow-contract.spec.js` passed after adding new row/order contracts.
+- Follow-up actions: Keep settings-level layout controls in parity with dockable panel capabilities and avoid relying on drag-only placement paths.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Completed safe CSS optimization follow-up and reconfirmed full deployment readiness.
+- Notable safety/infra updates: Reduced duplicate selector surface in `assets/css/layout.css` by grouping repeated scrollbar and footer status selectors with `:is(...)` while preserving style behavior.
+- Validation status: `tests/ide.spec.js` + `tests/layout-micro.spec.js` passed (`184 passed, 0 failed`); `tests/release.spec.js` passed (`10 passed, 0 failed`); `npm run test:css` passed; full `npm run test:all` passed end-to-end (`240` Playwright tests + desktop pack/dist + SiteGround verify + privacy check).
+- Follow-up actions: Continue CSS optimization in behavior-neutral batches and keep full-gate proof as a hard requirement before deploy handoff.
+
+
+## 2026-02-18T22:38:11.793Z - AI Verify (standard)
+
+- Status:
+  - PASS
+- Steps:
+  - test:integrity: PASS (263ms)
+  - test:memory: PASS (256ms)
+  - test:css: PASS (1475ms)
+  - test:changed: PASS (50222ms)
+  - test:smoke: PASS (4628ms)
+- Follow-up:
+  - No action required.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Realigned AI command-center checkpoint inference to active roadmap lanes.
+- Notable safety/infra updates: `scripts/ai-command-center.js` now infers `C5/C7` for architecture-spine and layout-engine/docking surfaces, and roadmap-memory target linking now includes `C5/C6/C7` (not just `C4`).
+- Validation status: `npm run ai:command-center -- --json` now reports `C5` and `C7` for the current working tree; `npm run test:integrity` passed after the script update.
+- Follow-up actions: Add a focused scripts contract for checkpoint inference mapping to prevent silent drift when checkpoint definitions evolve.

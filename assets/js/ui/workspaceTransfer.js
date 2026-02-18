@@ -105,9 +105,14 @@ export function normalizeImportedWorkspacePayload(input, {
         return null;
     }
 
-    const source = input.format === "fazide-workspace" && input.data && typeof input.data === "object"
-        ? input.data
-        : input;
+    const isWrappedWorkspace = input.format === "fazide-workspace" && input.data && typeof input.data === "object";
+    const source = isWrappedWorkspace ? input.data : input;
+
+    const workspaceShapeKeys = ["files", "trash", "folders", "activeId", "openIds", "theme", "layout"];
+    const hasWorkspaceShape = workspaceShapeKeys.some((key) => Object.prototype.hasOwnProperty.call(source, key));
+    if (!isWrappedWorkspace && !hasWorkspaceShape) {
+        return null;
+    }
 
     const filesValue = Array.isArray(source.files)
         ? source.files.map(normalizeFile).filter(Boolean)

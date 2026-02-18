@@ -65,7 +65,7 @@
                                     class="editor-shortcut-help-btn top-shortcut-help-btn"
                                     type="button"
                                     aria-label="Editor shortcuts"
-                                    title="Editor shortcuts: Ctrl/Cmd+Enter Run, Ctrl/Cmd+S Save, Ctrl/Cmd+Shift+S Save all, Ctrl/Cmd+/ Toggle comment, Alt+ArrowUp/Down Move line, Alt+Shift+ArrowDown Duplicate line, Ctrl/Cmd+F Find, Ctrl/Cmd+H Replace, Ctrl/Cmd+Shift+F Project search, Ctrl/Cmd+Shift+O Symbols. Press F1 for full list."
+                                    title="Editor shortcuts: Ctrl/Cmd+Enter Run, Ctrl/Cmd+S Save, Ctrl/Cmd+Shift+S Save all, Ctrl/Cmd+/ Toggle comment, Alt+ArrowUp/Down Move line, Alt+Shift+ArrowDown Duplicate line, Ctrl/Cmd+F Find, Ctrl/Cmd+H Replace, Ctrl/Cmd+Shift+F Project search, Ctrl/Cmd+Shift+O Symbols, Ctrl/Cmd+Plus/Minus Zoom. Press F1 for full list."
                                 >
                                     ?
                                 </button>
@@ -190,7 +190,7 @@
                                             <button type="button" class="files-menu-item" data-files-menu="save-file">Save</button>
                                             <button type="button" class="files-menu-item" data-files-menu="save-all">Save All</button>
                                             <button type="button" class="files-menu-item" data-files-menu="export-workspace">Export</button>
-                                            <button type="button" class="files-menu-item" data-files-menu="import-workspace">Import</button>
+                                            <button type="button" class="files-menu-item" data-files-menu="import-workspace" title="Import workspace JSON or code files (.js, .html, .css, .ts, .md, .txt, etc.)" aria-label="Import workspace JSON or code files">Import</button>
                                         </div>
                                     </section>
 
@@ -254,7 +254,7 @@
                                     <button type="button" class="files-menu-item" data-folder-menu-action="collapse-all">Collapse All</button>
                                     <button type="button" class="files-menu-item" data-folder-menu-action="expand-all">Expand All</button>
                                 </div>
-                                <input id="workspaceImportInput" class="sr-only" type="file" accept=".json,application/json" aria-label="Import workspace JSON file" />
+                                <input id="workspaceImportInput" class="sr-only" type="file" multiple accept=".json,application/json,.js,.mjs,.cjs,.jsx,.ts,.tsx,.html,.htm,.css,.scss,.sass,.less,.md,.markdown,.txt,.svg,.xml,text/plain,text/html,text/css" aria-label="Import workspace or code files" />
                             </div>
                             </aside>
 
@@ -494,6 +494,7 @@
                             <span id="footerSandbox">Sandbox: Idle</span>
                             <span id="footerProblems">Problems: 0</span>
                             <span id="footerStorage">Storage: OK</span>
+                            <span id="footerZoom" data-state="ok">Zoom: 100%</span>
                         </span>
                     </footer>
                 </div>
@@ -655,7 +656,7 @@
                     <div class="layout-group">
                         <label class="layout-label" for="editorFontFamilySelect">Font family</label>
                         <select id="editorFontFamilySelect" class="layout-select">
-                            <option value="default">System Mono</option>
+                            <option value="default">System Mono (Safe Default)</option>
                             <option value="jetbrains-mono">JetBrains Mono</option>
                             <option value="fira-code">Fira Code</option>
                             <option value="source-code-pro">Source Code Pro</option>
@@ -664,11 +665,13 @@
                             <option value="inconsolata">Inconsolata</option>
                             <option value="ubuntu-mono">Ubuntu Mono</option>
                             <option value="cascadia-mono">Cascadia Mono</option>
+                            <option value="space-mono">Space Mono</option>
                         </select>
                     </div>
                     <div class="layout-group">
                         <label class="layout-label" for="editorSyntaxThemeSelect">Syntax colors</label>
                         <select id="editorSyntaxThemeSelect" class="layout-select">
+                            <option value="default">Syntax Default</option>
                             <option value="volcanic">Volcanic Core (Orange + Dark Purple)</option>
                             <option value="twilight">Twilight Pulse</option>
                             <option value="aurora">Aurora Mint</option>
@@ -778,6 +781,9 @@
                             <li><span>New file</span><kbd>Ctrl/Cmd + N</kbd></li>
                             <li><span>Quick open files</span><kbd>Ctrl/Cmd + P</kbd></li>
                             <li><span>Command palette</span><kbd>Ctrl/Cmd + Shift + P</kbd></li>
+                            <li><span>Zoom in</span><kbd>Ctrl/Cmd + +</kbd></li>
+                            <li><span>Zoom out</span><kbd>Ctrl/Cmd + -</kbd></li>
+                            <li><span>Reset zoom</span><kbd>Ctrl/Cmd + 0</kbd></li>
                         </ul>
                     </div>
                     <div class="layout-group">
@@ -880,12 +886,28 @@
                     </div>
 
                     <div class="layout-group">
+                        <label class="layout-label" for="layoutRowLog">Console row</label>
+                        <select id="layoutRowLog" class="layout-select">
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
                         <label class="layout-label" for="layoutOrderEditor">Editor position</label>
                         <select id="layoutOrderEditor" class="layout-select">
                             <option value="0">1 (Left)</option>
                             <option value="1">2</option>
                             <option value="2">3</option>
                             <option value="3">4 (Right)</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutRowEditor">Editor row</label>
+                        <select id="layoutRowEditor" class="layout-select">
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
                         </select>
                     </div>
 
@@ -900,12 +922,46 @@
                     </div>
 
                     <div class="layout-group">
+                        <label class="layout-label" for="layoutRowFiles">Files row</label>
+                        <select id="layoutRowFiles" class="layout-select">
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
                         <label class="layout-label" for="layoutOrderSandbox">Sandbox position</label>
                         <select id="layoutOrderSandbox" class="layout-select">
                             <option value="0">1 (Left)</option>
                             <option value="1">2</option>
                             <option value="2">3</option>
                             <option value="3">4 (Right)</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutRowSandbox">Sandbox row</label>
+                        <select id="layoutRowSandbox" class="layout-select">
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutOrderTools">Tools position</label>
+                        <select id="layoutOrderTools" class="layout-select">
+                            <option value="0">1 (Left)</option>
+                            <option value="1">2</option>
+                            <option value="2">3</option>
+                            <option value="3">4 (Right)</option>
+                        </select>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutRowTools">Tools row</label>
+                        <select id="layoutRowTools" class="layout-select">
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
                         </select>
                     </div>
 
@@ -947,6 +1003,37 @@
                             <input id="layoutPanelGap" type="range" min="0" max="24" step="1" />
                             <input id="layoutPanelGapInput" type="number" min="0" max="24" step="1" />
                         </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutCornerRadius">Panel corner radius (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutCornerRadius" type="range" min="0" max="24" step="1" />
+                            <input id="layoutCornerRadiusInput" type="number" min="0" max="24" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutBottomHeight">Bottom dock height (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutBottomHeight" type="range" min="120" max="640" step="1" />
+                            <input id="layoutBottomHeightInput" type="number" min="120" max="640" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group">
+                        <label class="layout-label" for="layoutDockMagnet">Dock magnet strength (px)</label>
+                        <div class="layout-row">
+                            <input id="layoutDockMagnet" type="range" min="32" max="220" step="1" />
+                            <input id="layoutDockMagnetInput" type="number" min="32" max="220" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="layout-group layout-toggles">
+                        <label class="layout-toggle">
+                            <input id="layoutPanelAnimation" type="checkbox" />
+                            <span>Panel reflow animation</span>
+                        </label>
                     </div>
 
                     <div class="layout-group layout-toggles">

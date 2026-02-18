@@ -508,6 +508,39 @@ test("editor pro micro: ctrl/cmd+d selects next occurrence deterministically", a
   });
 });
 
+test("editor pro micro: ctrl/cmd+shift+l selects all occurrences in active file", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.evaluate(() => {
+    window.fazide?.setCode?.("const item = 1;\nitem += 2;\nitem += 3;");
+    const cm = document.querySelector(".CodeMirror")?.CodeMirror;
+    if (cm) {
+      cm.getDoc().setCursor({ line: 0, ch: 7 });
+      cm.focus();
+    }
+  });
+
+  await page.keyboard.press("ControlOrMeta+Shift+L");
+
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const cm = document.querySelector(".CodeMirror")?.CodeMirror;
+      if (!cm) return { supported: false, count: 0, words: [] };
+      const doc = cm.getDoc();
+      const words = doc.listSelections().map((sel) => doc.getRange(sel.from(), sel.to()));
+      return {
+        supported: true,
+        count: words.length,
+        words,
+      };
+    });
+  }).toEqual({
+    supported: true,
+    count: 3,
+    words: ["item", "item", "item"],
+  });
+});
+
 test("editor pro micro: textarea fallback preserves duplicate/move/comment/delete shortcuts", async ({ page }) => {
   await gotoWithTextareaFallback(page);
 

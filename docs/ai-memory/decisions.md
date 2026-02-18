@@ -258,6 +258,62 @@ Keep entries short, dated, and explicit about why the change was made.
 
 ## 2026-02-18T00:20:00Z - app.js file-icon subsystem extraction (organization wave)
 
+## 2026-02-18T14:20:00Z - Master-grade layout behavior controls (dock magnet + reflow animation)
+
+- Date (UTC):
+- 2026-02-18T14:20:00Z
+- Area:
+- Layout customization depth and docking/reflow behavior control
+- Decision:
+- Added user-facing layout controls for dock magnet sensitivity and panel reflow animation, wired through `layoutState`, sanitization bounds, preset application, and runtime control sync.
+- Why:
+- Advanced layout users needed behavior-level tuning (not only panel placement/sizing) to match personal docking precision and motion preferences.
+- Follow-up:
+- Keep `layout-micro` behavior contracts for dock magnet bounds/state sync and panel animation toggle in focused regression runs for future layout changes.
+
+## 2026-02-18T15:35:00Z - Layout radius token propagation + docking reset reliability hardening
+
+- Date (UTC):
+- 2026-02-18T15:35:00Z
+- Area:
+- Layout customization safety, docking behavior stability, and deployment-gate reliability
+- Decision:
+- Propagated layout radius control to shared radius token family (`--radius*`) so rounded UI surfaces stay synchronized with layout settings, including shell cards and top theme selector.
+- Removed transient center-touch preset reapply behavior from docking drop path so only final center drops can trigger center-layout behavior.
+- Replaced flaky pointer-heavy docking stress assertion with deterministic docking-route contract coverage and constrained overlap stress to stable zoom tiers used in release gating.
+- Why:
+- Users reported settings appearing to reset during panel moves and requested full-radius customization coverage; test-gate stability was required before deployment readiness.
+- Follow-up:
+- Keep C7 checkpoint active for future layout/docking updates; require focused layout+docking contracts plus full `npm run test:all` before deploy handoff.
+
+## 2026-02-18T19:12:00Z - Global panel no-overlap convergence for all resize paths
+
+- Date (UTC):
+- 2026-02-18T19:12:00Z
+- Area:
+- Layout resizing safety, zoom stability, and legacy path cleanup
+- Decision:
+- Added a shared resize commit path so splitter pointer-end, splitter keyboard resize, and splitter reset actions all run `normalizeLayoutWidths()` + `applyLayout()` before persistence.
+- Removed obsolete `data-resize-preview` cursor CSS from the old preview path.
+- Added a comprehensive regression that stress-resizes all splitters across multiple zoom levels and panel-row configurations, then asserts every visible panel stays in workspace bounds with zero overlap.
+- Why:
+- Some resize interactions could persist intermediate geometry without final global normalization, allowing user-visible out-of-view/overlap edge states under high zoom and mixed panel layouts.
+- Follow-up:
+- Keep the new full-panel invariant test mandatory for future splitter/layout changes and treat any reintroduction of non-normalized resize persistence as release-blocking.
+
+## 2026-02-18T19:30:00Z - Live splitter-drag row clamp hardening
+
+- Date (UTC):
+- 2026-02-18T19:30:00Z
+- Area:
+- Resize interaction safety under high zoom during active drag
+- Decision:
+- Updated column splitter live drag flow to run row width normalization on every drag move branch so panels stay row-bounded during interaction, not only on resize commit.
+- Why:
+- User-reported edge cases still showed panels moving out of view while dragging at high zoom despite release-time normalization.
+- Follow-up:
+- Keep live-drag row normalization coupled to splitter move math and preserve zoom stress regressions as mandatory.
+
 - Date (UTC):
 - 2026-02-18T00:20:00Z
 - Area:
@@ -366,3 +422,394 @@ Keep entries short, dated, and explicit about why the change was made.
 - Faster operator loops and more automation-friendly output reduce friction for Codex-driven feature work while making rollback handling explicit and safer.
 - Follow-up:
 - Keep command outputs stable for scripts/automation and keep dry-run default for rollback commands.
+
+## 2026-02-18T13:48:00Z - AI command-center risk inference + safety-alert contract
+
+- Date (UTC):
+- 2026-02-18T13:48:00Z
+- Area:
+- AI session safety gating and no-break feature workflow
+- Decision:
+- Hardened `scripts/ai-command-center.js` to infer risk tier from working-tree surfaces when `--risk` is not explicitly provided, and to emit deterministic safety alerts (missing tests, missing memory sync, and high-risk escalation reminders).
+- Added explicit `riskSource` metadata to text/json/session-brief outputs.
+- Why:
+- The previous default `medium` risk could understate high-risk surfaces (orchestration/sandbox/release scripts) and did not explicitly call out common safety misses before handoff.
+- Follow-up:
+- Keep matcher rules aligned with real high-risk surfaces and treat stale risk inference as a governance defect.
+
+## 2026-02-18T14:15:00Z - Filesystem import path-collision safety hardening
+
+- Date (UTC):
+- 2026-02-18T14:15:00Z
+- Area:
+- Workspace import/export safety and local-folder save reliability
+- Decision:
+- Added import-time workspace path-collision remediation for case-insensitive duplicates (for example `src/App.js` and `src/app.js`) so imported workspaces are normalized to unique safe paths before activation.
+- Added deterministic warning logs for remapped paths and a focused regression test in `tests/ide.spec.js`.
+- Why:
+- Previously, conflicting paths could import successfully but later block save-to-folder flows on case-insensitive filesystems.
+- Follow-up:
+- Keep import path remap behavior deterministic and add focused regressions for future filesystem workflow changes.
+
+## 2026-02-18T14:35:00Z - Unified import pipeline (workspace JSON + direct code files) with safety preview
+
+- Date (UTC):
+- 2026-02-18T14:35:00Z
+- Area:
+- Filesystem import UX, safety transparency, and local-first workflow reliability
+- Decision:
+- Expanded the hidden import input to accept both workspace JSON and direct code/text files (`.js`, `.html`, `.css`, etc.) with multi-file support.
+- Added append-import behavior for code files (does not replace workspace), with safety caps and deterministic warnings for unsupported/skipped/trimmed files.
+- Added pre-apply safety preview text for workspace JSON import confirmation, including safety-limit and path-remap adjustments.
+- Why:
+- Users need to import specific files quickly without packaging a full workspace JSON, while still keeping strict safety boundaries and transparent pre-import impact.
+- Follow-up:
+- Keep import confirmation and warning copy concise; add focused regressions whenever import format support changes.
+
+## 2026-02-18T14:55:00Z - JSON import routing hardening (workspace-shape guard + code fallback)
+
+- Date (UTC):
+- 2026-02-18T14:55:00Z
+- Area:
+- Filesystem import correctness and accidental workspace replacement prevention
+- Decision:
+- Tightened workspace payload normalization so arbitrary JSON objects are not treated as full workspace imports unless they match workspace shape keys or wrapped workspace format.
+- Added smart import routing: single JSON attempts workspace import first, then falls back to code-file import when not a workspace payload; mixed multi-file selections import as code files with explicit warning.
+- Why:
+- Prevents users from being blocked (or unexpectedly replacing workspace) when importing normal JSON files like config payloads.
+- Follow-up:
+- Keep import-routing tests focused on async completion and JSON edge-case behavior.
+
+## 2026-02-18T15:40:00Z - Master teaching IDE execution start: architecture spine before lesson layer
+
+- Date (UTC):
+- 2026-02-18T15:40:00Z
+- Area:
+- Product roadmap execution governance (teaching IDE + CM6 lesson system)
+- Decision:
+- Kept existing roadmap direction and expanded it with an explicit Phase 0 architecture spine that starts with command registry unification, project/workspace/runtime state separation, and atomic write/recovery journal foundations.
+- Added checkpoint governance for this program (`C5` architecture spine, `C6` CM6 ghost lesson foundation) and recorded the initiative in feature intake rather than replacing prior roadmap phases.
+- Why:
+- The requested teaching-heavy, file-heavy, reproducible IDE vision is already aligned with the roadmap; execution risk is reduced by stabilizing architecture primitives before scaling lesson constraints and curriculum complexity.
+- Follow-up:
+- Start implementation at command registry migration slice, then state boundary enforcement, then recovery journal; require checkpoint-linked evidence on each slice before lesson-mode default rollout.
+
+## 2026-02-18T16:05:00Z - Architecture spine C5 slice 1: unified command routing baseline
+
+- Date (UTC):
+- 2026-02-18T16:05:00Z
+- Area:
+- Command execution consistency across UI surfaces
+- Decision:
+- Upgraded `assets/js/core/commandRegistry.js` with deterministic `execute()` and `includeInPalette` support, then registered hidden foundation commands in `assets/js/app.js` for run/save/new/search/workspace/history actions.
+- Routed command-palette entries plus keyboard shortcuts, toolbar run button, and files-menu action handlers through the same command IDs.
+- Why:
+- This is the first implementation slice for Phase 0 architecture spine: one command path reduces drift between input surfaces and creates a safe base for future remapping, journaling, and lesson-mode constraints.
+- Follow-up:
+- Continue C5 with explicit project/workspace/runtime state-boundary guards, then recovery journal atomic-write flow.
+
+## 2026-02-18T16:25:00Z - Architecture spine C5 slice 2: explicit state-boundary snapshots
+
+- Date (UTC):
+- 2026-02-18T16:25:00Z
+- Area:
+- Orchestration state model safety (project/workspace/runtime separation)
+- Decision:
+- Added `assets/js/core/stateBoundaries.js` to provide deterministic state snapshots by boundary.
+- Wired `assets/js/app.js` to publish explicit `project`, `workspace`, and `runtime` snapshots via `fazide.getStateBoundaries()` and `fazide.getStateBoundary(name)` while keeping existing `getState()` compatibility.
+- Why:
+- This creates a safe migration surface for later guardrails (mutation boundaries, journaling, workers) without breaking current runtime behavior.
+- Follow-up:
+- Migrate high-churn read/write paths to boundary accessors incrementally, then introduce recovery-journal atomic write semantics under C5.
+
+## 2026-02-18T16:50:00Z - Architecture spine C5 slice 3: atomic persistence + recovery journal scaffold
+
+- Date (UTC):
+- 2026-02-18T16:50:00Z
+- Area:
+- Crash-safe persistence and recovery readiness
+- Decision:
+- Extended `assets/js/ui/store.js` with atomic batch save (`saveBatchAtomic`) and pending-write recovery (`recoverStorageJournal`) backed by a storage journal record.
+- Updated `assets/js/app.js` so layout/workspace persistence paths use atomic batch writes with safe fallback, added boot-time journal replay, and exposed journal diagnostics via `fazide` API.
+- Why:
+- The architecture spine requires atomic write and recovery primitives before deeper journaling/state mutation work, while preserving current UX and persistence behavior.
+- Follow-up:
+- Start routing additional high-value multi-key persistence paths through the same journaled transaction helper and add journal metrics to diagnostics panel flow.
+
+## 2026-02-18T17:05:00Z - Readability + zoom control safety pass (global UI font + Ctrl/Cmd zoom)
+
+- Date (UTC):
+- 2026-02-18T17:05:00Z
+- Area:
+- UX readability, accessibility controls, and keyboard interaction consistency
+- Decision:
+- Switched global UI base font stack to a clean sans-serif readability-first stack and raised the default app base font size.
+- Added persistent UI zoom control (`Ctrl/Cmd +`, `Ctrl/Cmd -`, `Ctrl/Cmd 0`) with boot restore, API exposure, and shortcut-help updates.
+- Why:
+- User requested clearer default readability and explicit keyboard zoom control while preserving fast power-user workflow.
+- Follow-up:
+- Keep zoom controls global and non-destructive, and ensure future shortcut additions do not conflict with zoom key combos.
+
+## 2026-02-18T17:15:00Z - Zoom layout stability fix (viewport fill + panel-safe clamp)
+
+- Date (UTC):
+- 2026-02-18T17:15:00Z
+- Area:
+- Layout safety under global UI zoom
+- Decision:
+- Updated UI zoom application in `assets/js/app.js` to compensate app-shell height against zoom scale and to re-run layout normalization/apply pass after each zoom change.
+- Reduced max zoom clamp from 180 to 160 to prevent high-end panel overlap risk while preserving readable enlargement.
+- Why:
+- User reported blank bottom space when zooming out and panel overlap at max zoom; this fix keeps viewport fill stable and forces width/bounds recalculation for safer panel geometry.
+- Follow-up:
+- Keep zoom regression coverage for viewport-fill behavior and include panel-layout checks whenever resize/zoom math changes.
+
+## 2026-02-18T17:30:00Z - Footer zoom visibility + diagnostics journal/zoom signals
+
+- Date (UTC):
+- 2026-02-18T17:30:00Z
+- Area:
+- Runtime observability and user-facing zoom state clarity
+- Decision:
+- Added a dedicated footer runtime chip for live UI zoom percentage and severity state (`ok`/`warn`) based on safe zoom bounds.
+- Extended diagnostics wiring to consume storage journal commit/recovery events and UI zoom change events (excluding boot restore), emitting info/warn diagnostics and promoting storage health to `warn` on recovery.
+- Why:
+- User explicitly requested visible zoom state and continued master-grade hardening; this keeps zoom and crash-recovery state observable without changing core execution paths.
+- Follow-up:
+- Keep zoom/journal diagnostics low-noise (event-driven only) and include footer-runtime status coverage in future status-bar regressions.
+
+## 2026-02-18T17:45:00Z - Footer zoom sync closure + storage adapter spine (roadmap item #4 start)
+
+- Date (UTC):
+- 2026-02-18T17:45:00Z
+- Area:
+- Zoom status correctness and IndexedDB filesystem adapter migration safety
+- Decision:
+- Fixed zoom footer drift at the source by calling `syncFooterRuntimeStatus()` inside `applyUiZoom(...)`, ensuring footer state refreshes on every zoom mutation path (shortcuts/API/reset/boot load).
+- Introduced a storage backend abstraction in `assets/js/ui/store.js` and exported `getStorageBackendInfo()` while keeping localStorage as the active synchronous backend; app diagnostics and debug API now expose backend capabilities including IndexedDB availability.
+- Why:
+- User reported stale footer zoom updates, and the next roadmap queue item requires an adapter seam before switching persistence engines.
+- Follow-up:
+- Keep sync API compatibility until filesystem persistence transitions fully to IndexedDB adapter paths; next slice should add IndexedDB-backed workspace payload read/write behind this backend interface.
+
+## 2026-02-18T18:30:00Z - High-zoom panel overlap closure via row width-fit enforcement
+
+- Date (UTC):
+- 2026-02-18T18:30:00Z
+- Area:
+- Layout/resizer reliability under high UI zoom
+- Decision:
+- Added dock-row width-fit enforcement in `assets/js/app.js` that reflows overflow non-editor panels between top/bottom rows when a row’s minimum required panel widths exceed available row width.
+- Integrated the width-fit pass into both `normalizeLayoutWidths()` and `applyPanelOrder()` so overlap is prevented before width clamping and splitter math executes.
+- Added regression checks in `tests/ide.spec.js` verifying no horizontal panel overlap in top/bottom rows at max zoom.
+- Why:
+- User reported that high zoom still caused panel overlap and broken resizing interactions; previous width normalization could leave impossible row width states unresolved.
+- Follow-up:
+- Keep width-fit enforcement coupled to row-cap logic and include row-overlap checks whenever zoom or docking constraints are adjusted.
+
+## 2026-02-18T18:55:00Z - Max-zoom panel visibility hardening (adaptive panel minimums)
+
+- Date (UTC):
+- 2026-02-18T18:55:00Z
+- Area:
+- High-zoom viewport safety and splitter preconditions
+- Decision:
+- Added adaptive panel minimum width logic in `assets/js/app.js` that scales panel/editor minimums by zoom level and workspace width budget, then syncs these values to `--panel-min-width` and `--panel-min-width-editor` on the app shell.
+- Updated layout bound calculations and editor minimum-width reads to use adaptive minimums so JS constraints and CSS minimums stay aligned.
+- Expanded max-zoom regression assertions in `tests/ide.spec.js` to fail if any visible panel leaves workspace horizontal bounds.
+- Why:
+- User reported that some panels still moved out of view and occasional overlap persisted at max zoom; fixed-width CSS minimums were still capable of exceeding effective viewport capacity.
+- Follow-up:
+- Keep adaptive minimums and row width-fit enforcement together; treat any out-of-bounds panel at max zoom as a release blocker.
+
+## 2026-02-18T19:05:00Z - 110% zoom overlap/resizer fix (shell width compensation)
+
+- Date (UTC):
+- 2026-02-18T19:05:00Z
+- Area:
+- Zoom geometry normalization and panel resize reliability
+- Decision:
+- Added app-shell width compensation in `applyUiZoom(...)` (`width` + `min-width` set to inverse zoom viewport units) alongside existing height compensation.
+- Expanded zoom regression coverage in `tests/ide.spec.js` to assert no overlap/out-of-view panels and near-zero shell viewport gap at 110%, 160%, and 70% zoom states.
+- Why:
+- User reported overlap and non-functional resizing beginning at 110%; root cause was zoom scaling widening effective shell geometry without width compensation.
+- Follow-up:
+- Keep zoom compensation symmetric (width + height) and treat viewport-gap regressions at first zoom step as blocker-level.
+
+## 2026-02-18T19:20:00Z - Panel engine foundation slice (reusable solver module + roadmap blueprint)
+
+- Date (UTC):
+- 2026-02-18T19:20:00Z
+- Area:
+- Layout architecture modernization toward VS Code-style column/stack behavior
+- Decision:
+- Added `assets/js/core/layoutEngine.js` with a reusable panel-row solver (`solvePanelRows`) handling deterministic row caps + width-fit spill logic.
+- Rewired `assets/js/app.js` row-cap/width-fit enforcement through the engine module via a single solver gateway (`solveDockingRows`), preserving existing behavior while establishing a dedicated layout-engine boundary.
+- Simplified splitter visuals in `assets/css/layout.css` to hover/focus/drag visibility only (default hidden line) to keep resize affordance minimal.
+- Added execution blueprint in `docs/PANEL_ENGINE_BLUEPRINT.md` and linked it from `docs/MASTER_ROADMAP.md` as the explicit optimization track.
+- Why:
+- User requested a “perfect engine” aligned to VS Code-like panel behavior with simple resize affordances; extracting the solver core is the lowest-risk path to continue toward full columns+stacks architecture.
+- Follow-up:
+- Next slice introduces explicit `columns/stacks` state in parallel with legacy `panelRows`, then migrates persistence/rendering in staged compatibility mode.
+
+## 2026-02-18T19:45:00Z - Panel engine Slice B completion (dual-state columns/stacks + panelRows)
+
+- Date (UTC):
+- 2026-02-18T19:45:00Z
+- Area:
+- Layout model migration safety and backward compatibility
+- Decision:
+- Added `assets/js/core/panelLayoutModel.js` introducing normalized `panelLayout` (`columns/stacks`) with adapters `rowsToPanelLayout` and `panelLayoutToRows`.
+- Updated `assets/js/app.js` to dual-sync layout state through `setPanelRows`, `syncPanelRowsFromLayoutModel`, and `syncPanelLayoutFromRows`, with sanitize-time reconciliation that preserves preset-driven row behavior.
+- Added migration observability via `fazide.getPanelLayout()` and regression coverage in `tests/ide.spec.js` confirming model/row synchronization after docking mutations.
+- Why:
+- User requested a perfect panel engine that connects cleanly with existing behavior; dual-state synchronization enables architecture evolution without breaking current row-based rendering and controls.
+- Follow-up:
+- Proceed to Slice C: ratio-first persistence and snapshot upgrade path while keeping old saved layouts readable.
+
+## 2026-02-18T19:40:00Z - Panel guide bounds closure + Slice C ratio-first persistence completion
+
+- Date (UTC):
+- 2026-02-18T19:40:00Z
+- Area:
+- Panel guide geometry safety and layout persistence migration
+- Decision:
+- Removed legacy long-span resize-guide behavior and clamped row/column guide coordinates to workspace bounds in `assets/js/app.js` so drag guides never render out-of-bounds.
+- Completed Slice C by introducing ratio-first layout persistence snapshots (`panelRatios`) with backward-compatible sanitize/load upgrade handling for legacy absolute-width snapshots.
+- Added regression coverage in `tests/ide.spec.js` validating ratio-first persistence/restore behavior.
+- Why:
+- User reported guideline overflow and required full migration execution without legacy behavior; bounded guides plus ratio-first persistence closes the geometry/persistence mismatch at the root.
+- Follow-up:
+- Start Slice D renderer migration (column+stack rendering/tabs/docking targets) while keeping legacy snapshot readability intact during transition.
+
+## 2026-02-18T20:05:00Z - Single resize path enforcement + deterministic row overflow solver
+
+- Date (UTC):
+- 2026-02-18T20:05:00Z
+- Area:
+- Panel zoom stability and resize architecture cleanup
+- Decision:
+- Reworked `assets/js/core/layoutEngine.js` row width-fit enforcement to a deterministic overflow-reduction strategy that only moves a panel between rows when total row overflow decreases, preventing ping-pong relocation loops under zoom pressure.
+- Removed the unused legacy edge-resize subsystem from `assets/js/app.js` so splitter-driven resizing remains the single active panel resize path.
+- Why:
+- User reported persistent overlap/broken panel behavior while zooming and explicitly requested removal of old systems; duplicate/legacy resize logic and non-deterministic overflow moves increased risk of unstable states.
+- Follow-up:
+- Keep all panel width mutations routed through solver + splitters only, and continue Slice D renderer migration toward full VS Code-style columns/stacks/tabs.
+
+## 2026-02-18T20:25:00Z - Layout reset determinism + row-scoped resize guide rendering
+
+- Date (UTC):
+- 2026-02-18T20:25:00Z
+- Area:
+- Preset reset reliability and resize guide clarity
+- Decision:
+- Fixed `applyLayoutPreset(...)` in `assets/js/app.js` to drop stale `panelRatios` before sanitize/rebuild so preset width/height geometry is actually restored instead of being overridden by prior ratio snapshots.
+- Updated column-guide rendering in `assets/js/app.js` to clamp guide vertical span to the active panel row bounds (with explicit style reset on hide), preventing guides from visually spanning unrelated panels.
+- Added regression coverage in `tests/ide.spec.js` ensuring preset application resets geometry after extreme custom size mutations.
+- Why:
+- User reported that reset did not truly reset and guide lines looked broken across the layout; stale ratio carry-over and full-height guide lines were causing confusing/incorrect behavior.
+- Follow-up:
+- Keep preset application as a deterministic geometry reset path and preserve row-scoped guide visuals while Slice D renderer migration continues.
+
+## 2026-02-18T20:40:00Z - High-zoom editor resize unlock (zoom-aware drag + feasible min budgets)
+
+- Date (UTC):
+- 2026-02-18T20:40:00Z
+- Area:
+- Splitter interaction correctness under UI zoom
+- Decision:
+- Updated splitter drag math in `assets/js/app.js` to convert pointer deltas into layout-space deltas using current UI zoom scale, so drag distance maps correctly at non-100% zoom.
+- Hardened adaptive panel minimum logic in `assets/js/app.js` with feasibility scaling + hard floors (`64/96`) so two-panel editor rows remain resizable instead of getting locked by impossible min-width combinations at high zoom.
+- Added regression coverage in `tests/ide.spec.js` for splitter resize behavior at 160% zoom.
+- Why:
+- User reported editor resizing was broken when zoomed in; root cause was a combination of zoom-space delta mismatch and minimum-width floors that could leave no movable range.
+- Follow-up:
+- Keep all splitter interactions zoom-aware and preserve feasible-minimum guarantees whenever zoom/min-width formulas change.
+
+## 2026-02-18T20:20:00Z - CSS gate contract hardening + base-style redundancy cleanup
+
+- Date (UTC):
+- 2026-02-18T20:20:00Z
+- Area:
+- CSS system reliability, release gating, and regression safety
+- Decision:
+- Consolidated duplicate `body` styling declarations in `assets/css/base.css` into a single canonical block to remove redundant base-style surface while preserving existing visual behavior.
+- Added micro release-contract tests in `tests/release.spec.js` that enforce: (1) `test:css` presence and ordering in `test:quick`/`test:all`, and (2) `scripts/ai-verify.js` running `test:css` before changed/smoke suites.
+- Why:
+- User requested optimization/removal of unnecessary code while strengthening micro-regression coverage and AI safety flow updates.
+- Follow-up:
+- Keep CSS gate ordering contract-tested and treat any removal or reordering of `test:css` from verification pipelines as release-blocking drift.
+
+## 2026-02-18T20:26:00Z - Modal selector dedupe optimization + resilient stress contract
+
+- Date (UTC):
+- 2026-02-18T20:26:00Z
+- Area:
+- CSS parsing/maintenance efficiency and regression determinism
+- Decision:
+- Refactored repeated modal selector chains in `assets/css/components.css` to shared `:is(...)` selectors for `#editorHistoryPanel`, `#shortcutHelpPanel`, and `#editorSettingsPanel`.
+- Removed duplicate declaration surface for `#editorHistoryPanel .editor-history-actions button` while preserving shared button styling through the existing grouped action selector.
+- Added micro contract coverage in `tests/release.spec.js` to enforce the deduped selector pattern and forbid legacy standalone duplicate block reintroduction.
+- Stabilized `tests/ide.spec.js` stress invariant timing by forcing a deterministic post-drag layout normalization pass before final overlap/out-of-bounds audit.
+- Why:
+- User requested deeper optimization with no breakage and explicit micro test additions; this reduces CSS rule redundancy while keeping release safety deterministic.
+- Follow-up:
+- Keep grouped modal selector contracts and deterministic stress normalization in place for future panel/style tuning.
+
+## 2026-02-18T21:05:00Z - Layout settings surface expansion (corner radius + bottom dock height)
+
+- Date (UTC):
+- 2026-02-18T21:05:00Z
+- Area:
+- Layout settings UX completeness and dock geometry control parity
+- Decision:
+- Exposed previously hidden layout controls in `index.html` for panel corner radius and bottom dock height.
+- Wired `layoutBottomHeight`/`layoutBottomHeightInput` in `assets/js/ui/elements.js` and `assets/js/app.js` with sync, clamping, persistence, and disabled-state behavior when bottom row has no open panels.
+- Corrected corner-radius bounds in `getLayoutBounds()` from `{ min: 0, max: 0 }` to `{ min: 0, max: 24 }` so UI controls can apply non-zero values.
+- Added micro regression coverage in `tests/layout-micro.spec.js` and `tests/typography-sizing-contract.spec.js` for control bounds synchronization and runtime style application.
+- Why:
+- User requested adding more layout settings; existing runtime support was partially implemented but not fully exposed in UI, causing capability drift.
+- Follow-up:
+- Keep any future layout control additions paired with both bounds-sync contracts and at least one behavior-level micro test.
+
+## 2026-02-18T21:30:00Z - Full layout customization upgrade (row + order controls for all major panels)
+
+- Date (UTC):
+- 2026-02-18T21:30:00Z
+- Area:
+- Layout control completeness and settings-driven docking parity
+- Decision:
+- Expanded layout settings in `index.html` with per-panel row selectors (`top`/`bottom`) for console, editor, files, sandbox, and tools.
+- Added missing tools position selector and bindings so order controls now cover all major panels consistently.
+- Wired new controls in `assets/js/ui/elements.js` and `assets/js/app.js`, including control sync, open-state disabling, and deterministic row migration via `movePanelToRow(..., { animatePanels: true })`.
+- Why:
+- User requested another optimization pass with full layout customization from settings; prior state required drag interactions for some placement scenarios and lacked tools order parity.
+- Follow-up:
+- Keep layout settings aligned with all dockable panel capabilities; if new panels become dockable, row/order controls must be added in the same change.
+
+## 2026-02-18T22:20:00Z - Safe CSS selector dedupe follow-up with full gate proof
+
+- Date (UTC):
+- 2026-02-18T22:20:00Z
+- Area:
+- CSS optimization safety and release confidence
+- Decision:
+- Consolidated repeated scrollbar and footer runtime-status selectors in `assets/css/layout.css` using `:is(...)` grouping to reduce duplicate selector surface without changing computed behavior.
+- Why:
+- User requested continued CSS optimization while keeping stabilization and deployment safety intact.
+- Follow-up:
+- Keep selector dedupe changes behavior-neutral and require `test:css`, focused release contracts, and full `npm run test:all` evidence for CSS optimization waves.
+
+## 2026-02-18T22:44:00Z - Command-center checkpoint inference realigned to active roadmap lanes
+
+- Date (UTC):
+- 2026-02-18T22:44:00Z
+- Area:
+- AI memory governance and checkpoint-routing accuracy
+- Decision:
+- Updated `scripts/ai-command-center.js` checkpoint inference so active roadmap lanes (`C5` architecture spine and `C7` layout stability lane) are detected from current high-change surfaces (`app.js`, layout engine/model files, state/store primitives, and layout/docking files).
+- Expanded roadmap-memory targeting trigger to include `C5/C6/C7` (not only `C4`) so roadmap decision map sync remains required when modern checkpoint lanes are touched.
+- Why:
+- Deep memory audit showed command-center output was still biasing guidance toward legacy checkpoints (`C1/C3/C4`) even when active work clearly belonged to `C5/C7`, creating governance drift risk.
+- Follow-up:
+- Add a focused contract test for checkpoint inference mapping in a future scripts-contract wave; preserve roadmap-lane inference whenever checkpoint definitions evolve.

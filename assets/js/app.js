@@ -18,7 +18,7 @@
 
 import { APP, STORAGE, DEFAULT_CODE, DEFAULT_WELCOME_FILES, GAMES, APPLICATIONS } from "./config.js";
 import { getRequiredElements } from "./ui/elements.js";
-import { load, save } from "./ui/store.js";
+import { load, save, saveBatchAtomic, recoverStorageJournal, getStorageJournalState, getStorageBackendInfo, STORAGE_JOURNAL_KEY } from "./ui/store.js";
 import { makeLogger } from "./ui/logger.js";
 import { makeStatus } from "./ui/status.js";
 import { makeDiagnostics } from "./ui/diagnostics.js";
@@ -35,6 +35,9 @@ import { buildCssPreviewHtml, createWorkspaceAssetResolver } from "./sandbox/wor
 import { makeTextareaEditor } from "./editors/textarea.js";
 import { makeCodeMirrorEditor } from "./editors/codemirror5.js";
 import { createCommandRegistry } from "./core/commandRegistry.js";
+import { createStateBoundaries } from "./core/stateBoundaries.js";
+import { solvePanelRows } from "./core/layoutEngine.js";
+import { rowsToPanelLayout, panelLayoutToRows, normalizePanelLayout } from "./core/panelLayoutModel.js";
 import {
     splitLeafExtension,
     collapseDuplicateTerminalExtension,
@@ -78,6 +81,10 @@ import {
     isDuplicateLineUpShortcut,
     isDeleteLineShortcut,
     isSelectNextOccurrenceShortcut,
+    isSelectAllOccurrencesShortcut,
+    isZoomInShortcut,
+    isZoomOutShortcut,
+    isZoomResetShortcut,
 } from "./ui/shortcuts.js";
 
 // DOM references kept centralized (easy maintenance)
@@ -154,6 +161,14 @@ function syncFooterRuntimeStatus() {
         el.footerStorage.dataset.state = storageState;
         el.footerStorage.textContent = `Storage: ${storageLabel}`;
         el.footerStorage.title = `Storage status: ${storageLabel}`;
+    }
+
+    if (el.footerZoom) {
+        const zoom = normalizeUiZoom(uiZoomPercent);
+        const zoomState = zoom >= 140 || zoom <= 80 ? "warn" : "ok";
+        el.footerZoom.dataset.state = zoomState;
+        el.footerZoom.textContent = `Zoom: ${zoom}%`;
+        el.footerZoom.title = `UI zoom: ${zoom}%`;
     }
 
     if (el.footerProblems) {
@@ -269,7 +284,7 @@ const SNAPSHOT_RECOVERY_GRACE_MS = 1500;
 const EDITOR_HISTORY_LIMIT = 80;
 const RUNTIME_PROBLEM_LIMIT = 120;
 const PROBLEM_ENTRY_LIMIT = 200;
-const DOCK_ZONE_MAGNET_DISTANCE = 96;
+const DEFAULT_DOCK_ZONE_MAGNET_DISTANCE = 96;
 const EDITOR_MARK_KIND_DIAGNOSTIC = "diagnostic";
 const EDITOR_MARK_KIND_ERROR_LENS = "error-lens";
 const EDITOR_MARK_KIND_FIND = "find";
@@ -310,6 +325,8 @@ const LOCAL_FOLDER_IMPORT_EXTENSIONS = new Set([
     "jsx",
     "ts",
     "tsx",
+    "json",
+    "html",
     "css",
     "scss",
     "sass",
@@ -375,9 +392,9 @@ const EDITOR_CURSOR_COMFORT_TOLERANCE_RATIO = 0.06;
 const EDITOR_PROFILES = {
     balanced: {
         tabSize: 2,
-        fontSize: 13,
+        fontSize: 16,
         fontFamily: "default",
-        syntaxTheme: "retro",
+        syntaxTheme: "default",
         lineWrapping: true,
         lintEnabled: true,
         errorLensEnabled: true,
@@ -392,7 +409,7 @@ const EDITOR_PROFILES = {
         tabSize: 2,
         fontSize: 14,
         fontFamily: "default",
-        syntaxTheme: "retro",
+        syntaxTheme: "default",
         lineWrapping: false,
         lintEnabled: true,
         errorLensEnabled: true,
@@ -407,7 +424,7 @@ const EDITOR_PROFILES = {
         tabSize: 2,
         fontSize: 16,
         fontFamily: "default",
-        syntaxTheme: "retro",
+        syntaxTheme: "default",
         lineWrapping: true,
         lintEnabled: false,
         errorLensEnabled: false,
@@ -421,7 +438,7 @@ const EDITOR_PROFILES = {
 };
 
 const EDITOR_FONT_FAMILY_OPTIONS = {
-    default: '"JetBrains Mono", "Cascadia Mono", "Consolas", monospace',
+    default: 'ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
     "jetbrains-mono": '"JetBrains Mono", "Cascadia Mono", "Consolas", monospace',
     "fira-code": '"Fira Code", "Cascadia Mono", "Consolas", monospace',
     "source-code-pro": '"Source Code Pro", "Cascadia Mono", "Consolas", monospace',
@@ -430,9 +447,10 @@ const EDITOR_FONT_FAMILY_OPTIONS = {
     inconsolata: '"Inconsolata", "Cascadia Mono", "Consolas", monospace',
     "ubuntu-mono": '"Ubuntu Mono", "Cascadia Mono", "Consolas", monospace',
     "cascadia-mono": '"Cascadia Mono", "Consolas", monospace',
+    "space-mono": '"Space Mono", "Cascadia Mono", "Consolas", monospace',
 };
 
-const DEFAULT_EDITOR_SYNTAX_THEME = "retro";
+const DEFAULT_EDITOR_SYNTAX_THEME = "default";
 const EDITOR_AUTO_PAIR_OPEN_TO_CLOSE = new Map([
     ["(", ")"],
     ["[", "]"],
@@ -451,6 +469,7 @@ const EDITOR_HTML_VOID_TAGS = new Set([
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
 ]);
 const EDITOR_SYNTAX_THEME_NAMES = Object.freeze([
+    "default",
     "dark",
     "light",
     "purple",
@@ -464,6 +483,10 @@ const EDITOR_SYNTAX_THEME_NAMES = Object.freeze([
 ]);
 const EDITOR_SYNTAX_THEME_NAME_SET = new Set(EDITOR_SYNTAX_THEME_NAMES);
 const EDITOR_SYNTAX_THEME_METADATA = Object.freeze({
+    default: Object.freeze({
+        label: "Syntax Default",
+        colors: Object.freeze(["Classic defaults", "Balanced contrast", "Safe baseline"]),
+    }),
     dark: Object.freeze({
         label: "Dark",
         colors: Object.freeze(["Silver White", "Amethyst Purple", "Amber Gold", "Electric Cyan", "Graphite Gray"]),
@@ -506,6 +529,7 @@ const EDITOR_SYNTAX_THEME_METADATA = Object.freeze({
     }),
 });
 const EDITOR_SYNTAX_THEME_ROLE_COLORS = Object.freeze({
+    default: Object.freeze({ primary: "#e5e7eb", secondary: "#8b5cf6", accent: "#f59e0b", support: "#22d3ee", neutral: "#71717a" }),
     dark: Object.freeze({ primary: "#e5e7eb", secondary: "#8b5cf6", accent: "#f59e0b", support: "#22d3ee", neutral: "#71717a" }),
     light: Object.freeze({ primary: "#38bdf8", secondary: "#60a5fa", accent: "#34d399", support: "#f59e0b", neutral: "#94a3b8" }),
     purple: Object.freeze({ primary: "#7c3aed", secondary: "#3b82f6", accent: "#f59e0b", support: "#10b981", neutral: "#a1a1aa" }),
@@ -536,6 +560,8 @@ const SYNTAX_THEME_MIX_OVERRIDES = Object.freeze({
     }),
 });
 const EDITOR_SYNTAX_THEME_ALIASES = Object.freeze({
+    default: "default",
+    "syntax-default": "default",
     dark: "dark",
     light: "light",
     purple: "purple",
@@ -1569,6 +1595,7 @@ const EDITOR_RAW_SYNTAX_THEME_SOURCE = Object.freeze({
 });
 
 const EDITOR_SYNTAX_THEME_SOURCE_BY_NAME = Object.freeze({
+    default: "dark",
     dark: "obsidian",
     light: "glacier",
     purple: "royal",
@@ -1729,13 +1756,129 @@ let currentTheme = DEFAULT_THEME;
 let layoutState = cloneLayoutState(DEFAULT_LAYOUT_STATE);
 let suppressChange = false;
 
+const stateBoundaries = createStateBoundaries({
+    getProject: () => ({
+        fileCount: files.length,
+        folderCount: folders.length,
+        trashCount: trashFiles.length,
+        activeFileId,
+        activeFileName: String(getActiveFile()?.name || ""),
+        openTabCount: openTabIds.length,
+        selectedFileCount: selectedFileIds.size,
+        selectedFolderCount: selectedFolderPaths.size,
+        dirtyFileCount: getDirtyFiles().length,
+        canUndoFileHistory: canUndoFileHistory(),
+        canRedoFileHistory: canRedoFileHistory(),
+    }),
+    getWorkspace: () => ({
+        theme: currentTheme,
+        activeLayoutPreset: activeLayoutPresetName,
+        layout: { ...layoutState },
+        openPanels: {
+            header: Boolean(layoutState.headerOpen),
+            files: Boolean(layoutState.filesOpen),
+            editor: Boolean(layoutState.editorOpen),
+            sandbox: Boolean(layoutState.sandboxOpen),
+            log: Boolean(layoutState.logOpen),
+            tools: Boolean(layoutState.toolsOpen),
+            footer: Boolean(layoutState.footerOpen),
+        },
+    }),
+    getRuntime: () => ({
+        runCount,
+        hasRunToken: Boolean(currentToken),
+        currentRunToken: currentToken || null,
+        runContextId: currentRunContext?.id || null,
+        inspectEnabled,
+        debugMode,
+        runnerFullscreen,
+        sandboxPopoutOpen: isSandboxWindowOpen(),
+        taskRunnerBusy,
+    }),
+});
+
+function getStateBoundariesSnapshot() {
+    return stateBoundaries.snapshot();
+}
+
+function getStateBoundary(name) {
+    return stateBoundaries.snapshotBoundary(name);
+}
+
+const UI_ZOOM_DEFAULT = 100;
+const UI_ZOOM_STEP = 10;
+const UI_ZOOM_MIN = 70;
+const UI_ZOOM_MAX = 160;
+let uiZoomPercent = UI_ZOOM_DEFAULT;
+
+function normalizeUiZoom(value) {
+    const numeric = Number.parseInt(String(value ?? UI_ZOOM_DEFAULT), 10);
+    if (!Number.isFinite(numeric)) return UI_ZOOM_DEFAULT;
+    return clamp(numeric, UI_ZOOM_MIN, UI_ZOOM_MAX);
+}
+
+function applyUiZoom(value, { persist = true, announce = false, syncLayout = true, source = "manual" } = {}) {
+    const previous = uiZoomPercent;
+    const next = normalizeUiZoom(value);
+    uiZoomPercent = next;
+    const zoomScale = Math.max(0.01, next / 100);
+    const zoomViewportRatio = Math.max(0.01, 1 / zoomScale);
+    const inverseHeight = 100 / zoomScale;
+    const inverseWidth = 100 / zoomScale;
+    document.documentElement.style.zoom = `${next}%`;
+    document.documentElement.style.setProperty("--ui-zoom-viewport-ratio", String(zoomViewportRatio));
+    if (el.appShell) {
+        el.appShell.style.width = `${inverseWidth}dvw`;
+        el.appShell.style.minWidth = `${inverseWidth}dvw`;
+        el.appShell.style.height = `${inverseHeight}dvh`;
+        el.appShell.style.minHeight = `${inverseHeight}dvh`;
+    }
+    if (syncLayout) {
+        normalizeLayoutWidths();
+        applyLayout();
+        syncLayoutControls();
+    }
+    if (persist) {
+        save(STORAGE.UI_ZOOM, String(next));
+    }
+    syncFooterRuntimeStatus();
+    if (typeof window !== "undefined" && window.dispatchEvent && next !== previous) {
+        window.dispatchEvent(new CustomEvent("fazide:ui-zoom-changed", {
+            detail: {
+                previous,
+                next,
+                source,
+            },
+        }));
+    }
+    if (announce) {
+        status.set(`Zoom ${next}%`);
+    }
+    return next;
+}
+
+function adjustUiZoom(delta, options = {}) {
+    return applyUiZoom(uiZoomPercent + Number(delta || 0), options);
+}
+
+function resetUiZoom(options = {}) {
+    return applyUiZoom(UI_ZOOM_DEFAULT, options);
+}
+
+function loadUiZoom() {
+    const raw = load(STORAGE.UI_ZOOM);
+    if (!raw) {
+        return applyUiZoom(UI_ZOOM_DEFAULT, { persist: false, syncLayout: false, source: "boot" });
+    }
+    return applyUiZoom(raw, { persist: false, syncLayout: false, source: "boot" });
+}
+
 const debouncedFileFilterRender = createDebouncedTask(() => renderFileList(), FILE_FILTER_RENDER_DEBOUNCE_MS);
 const debouncedProjectSearchScan = createDebouncedTask(() => {
     if (!projectSearchOpen) return;
     runProjectSearchScan();
 }, PROJECT_SEARCH_SCAN_DEBOUNCE_MS);
 
-const EDGE_RESIZE_GRAB = 16;
 const RESIZE_SNAP_STEP = 8;
 const PANEL_REFLOW_ANIMATION_MS = 180;
 const PANEL_REFLOW_ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -1752,7 +1895,14 @@ const LOG_PANEL_MIN_WIDTH = 180;
 const FILES_PANEL_MIN_WIDTH = 180;
 const SANDBOX_PANEL_MIN_WIDTH = 180;
 const TOOLS_PANEL_MIN_WIDTH = 180;
-const RESIZE_GUIDE_COLOR = "var(--resize-guide-color)";
+const PANEL_MIN_WIDTH_FLOOR = 96;
+const PANEL_MIN_WIDTH_EDITOR_FLOOR = 128;
+const PANEL_MIN_WIDTH_HARD_FLOOR = 64;
+const PANEL_MIN_WIDTH_EDITOR_HARD_FLOOR = 96;
+const PANEL_RATIO_MIN = 0.08;
+const PANEL_RATIO_MAX = 0.92;
+const BOTTOM_RATIO_MIN = 0.12;
+const BOTTOM_RATIO_MAX = 0.88;
 let rowGuide = null;
 let colGuide = null;
 let panelReflowFrame = null;
@@ -1776,7 +1926,18 @@ function loadLayout(raw = load(STORAGE.LAYOUT)) {
 
 function persistLayout() {
     // Persist only layout UI state (not code) so refresh keeps user preferences.
-    save(STORAGE.LAYOUT, JSON.stringify(layoutState));
+    const snapshot = {
+        ...layoutState,
+        panelRatios: buildPanelRatioSnapshot(layoutState),
+    };
+    layoutState.panelRatios = snapshot.panelRatios;
+    const value = JSON.stringify(snapshot);
+    const ok = saveBatchAtomic([
+        { key: STORAGE.LAYOUT, value },
+    ], { label: "layout-state" });
+    if (!ok) {
+        save(STORAGE.LAYOUT, value);
+    }
 }
 
 function getPanelRow(panel) {
@@ -1784,6 +1945,95 @@ function getPanelRow(panel) {
     if (rows?.top?.includes(panel)) return "top";
     if (rows?.bottom?.includes(panel)) return "bottom";
     return "top";
+}
+
+function getPanelRowFromRows(rows, panel) {
+    if (rows?.top?.includes(panel)) return "top";
+    if (rows?.bottom?.includes(panel)) return "bottom";
+    return "top";
+}
+
+function normalizeSizeRatio(value, { min = PANEL_RATIO_MIN, max = PANEL_RATIO_MAX, fallback = 0.25 } = {}) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return clamp(numeric, min, max);
+}
+
+function resolvePanelRatioRowWidth(rowName) {
+    const rowEl = rowName === "bottom" ? el.workspaceBottom : el.workspaceTop;
+    const rowWidth = rowEl?.getBoundingClientRect?.().width;
+    if (Number.isFinite(rowWidth) && rowWidth > 0) return rowWidth;
+    const workspaceWidth = el.workspace?.getBoundingClientRect?.().width;
+    if (Number.isFinite(workspaceWidth) && workspaceWidth > 0) return workspaceWidth;
+    return window.innerWidth;
+}
+
+function resolveWorkspaceHeightForRatios() {
+    const workspaceHeight = el.workspace?.getBoundingClientRect?.().height;
+    if (Number.isFinite(workspaceHeight) && workspaceHeight > 0) return workspaceHeight;
+    return window.innerHeight;
+}
+
+function buildPanelRatioSnapshot(state = layoutState) {
+    const rows = normalizePanelRows(state?.panelRows || layoutState.panelRows);
+    const rowTopWidth = resolvePanelRatioRowWidth("top");
+    const rowBottomWidth = resolvePanelRatioRowWidth("bottom");
+    const workspaceHeight = resolveWorkspaceHeightForRatios();
+    const ratioFor = (panel, width) => {
+        const rowName = getPanelRowFromRows(rows, panel);
+        const rowWidth = rowName === "bottom" ? rowBottomWidth : rowTopWidth;
+        if (!Number.isFinite(rowWidth) || rowWidth <= 0) return 0.25;
+        return normalizeSizeRatio(width / rowWidth, { fallback: 0.25 });
+    };
+
+    return {
+        logWidth: ratioFor("log", Number(state?.logWidth) || layoutState.logWidth),
+        sidebarWidth: ratioFor("files", Number(state?.sidebarWidth) || layoutState.sidebarWidth),
+        sandboxWidth: ratioFor("sandbox", Number(state?.sandboxWidth) || layoutState.sandboxWidth),
+        toolsWidth: ratioFor("tools", Number(state?.toolsWidth) || layoutState.toolsWidth),
+        bottomHeight: normalizeSizeRatio(
+            (Number(state?.bottomHeight) || layoutState.bottomHeight) / Math.max(1, workspaceHeight),
+            { min: BOTTOM_RATIO_MIN, max: BOTTOM_RATIO_MAX, fallback: 0.35 }
+        ),
+    };
+}
+
+function normalizePanelRatios(rawRatios, fallbackState) {
+    const fallback = buildPanelRatioSnapshot(fallbackState || layoutState);
+    const source = rawRatios && typeof rawRatios === "object" ? rawRatios : fallback;
+    return {
+        logWidth: normalizeSizeRatio(source.logWidth, { fallback: fallback.logWidth }),
+        sidebarWidth: normalizeSizeRatio(source.sidebarWidth, { fallback: fallback.sidebarWidth }),
+        sandboxWidth: normalizeSizeRatio(source.sandboxWidth, { fallback: fallback.sandboxWidth }),
+        toolsWidth: normalizeSizeRatio(source.toolsWidth, { fallback: fallback.toolsWidth }),
+        bottomHeight: normalizeSizeRatio(source.bottomHeight, {
+            min: BOTTOM_RATIO_MIN,
+            max: BOTTOM_RATIO_MAX,
+            fallback: fallback.bottomHeight,
+        }),
+    };
+}
+
+function setPanelRows(rows, { syncModel = true } = {}) {
+    const normalized = normalizePanelRows(rows);
+    layoutState.panelRows = normalized;
+    if (syncModel) {
+        syncPanelLayoutFromRows();
+    }
+    return normalized;
+}
+
+function syncPanelRowsFromLayoutModel() {
+    const rows = panelLayoutToRows(layoutState.panelLayout);
+    return setPanelRows(rows, { syncModel: false });
+}
+
+function syncPanelLayoutFromRows() {
+    layoutState.panelLayout = normalizePanelLayout(rowsToPanelLayout(layoutState.panelRows), {
+        fallbackRows: layoutState.panelRows,
+    });
+    layoutState.panelRatios = buildPanelRatioSnapshot(layoutState);
+    return layoutState.panelLayout;
 }
 
 function rowHasOpenPanels(row) {
@@ -1806,33 +2056,119 @@ function pickOverflowPanel(rows, rowName, preservePanel = null) {
     return reversed.find((panel) => isPanelOpen(panel)) || null;
 }
 
+function solveDockingRows(rows, {
+    preferredRow = null,
+    preservePanel = null,
+    widthFit = true,
+} = {}) {
+    const bounds = getLayoutBounds();
+    return solvePanelRows({
+        rows,
+        normalizeRows: normalizePanelRows,
+        isPanelOpen,
+        rowWidthByName: {
+            top: getRowWidth("top"),
+            bottom: getRowWidth("bottom"),
+        },
+        panelGap: layoutState.panelGap || 0,
+        getPanelMinWidth(panel) {
+            return getPanelMinWidthForRowFit(panel, bounds);
+        },
+        maxOpenPerRow: LAYOUT_COLUMN_COUNT,
+        preferredRow,
+        preservePanel,
+        widthFit,
+    });
+}
+
 function enforceDockingRowCaps(rows, { preferredRow = null, preservePanel = null } = {}) {
-    const normalized = normalizePanelRows(rows);
-    const maxOpenPerRow = LAYOUT_COLUMN_COUNT;
-    const maxPasses = 12;
-    for (let pass = 0; pass < maxPasses; pass += 1) {
-        const topOpen = countOpenPanelsInRow(normalized, "top");
-        const bottomOpen = countOpenPanelsInRow(normalized, "bottom");
-        if (topOpen <= maxOpenPerRow && bottomOpen <= maxOpenPerRow) break;
+    return solveDockingRows(rows, { preferredRow, preservePanel, widthFit: false });
+}
 
-        const rowName = topOpen > maxOpenPerRow ? "top" : "bottom";
-        const targetRow = rowName === "top" ? "bottom" : "top";
-        const preserve = rowName === preferredRow ? preservePanel : null;
-        const overflowPanel = pickOverflowPanel(normalized, rowName, preserve);
-        if (!overflowPanel) break;
-
-        normalized[rowName] = normalized[rowName].filter((panel) => panel !== overflowPanel);
-        const targetOrder = normalized[targetRow].filter((panel) => panel !== overflowPanel);
-        const insertionIndex = targetRow === "bottom" ? targetOrder.length : 0;
-        targetOrder.splice(insertionIndex, 0, overflowPanel);
-        normalized[targetRow] = targetOrder;
+function getPanelMinWidthForRowFit(panel, bounds) {
+    if (panel === "editor") {
+        return getAdaptivePanelMinimums().editorMin;
     }
-    return normalized;
+    if (panel === "log") return bounds.logWidth.min;
+    if (panel === "files") return bounds.sidebar.min;
+    if (panel === "sandbox") return bounds.sandboxWidth.min;
+    if (panel === "tools") return bounds.toolsWidth.min;
+    return 0;
+}
+
+function getAdaptivePanelMinimums() {
+    const workspaceWidth = el.workspace?.getBoundingClientRect().width || window.innerWidth || 0;
+    const gap = layoutState.panelGap || 0;
+    const zoom = normalizeUiZoom(uiZoomPercent);
+    const zoomScale = Math.min(1, 100 / zoom);
+
+    const threeColumnGap = Math.max(0, (LAYOUT_COLUMN_COUNT - 1) * 2) * gap;
+    const threeColumnBudget = Math.floor((Math.max(0, workspaceWidth - threeColumnGap)) / LAYOUT_COLUMN_COUNT);
+    const twoColumnBudget = Math.floor((Math.max(0, workspaceWidth - (2 * gap))) / 2);
+
+    const scaledPanelMin = Math.round(FILES_PANEL_MIN_WIDTH * zoomScale);
+    const scaledEditorMin = Math.round(EDITOR_SOFT_MIN_WIDTH * zoomScale);
+
+    let panelMin = clamp(
+        Math.min(FILES_PANEL_MIN_WIDTH, scaledPanelMin, threeColumnBudget || FILES_PANEL_MIN_WIDTH),
+        PANEL_MIN_WIDTH_FLOOR,
+        FILES_PANEL_MIN_WIDTH
+    );
+    let editorMin = clamp(
+        Math.min(EDITOR_SOFT_MIN_WIDTH, scaledEditorMin, twoColumnBudget || EDITOR_SOFT_MIN_WIDTH),
+        PANEL_MIN_WIDTH_EDITOR_FLOOR,
+        EDITOR_SOFT_MIN_WIDTH
+    );
+
+    const editorRowBudget = Math.max(0, Math.floor(workspaceWidth - (4 * gap)));
+    if (editorRowBudget > 0) {
+        const currentRequired = (2 * panelMin) + editorMin;
+        if (currentRequired > editorRowBudget) {
+            const scale = editorRowBudget / Math.max(1, currentRequired);
+            panelMin = Math.max(PANEL_MIN_WIDTH_HARD_FLOOR, Math.floor(panelMin * scale));
+            editorMin = Math.max(PANEL_MIN_WIDTH_EDITOR_HARD_FLOOR, Math.floor(editorMin * scale));
+
+            let guard = 0;
+            while (((2 * panelMin) + editorMin) > editorRowBudget && guard < 128) {
+                if (panelMin > PANEL_MIN_WIDTH_HARD_FLOOR) {
+                    panelMin -= 1;
+                }
+                if (((2 * panelMin) + editorMin) > editorRowBudget && editorMin > PANEL_MIN_WIDTH_EDITOR_HARD_FLOOR) {
+                    editorMin -= 1;
+                }
+                if (panelMin <= PANEL_MIN_WIDTH_HARD_FLOOR && editorMin <= PANEL_MIN_WIDTH_EDITOR_HARD_FLOOR) {
+                    break;
+                }
+                guard += 1;
+            }
+        }
+    }
+
+    const maxPanelForEditorRow = Math.floor((Math.max(0, workspaceWidth - editorMin - (4 * gap))) / 2);
+    panelMin = clamp(Math.min(panelMin, maxPanelForEditorRow || panelMin), PANEL_MIN_WIDTH_HARD_FLOOR, FILES_PANEL_MIN_WIDTH);
+
+    const maxEditorForEditorRow = Math.floor(Math.max(0, workspaceWidth - (2 * panelMin) - (4 * gap)));
+    editorMin = clamp(Math.min(editorMin, maxEditorForEditorRow || editorMin), PANEL_MIN_WIDTH_EDITOR_HARD_FLOOR, EDITOR_SOFT_MIN_WIDTH);
+
+    return { panelMin, editorMin };
+}
+
+function syncAdaptivePanelMinimumStyles() {
+    if (!el.appShell) return;
+    const mins = getAdaptivePanelMinimums();
+    el.appShell.style.setProperty("--panel-min-width", `${mins.panelMin}px`);
+    el.appShell.style.setProperty("--panel-min-width-editor", `${mins.editorMin}px`);
+}
+
+function enforceDockingRowWidthFit(rows) {
+    return solveDockingRows(rows, { widthFit: true });
 }
 
 function applyPanelOrder() {
-    const rows = enforceDockingRowCaps(layoutState.panelRows);
-    layoutState.panelRows = rows;
+    let rows = enforceDockingRowCaps(layoutState.panelRows);
+    rows = enforceDockingRowWidthFit(rows);
+    rows = enforceDockingRowCaps(rows);
+    rows = setPanelRows(rows);
     const panels = {
         log: el.logPanel,
         editor: el.editorPanel,
@@ -1915,6 +2251,7 @@ function applyLayout({ animatePanels = false } = {}) {
     // Single place to update DOM based on layout state.
     const enablePanelAnimation = animatePanels && shouldAnimatePanelReflow();
     const previousRects = enablePanelAnimation ? capturePanelRectsForReflow() : null;
+    syncAdaptivePanelMinimumStyles();
     normalizeLayoutWidths();
     if (el.appShell) {
         el.appShell.setAttribute("data-log", layoutState.logOpen ? "open" : "closed");
@@ -1981,8 +2318,18 @@ function snapDimension(value, min, max, { enabled = true, step = RESIZE_SNAP_STE
 
 function shouldAnimatePanelReflow() {
     if (document.body?.hasAttribute("data-resize")) return false;
+    if (!layoutState.panelReflowAnimation) return false;
     if (PANEL_REDUCED_MOTION_QUERY?.matches) return false;
     return true;
+}
+
+function getDockZoneMagnetDistance() {
+    const bounds = getLayoutBounds().dockMagnet;
+    return clamp(
+        Number(layoutState.dockMagnetDistance || DEFAULT_DOCK_ZONE_MAGNET_DISTANCE),
+        bounds.min,
+        bounds.max
+    );
 }
 
 function setSidebarWidth(next) {
@@ -2223,16 +2570,6 @@ function syncDefaultEditorSandboxWidth({ persist = true } = {}) {
     syncLayoutControls();
 }
 
-function getPanelNameFromElement(panelEl) {
-    if (!panelEl) return null;
-    if (panelEl === el.logPanel) return "log";
-    if (panelEl === el.editorPanel) return "editor";
-    if (panelEl === el.side) return "files";
-    if (panelEl === el.sandboxPanel) return "sandbox";
-    if (panelEl === el.toolsPanel) return "tools";
-    return null;
-}
-
 function getPanelElement(name) {
     if (name === "log") return el.logPanel;
     if (name === "editor") return el.editorPanel;
@@ -2264,6 +2601,7 @@ function clearPanelReflowAnimation(panel) {
     panel.style.transition = "";
     panel.style.transform = "";
     panel.style.willChange = "";
+    panel.removeAttribute("data-panel-reflow");
 }
 
 function animatePanelReflow(previousRects) {
@@ -2289,6 +2627,16 @@ function animatePanelReflow(previousRects) {
             panel.style.transition = "none";
             panel.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
             panel.style.willChange = "transform";
+            panel.setAttribute("data-panel-reflow", "true");
+            if (typeof window !== "undefined") {
+                const previous = window.__fazideLastPanelReflow;
+                const existingPanels = Array.isArray(previous?.panels) ? previous.panels : [];
+                const nextPanels = [...new Set([...existingPanels, panelName])];
+                window.__fazideLastPanelReflow = {
+                    at: Date.now(),
+                    panels: nextPanels,
+                };
+            }
             panel.getBoundingClientRect();
             panel.style.transition = `transform ${PANEL_REFLOW_ANIMATION_MS}ms ${PANEL_REFLOW_ANIMATION_EASING}`;
             panel.style.transform = "";
@@ -2336,14 +2684,16 @@ function getWidthControl(panel) {
 
 function getLayoutBounds() {
     const workspaceRect = el.workspace?.getBoundingClientRect() ?? { width: window.innerWidth, height: window.innerHeight };
-    const maxSidebar = Math.min(1400, Math.max(FILES_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.85));
-    const minSidebar = Math.min(maxSidebar, FILES_PANEL_MIN_WIDTH);
-    const maxLog = Math.min(1600, Math.max(LOG_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.9));
-    const minLog = Math.min(maxLog, LOG_PANEL_MIN_WIDTH);
-    const maxSandbox = Math.min(1600, Math.max(SANDBOX_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.9));
-    const minSandbox = Math.min(maxSandbox, SANDBOX_PANEL_MIN_WIDTH);
-    const maxTools = Math.min(1600, Math.max(TOOLS_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.9));
-    const minTools = Math.min(maxTools, TOOLS_PANEL_MIN_WIDTH);
+    const mins = getAdaptivePanelMinimums();
+    const panelMin = mins.panelMin;
+    const maxSidebar = Math.min(1400, Math.max(panelMin + 120, workspaceRect.width * 0.85));
+    const minSidebar = Math.min(maxSidebar, panelMin);
+    const maxLog = Math.min(1600, Math.max(panelMin + 120, workspaceRect.width * 0.9));
+    const minLog = Math.min(maxLog, panelMin);
+    const maxSandbox = Math.min(1600, Math.max(panelMin + 120, workspaceRect.width * 0.9));
+    const minSandbox = Math.min(maxSandbox, panelMin);
+    const maxTools = Math.min(1600, Math.max(panelMin + 120, workspaceRect.width * 0.9));
+    const minTools = Math.min(maxTools, panelMin);
     const maxBottom = Math.max(160, Math.round(workspaceRect.height * 0.7));
     return {
         logWidth: { min: minLog, max: maxLog },
@@ -2351,8 +2701,9 @@ function getLayoutBounds() {
         sandboxWidth: { min: minSandbox, max: maxSandbox },
         toolsWidth: { min: minTools, max: maxTools },
         panelGap: { min: 0, max: 24 },
-        cornerRadius: { min: 0, max: 0 },
+        cornerRadius: { min: 0, max: 24 },
         bottomHeight: { min: WORKSPACE_ROW_MIN_HEIGHT, max: maxBottom },
+        dockMagnet: { min: 32, max: 220 },
     };
 }
 
@@ -2386,11 +2737,7 @@ function getRowWidth(row) {
 function getEditorMinWidth(row) {
     if (!row) return 0;
     if (!getOpenPanelsInRow(row).includes("editor")) return 0;
-    const minFromStyle = Number.parseFloat(getComputedStyle(el.editorPanel || document.documentElement).minWidth || "0");
-    const cssMin = Number.isFinite(minFromStyle) && minFromStyle > 0
-        ? Math.round(minFromStyle)
-        : EDITOR_SOFT_MIN_WIDTH;
-    return Math.max(EDITOR_SOFT_MIN_WIDTH, cssMin);
+    return getAdaptivePanelMinimums().editorMin;
 }
 
 function getEffectiveBounds(panel, row, baseBounds) {
@@ -2442,7 +2789,7 @@ function showRowGuideAt(y) {
     const guide = ensureRowGuide();
     if (!guide || !el.workspace) return;
     const workspaceRect = el.workspace.getBoundingClientRect();
-    const offset = Math.max(0, Math.round(y - workspaceRect.top));
+    const offset = clamp(Math.round(y - workspaceRect.top), 0, Math.max(0, Math.round(workspaceRect.height)));
     guide.style.top = `${offset}px`;
     guide.setAttribute("data-active", "true");
 }
@@ -2456,36 +2803,55 @@ function showColGuideAt(leftX, rightX = null) {
     const guide = ensureColGuide();
     if (!guide || !el.workspace) return;
     const workspaceRect = el.workspace.getBoundingClientRect();
-    const leftOffset = Math.round(leftX - workspaceRect.left);
+    const maxOffset = Math.max(0, Math.round(workspaceRect.width));
+    const leftOffset = clamp(Math.round(leftX - workspaceRect.left), 0, maxOffset);
     guide.style.left = `${leftOffset}px`;
-    if (Number.isFinite(rightX)) {
-        const gap = Math.max(0, Math.round(rightX - leftX));
-        guide.style.boxShadow = gap >= 1 ? `${gap}px 0 0 0 ${RESIZE_GUIDE_COLOR}` : "none";
-    } else {
-        guide.style.boxShadow = "none";
-    }
+    guide.style.top = "0px";
+    guide.style.bottom = "0px";
     guide.setAttribute("data-active", "true");
 }
 
 function hideColGuide() {
     if (!colGuide) return;
+    colGuide.style.left = "";
+    colGuide.style.top = "";
+    colGuide.style.bottom = "";
     colGuide.removeAttribute("data-active");
-    colGuide.style.boxShadow = "none";
 }
 
 function showColGuideForPanels(leftEl, rightEl) {
     const leftRect = leftEl?.getBoundingClientRect() || null;
     const rightRect = rightEl?.getBoundingClientRect() || null;
+    const workspaceRect = el.workspace?.getBoundingClientRect?.() || null;
+    const applyVerticalSpan = (guide) => {
+        if (!guide || !workspaceRect || (!leftRect && !rightRect)) return;
+        const top = Math.min(
+            Number.isFinite(leftRect?.top) ? leftRect.top : rightRect.top,
+            Number.isFinite(rightRect?.top) ? rightRect.top : leftRect.top
+        );
+        const bottom = Math.max(
+            Number.isFinite(leftRect?.bottom) ? leftRect.bottom : rightRect.bottom,
+            Number.isFinite(rightRect?.bottom) ? rightRect.bottom : leftRect.bottom
+        );
+        const clampedTop = clamp(Math.round(top - workspaceRect.top), 0, Math.round(workspaceRect.height));
+        const clampedBottom = clamp(Math.round(bottom - workspaceRect.top), clampedTop, Math.round(workspaceRect.height));
+        guide.style.top = `${clampedTop}px`;
+        guide.style.bottom = `${Math.max(0, Math.round(workspaceRect.height) - clampedBottom)}px`;
+    };
+
     if (leftRect && rightRect) {
         showColGuideAt(leftRect.right, rightRect.left);
+        applyVerticalSpan(colGuide);
         return;
     }
     if (leftRect) {
         showColGuideAt(leftRect.right);
+        applyVerticalSpan(colGuide);
         return;
     }
     if (rightRect) {
         showColGuideAt(rightRect.left);
+        applyVerticalSpan(colGuide);
     }
 }
 
@@ -2502,11 +2868,17 @@ function sanitizeLayoutState(state = {}) {
     const safeNumber = (value, fallback) => (Number.isFinite(value) ? value : fallback);
     const legacyOrder = Array.isArray(state.panelOrder) ? state.panelOrder : layoutState.panelRows?.top;
     const normalizedRows = normalizePanelRows(state.panelRows ?? { top: legacyOrder, bottom: ["log"] });
+    const hasExplicitPanelRows = state.panelRows !== undefined || Array.isArray(state.panelOrder);
+    const normalizedPanelLayout = hasExplicitPanelRows
+        ? normalizePanelLayout(rowsToPanelLayout(normalizedRows), { fallbackRows: normalizedRows })
+        : normalizePanelLayout(state.panelLayout, { fallbackRows: normalizedRows });
+    const rowsFromLayoutModel = normalizePanelRows(panelLayoutToRows(normalizedPanelLayout));
 
     const next = {
         ...layoutState,
         ...state,
-        panelRows: normalizedRows,
+        panelRows: rowsFromLayoutModel,
+        panelLayout: normalizedPanelLayout,
     };
 
     const legacyOutputOpen = state.outputOpen !== undefined ? Boolean(state.outputOpen) : undefined;
@@ -2538,13 +2910,53 @@ function sanitizeLayoutState(state = {}) {
     next.filesSectionOrder = normalizeFilesSectionOrder(state.filesSectionOrder ?? layoutState.filesSectionOrder);
 
     const fallbackWidth = safeNumber(state.outputWidth, null);
-    next.logWidth = clamp(safeNumber(state.logWidth ?? fallbackWidth, layoutState.logWidth), bounds.logWidth.min, bounds.logWidth.max);
-    next.sidebarWidth = clamp(safeNumber(state.sidebarWidth, layoutState.sidebarWidth), bounds.sidebar.min, bounds.sidebar.max);
-    next.sandboxWidth = clamp(safeNumber(state.sandboxWidth ?? fallbackWidth, layoutState.sandboxWidth), bounds.sandboxWidth.min, bounds.sandboxWidth.max);
-    next.toolsWidth = clamp(safeNumber(state.toolsWidth, layoutState.toolsWidth), bounds.toolsWidth.min, bounds.toolsWidth.max);
-    next.bottomHeight = clamp(safeNumber(state.bottomHeight, layoutState.bottomHeight), bounds.bottomHeight.min, bounds.bottomHeight.max);
+    const baseLogWidth = clamp(safeNumber(state.logWidth ?? fallbackWidth, layoutState.logWidth), bounds.logWidth.min, bounds.logWidth.max);
+    const baseSidebarWidth = clamp(safeNumber(state.sidebarWidth, layoutState.sidebarWidth), bounds.sidebar.min, bounds.sidebar.max);
+    const baseSandboxWidth = clamp(safeNumber(state.sandboxWidth ?? fallbackWidth, layoutState.sandboxWidth), bounds.sandboxWidth.min, bounds.sandboxWidth.max);
+    const baseToolsWidth = clamp(safeNumber(state.toolsWidth, layoutState.toolsWidth), bounds.toolsWidth.min, bounds.toolsWidth.max);
+    const baseBottomHeight = clamp(safeNumber(state.bottomHeight, layoutState.bottomHeight), bounds.bottomHeight.min, bounds.bottomHeight.max);
+
+    next.logWidth = baseLogWidth;
+    next.sidebarWidth = baseSidebarWidth;
+    next.sandboxWidth = baseSandboxWidth;
+    next.toolsWidth = baseToolsWidth;
+    next.bottomHeight = baseBottomHeight;
+
+    const fallbackForRatios = {
+        ...next,
+        logWidth: baseLogWidth,
+        sidebarWidth: baseSidebarWidth,
+        sandboxWidth: baseSandboxWidth,
+        toolsWidth: baseToolsWidth,
+        bottomHeight: baseBottomHeight,
+    };
+    const ratios = normalizePanelRatios(state.panelRatios, fallbackForRatios);
+    next.panelRatios = ratios;
+
+    const rowFor = (panel) => getPanelRowFromRows(next.panelRows, panel);
+    const widthFor = (panel, ratioKey) => {
+        const rowName = rowFor(panel);
+        const rowWidth = resolvePanelRatioRowWidth(rowName);
+        return Math.round(rowWidth * ratios[ratioKey]);
+    };
+    const workspaceHeight = resolveWorkspaceHeightForRatios();
+
+    next.logWidth = clamp(widthFor("log", "logWidth"), bounds.logWidth.min, bounds.logWidth.max);
+    next.sidebarWidth = clamp(widthFor("files", "sidebarWidth"), bounds.sidebar.min, bounds.sidebar.max);
+    next.sandboxWidth = clamp(widthFor("sandbox", "sandboxWidth"), bounds.sandboxWidth.min, bounds.sandboxWidth.max);
+    next.toolsWidth = clamp(widthFor("tools", "toolsWidth"), bounds.toolsWidth.min, bounds.toolsWidth.max);
+    next.bottomHeight = clamp(Math.round(workspaceHeight * ratios.bottomHeight), bounds.bottomHeight.min, bounds.bottomHeight.max);
+
     next.panelGap = clamp(safeNumber(state.panelGap, layoutState.panelGap), bounds.panelGap.min, bounds.panelGap.max);
     next.panelRadius = clamp(safeNumber(state.panelRadius, layoutState.panelRadius), bounds.cornerRadius.min, bounds.cornerRadius.max);
+    next.dockMagnetDistance = clamp(
+        safeNumber(state.dockMagnetDistance, layoutState.dockMagnetDistance),
+        bounds.dockMagnet.min,
+        bounds.dockMagnet.max
+    );
+    next.panelReflowAnimation = state.panelReflowAnimation !== undefined
+        ? Boolean(state.panelReflowAnimation)
+        : layoutState.panelReflowAnimation;
     return next;
 }
 
@@ -2619,9 +3031,18 @@ function normalizeBottomHeight() {
 }
 
 function normalizeLayoutWidths() {
+    syncPanelRowsFromLayoutModel();
+    const rows = enforceDockingRowWidthFit(enforceDockingRowCaps(layoutState.panelRows));
+    setPanelRows(rows);
     normalizeRowWidths("top");
     normalizeRowWidths("bottom");
     normalizeBottomHeight();
+}
+
+function commitLayoutResize() {
+    normalizeLayoutWidths();
+    applyLayout();
+    persistLayout();
 }
 
 function setLayoutPanelOpen(open) {
@@ -2657,9 +3078,15 @@ function syncLayoutControls() {
         return Math.max(0, list.indexOf(name));
     };
     if (el.layoutOrderLog) el.layoutOrderLog.value = String(idx("log"));
+    if (el.layoutRowLog) el.layoutRowLog.value = getPanelRow("log");
     if (el.layoutOrderEditor) el.layoutOrderEditor.value = String(idx("editor"));
+    if (el.layoutRowEditor) el.layoutRowEditor.value = getPanelRow("editor");
     if (el.layoutOrderFiles) el.layoutOrderFiles.value = String(idx("files"));
+    if (el.layoutRowFiles) el.layoutRowFiles.value = getPanelRow("files");
     if (el.layoutOrderSandbox) el.layoutOrderSandbox.value = String(idx("sandbox"));
+    if (el.layoutRowSandbox) el.layoutRowSandbox.value = getPanelRow("sandbox");
+    if (el.layoutOrderTools) el.layoutOrderTools.value = String(idx("tools"));
+    if (el.layoutRowTools) el.layoutRowTools.value = getPanelRow("tools");
     if (el.layoutLogOpen) el.layoutLogOpen.checked = layoutState.logOpen;
     if (el.layoutEditorOpen) el.layoutEditorOpen.checked = layoutState.editorOpen;
     if (el.layoutFilesOpen) el.layoutFilesOpen.checked = layoutState.filesOpen;
@@ -2730,15 +3157,50 @@ function syncLayoutControls() {
         el.layoutCornerRadiusInput.max = bounds.cornerRadius.max;
         el.layoutCornerRadiusInput.value = layoutState.panelRadius;
     }
+    if (el.layoutBottomHeight) {
+        el.layoutBottomHeight.min = bounds.bottomHeight.min;
+        el.layoutBottomHeight.max = bounds.bottomHeight.max;
+        el.layoutBottomHeight.value = layoutState.bottomHeight;
+    }
+    if (el.layoutBottomHeightInput) {
+        el.layoutBottomHeightInput.min = bounds.bottomHeight.min;
+        el.layoutBottomHeightInput.max = bounds.bottomHeight.max;
+        el.layoutBottomHeightInput.value = layoutState.bottomHeight;
+    }
+    if (el.layoutDockMagnet) {
+        el.layoutDockMagnet.min = bounds.dockMagnet.min;
+        el.layoutDockMagnet.max = bounds.dockMagnet.max;
+        el.layoutDockMagnet.value = layoutState.dockMagnetDistance;
+    }
+    if (el.layoutDockMagnetInput) {
+        el.layoutDockMagnetInput.min = bounds.dockMagnet.min;
+        el.layoutDockMagnetInput.max = bounds.dockMagnet.max;
+        el.layoutDockMagnetInput.value = layoutState.dockMagnetDistance;
+    }
+    if (el.layoutPanelAnimation) {
+        el.layoutPanelAnimation.checked = layoutState.panelReflowAnimation;
+    }
 
     if (el.layoutLogWidth) el.layoutLogWidth.disabled = !layoutState.logOpen;
     if (el.layoutLogWidthInput) el.layoutLogWidthInput.disabled = !layoutState.logOpen;
+    if (el.layoutOrderLog) el.layoutOrderLog.disabled = !layoutState.logOpen;
+    if (el.layoutRowLog) el.layoutRowLog.disabled = !layoutState.logOpen;
     if (el.layoutSidebarWidth) el.layoutSidebarWidth.disabled = !layoutState.filesOpen;
     if (el.layoutSidebarWidthInput) el.layoutSidebarWidthInput.disabled = !layoutState.filesOpen;
+    if (el.layoutOrderFiles) el.layoutOrderFiles.disabled = !layoutState.filesOpen;
+    if (el.layoutRowFiles) el.layoutRowFiles.disabled = !layoutState.filesOpen;
+    if (el.layoutOrderEditor) el.layoutOrderEditor.disabled = !layoutState.editorOpen;
+    if (el.layoutRowEditor) el.layoutRowEditor.disabled = !layoutState.editorOpen;
     if (el.layoutSandboxWidth) el.layoutSandboxWidth.disabled = !layoutState.sandboxOpen || isSandboxWindowOpen();
     if (el.layoutSandboxWidthInput) el.layoutSandboxWidthInput.disabled = !layoutState.sandboxOpen || isSandboxWindowOpen();
+    if (el.layoutOrderSandbox) el.layoutOrderSandbox.disabled = !layoutState.sandboxOpen;
+    if (el.layoutRowSandbox) el.layoutRowSandbox.disabled = !layoutState.sandboxOpen;
     if (el.layoutToolsWidth) el.layoutToolsWidth.disabled = !layoutState.toolsOpen;
     if (el.layoutToolsWidthInput) el.layoutToolsWidthInput.disabled = !layoutState.toolsOpen;
+    if (el.layoutOrderTools) el.layoutOrderTools.disabled = !layoutState.toolsOpen;
+    if (el.layoutRowTools) el.layoutRowTools.disabled = !layoutState.toolsOpen;
+    if (el.layoutBottomHeight) el.layoutBottomHeight.disabled = !rowHasOpenPanels("bottom");
+    if (el.layoutBottomHeightInput) el.layoutBottomHeightInput.disabled = !rowHasOpenPanels("bottom");
     if (el.layoutSandboxOpen) el.layoutSandboxOpen.disabled = isSandboxWindowOpen();
 }
 
@@ -2782,6 +3244,8 @@ function checkStorageHealth() {
         localStorage.removeItem(key);
         setHealth(health.storage, "ok", "Storage: OK");
         pushDiag("info", "Storage check passed.");
+        const backend = getStorageBackendInfo();
+        pushDiag("info", `Storage backend: ${backend.kind}${backend.indexedDbAvailable ? " (IndexedDB available)" : ""}.`);
     } catch (err) {
         setHealth(health.storage, "error", "Storage: Blocked");
         pushDiag("error", "Storage unavailable. Browser blocked localStorage.");
@@ -2807,6 +3271,30 @@ function wireDiagnostics() {
         const detail = event.detail || {};
         pushDiag("warn", detail.reason || "Clipboard blocked.");
         ensureToolsOpen("Tools opened for diagnostics.", { tab: "diagnostics" });
+    });
+
+    window.addEventListener("fazide:storage-journal-commit", (event) => {
+        const detail = event.detail || {};
+        setHealth(health.storage, "ok", "Storage: OK");
+        pushDiag("info", `Storage journal committed (${detail.entryCount || 0} entries).`);
+    });
+
+    window.addEventListener("fazide:storage-journal-recovered", (event) => {
+        const detail = event.detail || {};
+        setHealth(health.storage, "warn", "Storage: Recovered");
+        pushDiag("warn", `Recovered pending storage journal (${detail.entryCount || 0} entries).`);
+        ensureToolsOpen("Tools opened for diagnostics.", { tab: "diagnostics" });
+    });
+
+    window.addEventListener("fazide:ui-zoom-changed", (event) => {
+        const detail = event.detail || {};
+        if (detail.source === "boot") return;
+        const next = normalizeUiZoom(detail.next);
+        if (next >= 140 || next <= 80) {
+            pushDiag("warn", `UI zoom set to ${next}% (extreme scale).`);
+            return;
+        }
+        pushDiag("info", `UI zoom set to ${next}%.`);
     });
 }
 
@@ -4978,7 +5466,6 @@ function initDocking() {
     let dragOffset = { x: 0, y: 0 };
     let dragZoneRects = [];
     let lastGhostPoint = null;
-    let centerZoneTouched = false;
 
     const updateActiveZone = (zone) => {
         if (activeZone === zone) return;
@@ -5081,7 +5568,7 @@ function initDocking() {
             }
         });
 
-        return nearestDistance <= DOCK_ZONE_MAGNET_DISTANCE ? nearest : null;
+        return nearestDistance <= getDockZoneMagnetDistance() ? nearest : null;
     };
 
     const movePanelHorizontally = (panel, direction) => {
@@ -5140,8 +5627,7 @@ function initDocking() {
         if (!activePanel) return;
         const overlayCenterActive = overlay.getAttribute("data-active-zone") === "center";
         if (
-            centerZoneTouched
-            || overlayCenterActive
+            overlayCenterActive
             || (
                 dropPoint
                 && (
@@ -5166,16 +5652,16 @@ function initDocking() {
             return;
         }
         if (zoneName === "left") {
-            movePanelToRow(activePanel, "top", 0);
+            movePanelToRow(activePanel, "top", 0, { animatePanels: true });
             return;
         }
         if (zoneName === "right") {
-            movePanelToRow(activePanel, "top", (layoutState.panelRows?.top || []).length);
+            movePanelToRow(activePanel, "top", (layoutState.panelRows?.top || []).length, { animatePanels: true });
             return;
         }
         if (zoneName === "bottom") {
             const dropIndex = getDropIndexForRow("bottom", dropPoint?.x, activePanel);
-            movePanelToRow(activePanel, "bottom", dropIndex);
+            movePanelToRow(activePanel, "bottom", dropIndex, { animatePanels: true });
         }
     };
 
@@ -5238,7 +5724,6 @@ function initDocking() {
             captureDragZoneRects();
             setOverlayOpen(true);
             document.body?.classList.add("dock-dragging");
-            centerZoneTouched = false;
             handle.setPointerCapture(event.pointerId);
 
             let dragMoveFrame = null;
@@ -5249,9 +5734,6 @@ function initDocking() {
                 if (!state) return;
                 const zone = resolveZoneAtPoint(state.x, state.y);
                 updateActiveZone(zone);
-                if (zone?.getAttribute("data-dock-zone") === "center" || isPointInWorkspaceCenterBand(state.x, state.y)) {
-                    centerZoneTouched = true;
-                }
                 if (dragGhost) {
                     const nextX = state.x - dragOffset.x;
                     const nextY = state.y - dragOffset.y;
@@ -5316,7 +5798,6 @@ function initDocking() {
                     activePanelEl = null;
                     dragZoneRects = [];
                     lastGhostPoint = null;
-                    centerZoneTouched = false;
                 }
             };
 
@@ -5341,6 +5822,7 @@ function initSplitters() {
             if (!isPanelOpen(panel)) return;
             event.preventDefault();
             const pointerId = event.pointerId;
+            const zoomScale = Math.max(0.01, normalizeUiZoom(uiZoomPercent) / 100);
             document.body?.setAttribute("data-resize", "col");
             const startX = event.clientX;
             const startWidth = getWidth();
@@ -5367,7 +5849,7 @@ function initSplitters() {
 
             const applyMove = (moveEvent) => {
                 if (!moveEvent) return;
-                const delta = moveEvent.clientX - startX;
+                const delta = (moveEvent.clientX - startX) / zoomScale;
                 const snapEnabled = !moveEvent.altKey;
                 if (leftControl && rightControl) {
                     const minDelta = Math.max(
@@ -5383,23 +5865,27 @@ function initSplitters() {
                     const nextDelta = clamp(snapped, minDelta, maxDelta);
                     leftControl.set(startLeft + nextDelta);
                     rightControl.set(startRight - nextDelta);
+                    normalizeRowWidths(row);
                     showColGuideForPanels(leftEl, rightEl);
                     return;
                 }
                 if (leftControl && !rightControl) {
                     const next = snapDimension(startLeft + delta, leftEffective.min, leftEffective.max, { enabled: snapEnabled });
                     leftControl.set(next);
+                    normalizeRowWidths(row);
                     showColGuideForPanels(leftEl, rightEl);
                     return;
                 }
                 if (!leftControl && rightControl) {
                     const next = snapDimension(startRight - delta, rightEffective.min, rightEffective.max, { enabled: snapEnabled });
                     rightControl.set(next);
+                    normalizeRowWidths(row);
                     showColGuideForPanels(leftEl, rightEl);
                     return;
                 }
                 const next = snapDimension(startWidth + delta, bounds.min, bounds.max, { enabled: snapEnabled });
                 setWidth(next);
+                normalizeRowWidths(row);
                 showColGuideForPanels(leftEl, rightEl);
             };
 
@@ -5432,7 +5918,7 @@ function initSplitters() {
                 setResizeActive([leftEl, rightEl], false);
                 hideColGuide();
                 hideRowGuide();
-                persistLayout();
+                commitLayoutResize();
             };
 
             const onCancel = (cancelEvent) => {
@@ -5501,7 +5987,7 @@ function initSplitters() {
             if (panel === "files") setWidth(fallback.sidebarWidth);
             if (panel === "sandbox") setWidth(fallback.sandboxWidth);
             if (panel === "tools") setWidth(fallback.toolsWidth);
-            persistLayout();
+            commitLayoutResize();
             pushDiag("info", `${label} width reset.`);
         });
 
@@ -5546,7 +6032,7 @@ function initSplitters() {
                     const next = clamp(getWidth() + dir * step, bounds.min, bounds.max);
                     setWidth(next);
                 }
-                persistLayout();
+                commitLayoutResize();
                 event.preventDefault();
             }
         });
@@ -5563,6 +6049,7 @@ function initSplitters() {
             if (!rowHasOpenPanels("bottom")) return;
             event.preventDefault();
             const pointerId = event.pointerId;
+            const zoomScale = Math.max(0.01, normalizeUiZoom(uiZoomPercent) / 100);
             document.body?.setAttribute("data-resize", "row");
             const startY = event.clientY;
             const startHeight = layoutState.bottomHeight;
@@ -5581,7 +6068,7 @@ function initSplitters() {
 
             const applyMove = (moveEvent) => {
                 if (!moveEvent) return;
-                const delta = moveEvent.clientY - startY;
+                const delta = (moveEvent.clientY - startY) / zoomScale;
                 const next = snapDimension(startHeight - delta, bounds.min, maxBottom, { enabled: !moveEvent.altKey });
                 setBottomHeight(next);
                 const boundary = getRowBoundaryY();
@@ -5617,7 +6104,7 @@ function initSplitters() {
                 setResizeActive([el.workspaceTop, el.workspaceBottom], false);
                 hideRowGuide();
                 hideColGuide();
-                persistLayout();
+                commitLayoutResize();
             };
 
             const onCancel = (cancelEvent) => {
@@ -5683,7 +6170,7 @@ function initSplitters() {
         splitter.addEventListener("dblclick", () => {
             const fallback = LAYOUT_PRESETS.studio;
             setBottomHeight(fallback.bottomHeight);
-            persistLayout();
+            commitLayoutResize();
             pushDiag("info", "Bottom dock height reset.");
         });
 
@@ -5697,395 +6184,13 @@ function initSplitters() {
                 const maxBottom = Math.max(bounds.min, Math.min(bounds.max, workspaceHeight - minTop));
                 const next = clamp(layoutState.bottomHeight - dir * step, bounds.min, maxBottom);
                 setBottomHeight(next);
-                persistLayout();
+                commitLayoutResize();
                 event.preventDefault();
             }
         });
     };
 
     wireRowSplitter(el.splitRow);
-}
-
-function initEdgeResizing() {
-    if (!el.workspace) return;
-
-    ensureRowGuide();
-    ensureColGuide();
-
-    const getNeighbor = (row, panel, dir) => {
-        const list = layoutState.panelRows?.[row] || [];
-        const idx = list.indexOf(panel);
-        if (idx === -1) return null;
-        const step = dir === "left" ? -1 : 1;
-        let i = idx + step;
-        while (i >= 0 && i < list.length) {
-            const name = list[i];
-            if (isPanelOpen(name)) return name;
-            i += step;
-        }
-        return null;
-    };
-
-    const getEdgeDir = (panel, rect, x) => {
-        const adaptiveGrab = rect.width <= EDGE_RESIZE_GRAB * 10
-            ? Math.max(EDGE_RESIZE_GRAB, rect.width / 2)
-            : EDGE_RESIZE_GRAB;
-        const leftDistance = x - rect.left;
-        const rightDistance = rect.right - x;
-        const nearLeft = leftDistance <= adaptiveGrab;
-        const nearRight = rightDistance <= adaptiveGrab;
-        if (!nearLeft && !nearRight) return null;
-
-        const row = getPanelRow(panel);
-        const hasLeftNeighbor = Boolean(getNeighbor(row, panel, "left"));
-        const hasRightNeighbor = Boolean(getNeighbor(row, panel, "right"));
-
-        if (!hasLeftNeighbor && !hasRightNeighbor) return null;
-
-        if (nearLeft && nearRight) {
-            if (hasLeftNeighbor && !hasRightNeighbor) return "left";
-            if (!hasLeftNeighbor && hasRightNeighbor) return "right";
-            const centerX = rect.left + (rect.width / 2);
-            return x < centerX ? "left" : "right";
-        }
-
-        if (nearLeft) {
-            if (hasLeftNeighbor) return "left";
-            return hasRightNeighbor ? "right" : null;
-        }
-
-        if (nearRight) {
-            if (hasRightNeighbor) return "right";
-            return hasLeftNeighbor ? "left" : null;
-        }
-
-        return null;
-    };
-
-    const startRowResize = (startEvent) => {
-        if (!rowHasOpenPanels("bottom")) return;
-        const bounds = getLayoutBounds().bottomHeight;
-        const pointerId = startEvent.pointerId;
-        const startY = startEvent.clientY;
-        const startHeight = layoutState.bottomHeight;
-        const workspaceHeight = el.workspace?.getBoundingClientRect().height || 0;
-        const minTop = rowHasOpenPanels("top") ? WORKSPACE_ROW_MIN_HEIGHT : 0;
-        const maxBottom = Math.max(bounds.min, Math.min(bounds.max, workspaceHeight - minTop));
-
-        document.body?.setAttribute("data-resize", "row");
-        document.body?.removeAttribute("data-resize-preview");
-        setResizeActive([el.workspaceTop, el.workspaceBottom], true);
-        hideColGuide();
-        const boundaryStart = getRowBoundaryY();
-        if (boundaryStart !== null) showRowGuideAt(boundaryStart);
-        let moveFrame = null;
-        let pendingMoveEvent = null;
-        let ended = false;
-
-        const applyMove = (moveEvent) => {
-            if (!moveEvent) return;
-            const delta = moveEvent.clientY - startY;
-            const next = snapDimension(startHeight - delta, bounds.min, maxBottom, { enabled: !moveEvent.altKey });
-            setBottomHeight(next);
-            const boundary = getRowBoundaryY();
-            if (boundary !== null) showRowGuideAt(boundary);
-        };
-
-        const onMove = (moveEvent) => {
-            pendingMoveEvent = moveEvent;
-            if (moveFrame != null) return;
-            moveFrame = requestAnimationFrame(() => {
-                moveFrame = null;
-                const next = pendingMoveEvent;
-                pendingMoveEvent = null;
-                applyMove(next);
-            });
-        };
-
-        const onEnd = (event) => {
-            if (ended) return;
-            if (Number.isFinite(event?.pointerId) && event.pointerId !== pointerId) return;
-            ended = true;
-            if (moveFrame != null) {
-                cancelAnimationFrame(moveFrame);
-                moveFrame = null;
-            }
-            applyMove(pendingMoveEvent);
-            pendingMoveEvent = null;
-            el.workspace.removeEventListener("pointermove", onMove);
-            el.workspace.removeEventListener("pointerup", onEnd);
-            el.workspace.removeEventListener("pointercancel", onEnd);
-            document.body?.removeAttribute("data-resize");
-            document.body?.removeAttribute("data-resize-preview");
-            setResizeActive([el.workspaceTop, el.workspaceBottom], false);
-            hideRowGuide();
-            hideColGuide();
-            persistLayout();
-            if (Number.isFinite(pointerId)) {
-                try {
-                    el.workspace.releasePointerCapture(pointerId);
-                } catch (err) {
-                    // no-op
-                }
-            }
-            el.workspace.removeEventListener("lostpointercapture", onLostPointerCapture);
-            window.removeEventListener("pointerup", onWindowPointerEnd, true);
-            window.removeEventListener("pointercancel", onWindowPointerEnd, true);
-            window.removeEventListener("blur", onWindowBlur, true);
-        };
-
-        const onWindowPointerEnd = (endEvent) => {
-            if (Number.isFinite(endEvent?.pointerId) && endEvent.pointerId !== pointerId) return;
-            onEnd(endEvent);
-        };
-
-        const onWindowBlur = () => {
-            onEnd(null);
-        };
-
-        const onLostPointerCapture = (lostEvent) => {
-            if (Number.isFinite(lostEvent?.pointerId) && lostEvent.pointerId !== pointerId) return;
-            onEnd(lostEvent);
-        };
-
-        if (Number.isFinite(pointerId)) {
-            try {
-                el.workspace.setPointerCapture(pointerId);
-            } catch (err) {
-                // no-op
-            }
-        }
-        el.workspace.addEventListener("pointermove", onMove);
-        el.workspace.addEventListener("pointerup", onEnd);
-        el.workspace.addEventListener("pointercancel", onEnd);
-        el.workspace.addEventListener("lostpointercapture", onLostPointerCapture);
-        window.addEventListener("pointerup", onWindowPointerEnd, true);
-        window.addEventListener("pointercancel", onWindowPointerEnd, true);
-        window.addEventListener("blur", onWindowBlur, true);
-    };
-
-    const startResize = (panel, dir, startEvent) => {
-        const row = getPanelRow(panel);
-        const neighbor = getNeighbor(row, panel, dir);
-        const pointerId = startEvent.pointerId;
-
-        const leftName = dir === "right" ? panel : neighbor;
-        const rightName = dir === "right" ? neighbor : panel;
-        const leftControl = getWidthControl(leftName);
-        const rightControl = getWidthControl(rightName);
-
-        if (!leftControl && !rightControl) return;
-
-        const leftBounds = leftControl ? getLayoutBounds()[leftControl.boundsKey] : null;
-        const rightBounds = rightControl ? getLayoutBounds()[rightControl.boundsKey] : null;
-        const leftEffective = leftControl ? getEffectiveBounds(leftName, row, leftBounds) : null;
-        const rightEffective = rightControl ? getEffectiveBounds(rightName, row, rightBounds) : null;
-        const startLeft = leftControl ? leftControl.get() : 0;
-        const startRight = rightControl ? rightControl.get() : 0;
-        const leftEl = getPanelElement(leftName);
-        const rightEl = getPanelElement(rightName);
-        const startX = startEvent.clientX;
-
-        document.body?.setAttribute("data-resize", "col");
-        document.body?.removeAttribute("data-resize-preview");
-        setResizeActive([leftEl, rightEl], true);
-        hideRowGuide();
-        showColGuideForPanels(leftEl, rightEl);
-        let moveFrame = null;
-        let pendingMoveEvent = null;
-        let ended = false;
-
-        const applyMove = (moveEvent) => {
-            if (!moveEvent) return;
-            const delta = moveEvent.clientX - startX;
-            const snapEnabled = !moveEvent.altKey;
-            if (leftControl && rightControl) {
-                const minDelta = Math.max(
-                    leftEffective.min - startLeft,
-                    startRight - rightEffective.max
-                );
-                const maxDelta = Math.min(
-                    leftEffective.max - startLeft,
-                    startRight - rightEffective.min
-                );
-                const clamped = clamp(delta, minDelta, maxDelta);
-                const snapped = snapEnabled ? Math.round(clamped / RESIZE_SNAP_STEP) * RESIZE_SNAP_STEP : clamped;
-                const nextDelta = clamp(snapped, minDelta, maxDelta);
-                leftControl.set(startLeft + nextDelta);
-                rightControl.set(startRight - nextDelta);
-                showColGuideForPanels(leftEl, rightEl);
-                return;
-            }
-            if (leftControl && !rightControl) {
-                const next = snapDimension(startLeft + delta, leftEffective.min, leftEffective.max, { enabled: snapEnabled });
-                leftControl.set(next);
-                showColGuideForPanels(leftEl, rightEl);
-                return;
-            }
-            if (!leftControl && rightControl) {
-                const next = snapDimension(startRight - delta, rightEffective.min, rightEffective.max, { enabled: snapEnabled });
-                rightControl.set(next);
-                showColGuideForPanels(leftEl, rightEl);
-            }
-        };
-
-        const onMove = (moveEvent) => {
-            pendingMoveEvent = moveEvent;
-            if (moveFrame != null) return;
-            moveFrame = requestAnimationFrame(() => {
-                moveFrame = null;
-                const next = pendingMoveEvent;
-                pendingMoveEvent = null;
-                applyMove(next);
-            });
-        };
-
-        const onEnd = (event) => {
-            if (ended) return;
-            if (Number.isFinite(event?.pointerId) && event.pointerId !== pointerId) return;
-            ended = true;
-            if (moveFrame != null) {
-                cancelAnimationFrame(moveFrame);
-                moveFrame = null;
-            }
-            applyMove(pendingMoveEvent);
-            pendingMoveEvent = null;
-            el.workspace.removeEventListener("pointermove", onMove);
-            el.workspace.removeEventListener("pointerup", onEnd);
-            el.workspace.removeEventListener("pointercancel", onEnd);
-            document.body?.removeAttribute("data-resize");
-            document.body?.removeAttribute("data-resize-preview");
-            setResizeActive([leftEl, rightEl], false);
-            hideColGuide();
-            hideRowGuide();
-            persistLayout();
-            if (Number.isFinite(pointerId)) {
-                try {
-                    el.workspace.releasePointerCapture(pointerId);
-                } catch (err) {
-                    // no-op
-                }
-            }
-            el.workspace.removeEventListener("lostpointercapture", onLostPointerCapture);
-            window.removeEventListener("pointerup", onWindowPointerEnd, true);
-            window.removeEventListener("pointercancel", onWindowPointerEnd, true);
-            window.removeEventListener("blur", onWindowBlur, true);
-        };
-
-        const onWindowPointerEnd = (endEvent) => {
-            if (Number.isFinite(endEvent?.pointerId) && endEvent.pointerId !== pointerId) return;
-            onEnd(endEvent);
-        };
-
-        const onWindowBlur = () => {
-            onEnd(null);
-        };
-
-        const onLostPointerCapture = (lostEvent) => {
-            if (Number.isFinite(lostEvent?.pointerId) && lostEvent.pointerId !== pointerId) return;
-            onEnd(lostEvent);
-        };
-
-        if (Number.isFinite(pointerId)) {
-            try {
-                el.workspace.setPointerCapture(pointerId);
-            } catch (err) {
-                // no-op
-            }
-        }
-        el.workspace.addEventListener("pointermove", onMove);
-        el.workspace.addEventListener("pointerup", onEnd);
-        el.workspace.addEventListener("pointercancel", onEnd);
-        el.workspace.addEventListener("lostpointercapture", onLostPointerCapture);
-        window.addEventListener("pointerup", onWindowPointerEnd, true);
-        window.addEventListener("pointercancel", onWindowPointerEnd, true);
-        window.addEventListener("blur", onWindowBlur, true);
-    };
-
-    el.workspace.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        if (event.target.closest(".drag-handle")) return;
-        const boundary = getRowBoundaryY();
-        if (boundary !== null && Math.abs(event.clientY - boundary) <= EDGE_RESIZE_GRAB) {
-            event.preventDefault();
-            startRowResize(event);
-            return;
-        }
-        const panelEl = event.target.closest(".card");
-        if (!panelEl || !el.workspace.contains(panelEl)) return;
-        const panel = getPanelNameFromElement(panelEl);
-        if (!panel) return;
-        const rect = panelEl.getBoundingClientRect();
-        const dir = getEdgeDir(panel, rect, event.clientX);
-        if (!dir) return;
-        event.preventDefault();
-        startResize(panel, dir, event);
-    });
-
-    let previewFrame = null;
-    let pendingPreviewEvent = null;
-
-    const applyResizePreview = (event) => {
-        if (!event) return;
-        if (document.body?.hasAttribute("data-resize")) return;
-
-        if (rowHasOpenPanels("bottom")) {
-            const boundary = getRowBoundaryY();
-            if (boundary !== null && Math.abs(event.clientY - boundary) <= EDGE_RESIZE_GRAB) {
-                document.body?.setAttribute("data-resize-preview", "row");
-                showRowGuideAt(boundary);
-                hideColGuide();
-                return;
-            }
-        }
-
-        hideRowGuide();
-        const panelEl = event.target.closest(".card");
-        if (!panelEl || !el.workspace.contains(panelEl)) {
-            document.body?.removeAttribute("data-resize-preview");
-            hideColGuide();
-            return;
-        }
-
-        const rect = panelEl.getBoundingClientRect();
-        const panel = getPanelNameFromElement(panelEl);
-        if (!panel) {
-            document.body?.removeAttribute("data-resize-preview");
-            hideColGuide();
-            return;
-        }
-        const dir = getEdgeDir(panel, rect, event.clientX);
-        if (dir) {
-            document.body?.setAttribute("data-resize-preview", "col");
-            const edgeX = dir === "left" ? rect.left : rect.right;
-            showColGuideAt(edgeX);
-        } else {
-            document.body?.removeAttribute("data-resize-preview");
-            hideColGuide();
-        }
-    };
-
-    el.workspace.addEventListener("pointermove", (event) => {
-        pendingPreviewEvent = event;
-        if (previewFrame != null) return;
-        previewFrame = requestAnimationFrame(() => {
-            previewFrame = null;
-            const next = pendingPreviewEvent;
-            pendingPreviewEvent = null;
-            applyResizePreview(next);
-        });
-    });
-
-    el.workspace.addEventListener("pointerleave", () => {
-        if (previewFrame != null) {
-            cancelAnimationFrame(previewFrame);
-            previewFrame = null;
-        }
-        pendingPreviewEvent = null;
-        document.body?.removeAttribute("data-resize-preview");
-        hideRowGuide();
-        hideColGuide();
-    });
 }
 
 function isPanelOpen(panel) {
@@ -6171,10 +6276,10 @@ function setPanelOpen(panel, open) {
         layoutState.sandboxOpen = open;
     }
     if (panel === "tools") layoutState.toolsOpen = open;
-    layoutState.panelRows = enforceDockingRowCaps(layoutState.panelRows, {
+    setPanelRows(enforceDockingRowCaps(layoutState.panelRows, {
         preferredRow: getPanelRow(panel),
         preservePanel: open ? panel : null,
-    });
+    }));
     applyLayout();
     syncPanelToggles();
     persistLayout();
@@ -6198,7 +6303,10 @@ function setPanelOrder(panel, index, { animatePanels = true } = {}) {
     if (clamped === currentIndex) return;
     order.splice(currentIndex, 1);
     order.splice(clamped, 0, panel);
-    layoutState.panelRows[row] = order;
+    setPanelRows({
+        ...layoutState.panelRows,
+        [row]: order,
+    });
     applyLayout({ animatePanels });
     persistLayout();
     syncLayoutControls();
@@ -6223,7 +6331,7 @@ function movePanelToRow(panel, row, index = 0, { animatePanels = true } = {}) {
     const target = nextRows[targetRow];
     const clamped = clamp(Number(index), 0, target.length);
     target.splice(clamped, 0, panel);
-    layoutState.panelRows = enforceDockingRowCaps(nextRows, { preferredRow: targetRow, preservePanel: panel });
+    setPanelRows(enforceDockingRowCaps(nextRows, { preferredRow: targetRow, preservePanel: panel }));
     applyLayout({ animatePanels });
     persistLayout();
     syncLayoutControls();
@@ -6239,8 +6347,27 @@ function setPanelGap(value) {
 function setPanelRadius(value) {
     layoutState.panelRadius = Math.round(value);
     if (document.documentElement) {
-        document.documentElement.style.setProperty("--radius", `${layoutState.panelRadius}px`);
-        document.documentElement.style.setProperty("--radius-sm", `${Math.max(4, Math.round(layoutState.panelRadius * 0.8))}px`);
+        const radius = Math.max(0, layoutState.panelRadius);
+        const hasRadius = radius > 0;
+        const radiusSm = hasRadius ? Math.max(4, Math.round(radius * 0.8)) : 0;
+        const radiusXs = hasRadius ? Math.max(2, Math.round(radius * 0.6)) : 0;
+        const radiusXxs = hasRadius ? Math.max(1, Math.round(radius * 0.45)) : 0;
+        const radiusMd = hasRadius ? Math.max(radius, Math.round(radius * 1.1)) : 0;
+        const radiusLg = hasRadius ? Math.max(radiusMd, Math.round(radius * 1.35)) : 0;
+        const radiusXl = hasRadius ? Math.max(radiusLg, Math.round(radius * 1.6)) : 0;
+        const radius2xl = hasRadius ? Math.max(radiusXl, Math.round(radius * 1.9)) : 0;
+        const radius3xl = hasRadius ? Math.max(radius2xl, Math.round(radius * 2.2)) : 0;
+
+        document.documentElement.style.setProperty("--radius", `${radius}px`);
+        document.documentElement.style.setProperty("--radius-sm", `${radiusSm}px`);
+        document.documentElement.style.setProperty("--radius-xs", `${radiusXs}px`);
+        document.documentElement.style.setProperty("--radius-xxs", `${radiusXxs}px`);
+        document.documentElement.style.setProperty("--radius-md", `${radiusMd}px`);
+        document.documentElement.style.setProperty("--radius-lg", `${radiusLg}px`);
+        document.documentElement.style.setProperty("--radius-xl", `${radiusXl}px`);
+        document.documentElement.style.setProperty("--radius-2xl", `${radius2xl}px`);
+        document.documentElement.style.setProperty("--radius-3xl", `${radius3xl}px`);
+        document.documentElement.style.setProperty("--radius-pill", hasRadius ? "999px" : "0px");
     }
 }
 
@@ -6248,7 +6375,14 @@ function applyLayoutPreset(name, { animatePanels = true } = {}) {
     const preset = LAYOUT_PRESETS[name];
     if (!preset) return;
     activeLayoutPresetName = name;
-    layoutState = sanitizeLayoutState({ ...layoutState, ...preset });
+    const nextState = {
+        ...layoutState,
+        dockMagnetDistance: DEFAULT_LAYOUT_STATE.dockMagnetDistance,
+        panelReflowAnimation: DEFAULT_LAYOUT_STATE.panelReflowAnimation,
+        ...preset,
+    };
+    delete nextState.panelRatios;
+    layoutState = sanitizeLayoutState(nextState);
     applyLayout({ animatePanels });
     persistLayout();
     syncLayoutControls();
@@ -7431,6 +7565,64 @@ function logWorkspaceSafetyAdjustments(summary, { label = "Workspace safety limi
     logger.append("warn", [`${label}${suffix}`]);
 }
 
+function resolveWorkspacePathCollisions(payload, { source = "workspace" } = {}) {
+    if (!payload || typeof payload !== "object") return payload;
+    const list = Array.isArray(payload.files) ? payload.files : [];
+    if (!list.length) return payload;
+
+    const usedPaths = new Set();
+    const remapped = [];
+    const normalizedFiles = list.map((entry) => {
+        const file = normalizeFile(entry);
+        if (!file) return null;
+        const originalPath = normalizePathSlashes(String(file.name || "").trim());
+        if (!originalPath) return file;
+        const nextPath = ensureUniquePathInSet(originalPath, usedPaths);
+        if (nextPath !== originalPath) {
+            remapped.push([originalPath, nextPath]);
+        }
+        return {
+            ...file,
+            name: nextPath,
+        };
+    }).filter(Boolean);
+
+    if (!remapped.length) {
+        return {
+            ...payload,
+            files: normalizedFiles,
+        };
+    }
+
+    return {
+        ...payload,
+        files: normalizedFiles,
+        folders: normalizeFolderList([
+            ...(Array.isArray(payload.folders) ? payload.folders : []),
+            ...collectFolderPaths(normalizedFiles, []),
+        ]),
+        _pathRemapSummary: {
+            source: String(source || "workspace"),
+            remappedPaths: remapped.length,
+            samples: remapped.slice(0, 5),
+            hasAdjustments: remapped.length > 0,
+        },
+    };
+}
+
+function logWorkspacePathRemaps(summary, { label = "Workspace path safety applied." } = {}) {
+    if (!summary?.hasAdjustments) return;
+    const count = Math.max(0, Number(summary.remappedPaths) || 0);
+    const samples = (Array.isArray(summary.samples) ? summary.samples : [])
+        .slice(0, 3)
+        .map((entry) => `${entry?.[0] || ""} -> ${entry?.[1] || ""}`)
+        .filter(Boolean)
+        .join(", ");
+    const suffix = count > 3 ? "..." : "";
+    const detail = samples ? ` (${samples}${suffix})` : "";
+    logger.append("warn", [`${label} Remapped ${count} path collision${count === 1 ? "" : "s"}${detail}.`]);
+}
+
 function pruneTrashEntries() {
     const now = Date.now();
     trashFiles = (Array.isArray(trashFiles) ? trashFiles : [])
@@ -7699,7 +7891,13 @@ function persistWorkspaceSnapshot(reason = "autosave") {
         ...buildWorkspacePayload(),
         snapshotReason: reason,
     };
-    save(STORAGE.WORKSPACE_SNAPSHOT, JSON.stringify(payload));
+    const value = JSON.stringify(payload);
+    const ok = saveBatchAtomic([
+        { key: STORAGE.WORKSPACE_SNAPSHOT, value },
+    ], { label: `workspace-snapshot:${reason}` });
+    if (!ok) {
+        save(STORAGE.WORKSPACE_SNAPSHOT, value);
+    }
 }
 
 function clearPendingDeleteUndo() {
@@ -9387,6 +9585,20 @@ function closeShortcutHelp({ focusEditor = true } = {}) {
     if (focusEditor) editor.focus();
 }
 
+const FOUNDATION_COMMAND_IDS = Object.freeze({
+    RUN_EXECUTE: "foundation.run.execute",
+    FILE_SAVE_ACTIVE: "foundation.file.saveActive",
+    FILE_SAVE_ALL: "foundation.file.saveAll",
+    FILE_NEW: "foundation.file.new",
+    SEARCH_COMMAND_PALETTE: "foundation.search.commandPalette",
+    SEARCH_QUICK_OPEN: "foundation.search.quickOpen",
+    WORKSPACE_IMPORT: "foundation.workspace.import",
+    WORKSPACE_OPEN_FOLDER: "foundation.workspace.openFolder",
+    WORKSPACE_SAVE_FOLDER: "foundation.workspace.saveFolder",
+    HISTORY_UNDO: "foundation.history.undo",
+    HISTORY_REDO: "foundation.history.redo",
+});
+
 function isCommandEnabled(entry) {
     if (!entry) return false;
     if (typeof entry.enabled === "function") {
@@ -9399,8 +9611,143 @@ function isCommandEnabled(entry) {
     return Boolean(entry.enabled ?? true);
 }
 
+function executeRegisteredCommand(commandId, fallback = null) {
+    const result = commandRegistry.execute(commandId);
+    if (result?.ok) {
+        return result.value;
+    }
+    if (result?.reason === "error") {
+        logger.append("error", [`Command \"${commandId}\" failed: ${String(result.error?.message || result.error)}`]);
+        status.set("Command failed");
+        return false;
+    }
+    if (typeof fallback === "function") {
+        return fallback();
+    }
+    return false;
+}
+
+function registerFoundationCommands() {
+    const commands = [
+        {
+            id: FOUNDATION_COMMAND_IDS.RUN_EXECUTE,
+            label: "Run: Execute",
+            keywords: "run execute sandbox preview",
+            shortcut: "Ctrl/Cmd+Enter",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => run(),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.FILE_SAVE_ACTIVE,
+            label: "File: Save Active",
+            keywords: "save file write",
+            shortcut: "Ctrl/Cmd+S",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: () => Boolean(getActiveFile()),
+            run: () => saveActiveFile({ announce: true }),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.FILE_SAVE_ALL,
+            label: "File: Save All",
+            keywords: "save all write",
+            shortcut: "Ctrl/Cmd+Shift+S",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => saveAllFiles({ announce: true }),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.FILE_NEW,
+            label: "File: New",
+            keywords: "create file new",
+            shortcut: "Ctrl/Cmd+N",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => createFile(),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.SEARCH_COMMAND_PALETTE,
+            label: "Search: Command Palette",
+            keywords: "search command palette",
+            shortcut: "Ctrl/Cmd+Shift+P",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => openCommandPalette(),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.SEARCH_QUICK_OPEN,
+            label: "Search: Quick Open",
+            keywords: "quick open files",
+            shortcut: "Ctrl/Cmd+P",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => openQuickOpen(),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.WORKSPACE_IMPORT,
+            label: "Workspace: Import",
+            keywords: "workspace import files",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => triggerWorkspaceImportPicker(),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.WORKSPACE_OPEN_FOLDER,
+            label: "Workspace: Open Folder",
+            keywords: "workspace open local folder",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => openLocalProjectFolder(),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.WORKSPACE_SAVE_FOLDER,
+            label: "Workspace: Save To Folder",
+            keywords: "workspace save local folder",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => saveWorkspaceToLocalFolder(),
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.HISTORY_UNDO,
+            label: "History: Undo",
+            keywords: "undo file history",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => {
+                if (!undoFileHistory()) {
+                    undoLastDelete();
+                }
+            },
+        },
+        {
+            id: FOUNDATION_COMMAND_IDS.HISTORY_REDO,
+            label: "History: Redo",
+            keywords: "redo file history",
+            includeInPalette: false,
+            source: "foundation",
+            enabled: true,
+            run: () => redoFileHistory(),
+        },
+    ];
+    commands.forEach((command) => {
+        commandRegistry.register(command, { replace: true });
+    });
+}
+
+registerFoundationCommands();
+
 function getRegisteredCommandEntries() {
-    return commandRegistry.list().map((entry) => ({
+    return commandRegistry.list().filter((entry) => entry.includeInPalette !== false).map((entry) => ({
         id: entry.id,
         label: entry.label,
         keywords: entry.keywords || "",
@@ -12402,6 +12749,71 @@ function selectEditorNextOccurrence() {
     return true;
 }
 
+function selectAllEditorOccurrences() {
+    const source = String(editor.get?.() || "");
+    if (!source) return false;
+
+    const selections = normalizeEditorSelectionInfo();
+    if (!selections.length) return false;
+    const primary = selections[0];
+    if (!primary) return false;
+
+    let needle = "";
+    let currentStart = Math.max(0, Number(primary.start) || 0);
+
+    if (primary.collapsed) {
+        const word = editor.getWordAt?.(primary.head || primary.anchor);
+        const text = String(word?.word || "");
+        if (!text) return false;
+        const from = word?.from;
+        const to = word?.to;
+        if (!from || !to) return false;
+        const fromIndex = Number(editor.indexFromPos?.(from));
+        if (Number.isFinite(fromIndex)) {
+            currentStart = Math.max(0, fromIndex);
+        }
+        needle = text;
+    } else {
+        needle = source.slice(primary.start, primary.end);
+    }
+
+    if (!needle) return false;
+
+    const occurrences = [];
+    let cursor = 0;
+    while (cursor <= source.length) {
+        const found = source.indexOf(needle, cursor);
+        if (found < 0) break;
+        occurrences.push({ start: found, end: found + needle.length });
+        cursor = found + Math.max(needle.length, 1);
+        if (occurrences.length >= 600) break;
+    }
+    if (!occurrences.length) return false;
+
+    if (editor.supportsMultiCursor) {
+        const nextSelections = occurrences
+            .map((entry) => {
+                const anchor = editor.posFromIndex?.(entry.start);
+                const head = editor.posFromIndex?.(entry.end);
+                if (!anchor || !head) return null;
+                return { anchor, head };
+            })
+            .filter(Boolean);
+        if (!nextSelections.length) return false;
+        editor.setSelections?.(getUniqueSelections(nextSelections));
+        status.set(`Selected ${nextSelections.length} occurrences`);
+        return true;
+    }
+
+    const fallback = occurrences.find((entry) => entry.start > currentStart) || occurrences[0];
+    const anchor = editor.posFromIndex?.(fallback.start);
+    const head = editor.posFromIndex?.(fallback.end);
+    if (!anchor || !head) return false;
+    editor.setSelections?.([{ anchor, head }]);
+    status.set("Selected occurrence");
+    return true;
+}
+
 function handleEditorTabIndent(e, { outdent = false } = {}) {
     if (String(e.key || "") !== "Tab") return false;
     if (e.altKey || e.ctrlKey || e.metaKey) return false;
@@ -13925,7 +14337,7 @@ function getCommandPaletteEntries() {
             keywords: "create file new",
             shortcut: "Ctrl/Cmd+N",
             enabled: true,
-            run: () => createFile(),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_NEW, () => createFile()),
         },
         {
             id: "cmd-new-folder",
@@ -13965,7 +14377,7 @@ function getCommandPaletteEntries() {
             keywords: "save file write",
             shortcut: "Ctrl/Cmd+S",
             enabled: Boolean(active) && isFileDirty(active),
-            run: () => saveActiveFile({ announce: true }),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ACTIVE, () => saveActiveFile({ announce: true })),
         },
         {
             id: "cmd-save-all",
@@ -13973,7 +14385,7 @@ function getCommandPaletteEntries() {
             keywords: "save all write",
             shortcut: "Ctrl/Cmd+Shift+S",
             enabled: dirtyCount > 0,
-            run: () => saveAllFiles({ announce: true }),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ALL, () => saveAllFiles({ announce: true })),
         },
         {
             id: "cmd-format",
@@ -13989,7 +14401,7 @@ function getCommandPaletteEntries() {
             keywords: "run execute sandbox preview",
             shortcut: "Ctrl/Cmd+Enter",
             enabled: true,
-            run: () => run(),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.RUN_EXECUTE, () => run()),
         },
         {
             id: "cmd-clear-editor",
@@ -14093,7 +14505,7 @@ function getCommandPaletteEntries() {
             keywords: "search command palette",
             shortcut: "Ctrl/Cmd+Shift+P",
             enabled: true,
-            run: () => openCommandPalette(),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.SEARCH_COMMAND_PALETTE, () => openCommandPalette()),
         },
         {
             id: "cmd-find",
@@ -14493,7 +14905,7 @@ function getCommandPaletteEntries() {
             keywords: "import restore upload",
             shortcut: "",
             enabled: true,
-            run: () => triggerWorkspaceImportPicker(),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.WORKSPACE_IMPORT, () => triggerWorkspaceImportPicker()),
         },
         {
             id: "cmd-open-folder",
@@ -14501,7 +14913,7 @@ function getCommandPaletteEntries() {
             keywords: "folder filesystem open",
             shortcut: "",
             enabled: true,
-            run: () => openLocalProjectFolder(),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.WORKSPACE_OPEN_FOLDER, () => openLocalProjectFolder()),
         },
         {
             id: "cmd-save-folder",
@@ -14509,7 +14921,7 @@ function getCommandPaletteEntries() {
             keywords: "folder filesystem save write",
             shortcut: "",
             enabled: true,
-            run: () => saveWorkspaceToLocalFolder(),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.WORKSPACE_SAVE_FOLDER, () => saveWorkspaceToLocalFolder()),
         },
         {
             id: "cmd-open-quick-open",
@@ -14517,7 +14929,7 @@ function getCommandPaletteEntries() {
             keywords: "quick open files search",
             shortcut: "Ctrl/Cmd+P",
             enabled: true,
-            run: () => openQuickOpen(),
+            run: () => executeRegisteredCommand(FOUNDATION_COMMAND_IDS.SEARCH_QUICK_OPEN, () => openQuickOpen()),
         },
         {
             id: "cmd-show-shortcuts",
@@ -15188,10 +15600,24 @@ function persistFiles(reason = "autosave") {
     pruneTrashEntries();
     pruneProblemDiagnostics();
     const payload = buildWorkspacePayload();
-    save(STORAGE.FILES, JSON.stringify(payload));
+    const entries = [{ key: STORAGE.FILES, value: JSON.stringify(payload) }];
     const active = getActiveFile();
-    if (active) save(STORAGE.CODE, active.code);
-    persistWorkspaceSnapshot(reason);
+    if (active) {
+        entries.push({ key: STORAGE.CODE, value: active.code });
+    }
+    entries.push({
+        key: STORAGE.WORKSPACE_SNAPSHOT,
+        value: JSON.stringify({
+            ...payload,
+            snapshotReason: reason,
+        }),
+    });
+    const ok = saveBatchAtomic(entries, { label: `workspace-persist:${reason}` });
+    if (!ok) {
+        save(STORAGE.FILES, JSON.stringify(payload));
+        if (active) save(STORAGE.CODE, active.code);
+        persistWorkspaceSnapshot(reason);
+    }
     queueProblemsRender();
 }
 
@@ -15227,7 +15653,9 @@ function normalizeImportedWorkspace(input) {
         currentLayoutState: layoutState,
     });
     if (!normalized) return null;
-    return applyWorkspaceSafetyLimits(normalized, { source: "import" });
+    const limited = applyWorkspaceSafetyLimits(normalized, { source: "import" });
+    if (!limited) return null;
+    return resolveWorkspacePathCollisions(limited, { source: "import" });
 }
 
 function applyImportedWorkspace(normalized, { label = "Import workspace", focusEditor = true } = {}) {
@@ -15272,6 +15700,9 @@ function applyImportedWorkspace(normalized, { label = "Import workspace", focusE
     logWorkspaceSafetyAdjustments(normalized._limitSummary, {
         label: "Import safety limits applied.",
     });
+    logWorkspacePathRemaps(normalized._pathRemapSummary, {
+        label: "Import path safety applied.",
+    });
     if (focusEditor) editor.focus();
     return true;
 }
@@ -15280,6 +15711,40 @@ function triggerWorkspaceImportPicker() {
     if (!el.workspaceImportInput) return;
     el.workspaceImportInput.value = "";
     el.workspaceImportInput.click();
+}
+
+function isWorkspaceJsonFile(file) {
+    const name = String(file?.name || "").trim().toLowerCase();
+    const type = String(file?.type || "").trim().toLowerCase();
+    return name.endsWith(".json") || type.includes("application/json") || type.includes("text/json");
+}
+
+function buildWorkspaceImportSafetyPreview(normalized = null) {
+    if (!normalized || typeof normalized !== "object") return "";
+    const limit = normalized._limitSummary;
+    const remap = normalized._pathRemapSummary;
+    const details = [];
+
+    if (limit?.hasAdjustments) {
+        if (limit.droppedFiles) details.push(`- Files dropped by safety limits: ${limit.droppedFiles}`);
+        if (limit.truncatedFiles) details.push(`- Files trimmed by safety limits: ${limit.truncatedFiles}`);
+        if (limit.droppedTrash) details.push(`- Trash entries dropped by safety limits: ${limit.droppedTrash}`);
+        if (limit.truncatedTrash) details.push(`- Trash entries trimmed by safety limits: ${limit.truncatedTrash}`);
+        if (limit.droppedFoldersForLength) details.push(`- Folders dropped (path length): ${limit.droppedFoldersForLength}`);
+        if (limit.droppedFoldersForCap) details.push(`- Folders dropped (count cap): ${limit.droppedFoldersForCap}`);
+        if (limit.openTabsTrimmed) details.push(`- Open tabs trimmed: ${limit.openTabsTrimmed}`);
+        if (limit.fallbackInserted) details.push("- Added fallback default file to keep workspace valid");
+    }
+
+    if (remap?.hasAdjustments) {
+        details.push(`- Path collisions auto-remapped: ${Math.max(0, Number(remap.remappedPaths) || 0)}`);
+    }
+
+    if (!details.length) {
+        return "Safety preview: no adjustments required.";
+    }
+
+    return ["Safety preview:", ...details].join("\n");
 }
 
 async function importWorkspaceFromFile(file) {
@@ -15305,18 +15770,148 @@ async function importWorkspaceFromFile(file) {
         logger.append("error", ["Import failed: unsupported workspace payload."]);
         return false;
     }
+    const safetyPreview = buildWorkspaceImportSafetyPreview(normalized);
     const confirmImport = await showConfirmDialog({
         title: "Import Workspace",
-        message: buildImportWorkspaceConfirmMessage({
-            fileCount: normalized.files.length,
-            trashCount: normalized.trash.length,
-        }),
+        message: [
+            buildImportWorkspaceConfirmMessage({
+                fileCount: normalized.files.length,
+                trashCount: normalized.trash.length,
+            }),
+            safetyPreview,
+        ].filter(Boolean).join("\n\n"),
         confirmText: "Import",
         cancelText: "Cancel",
         danger: true,
     });
     if (!confirmImport) return false;
     return applyImportedWorkspace(normalized, { label: "Import workspace", focusEditor: true });
+}
+
+async function tryImportWorkspaceOrFallback(file) {
+    if (!file) return false;
+    const workspaceResult = await importWorkspaceFromFile(file);
+    if (workspaceResult) return true;
+
+    if (!isWorkspaceJsonFile(file)) return false;
+
+    const importedAsCode = await importCodeFilesFromPicker([file]);
+    if (importedAsCode) {
+        logger.append("system", ["Imported JSON file as code file (not a workspace payload)."]);
+        return true;
+    }
+    return false;
+}
+
+async function importCodeFilesFromPicker(fileList = []) {
+    const selectedFiles = Array.isArray(fileList) ? fileList : [];
+    if (!selectedFiles.length) return false;
+
+    const before = snapshotWorkspaceState();
+    stashActiveFile();
+
+    const reservedPaths = new Set(files.map((entry) => entry.name));
+    const existingCodeChars = files.reduce((total, entry) => total + String(entry?.code || "").length, 0);
+    let remainingChars = Math.max(0, WORKSPACE_MAX_TOTAL_CODE_CHARS - existingCodeChars);
+    let fileSlotsRemaining = Math.max(0, WORKSPACE_MAX_FILES - files.length);
+
+    const imported = [];
+    let skippedUnsupported = 0;
+    let skippedByCap = 0;
+    let skippedByTotalChars = 0;
+    let trimmedByPerFileCap = 0;
+    let trimmedByTotalCap = 0;
+
+    for (const fileEntry of selectedFiles) {
+        const rawPath = normalizePathSlashes(String(fileEntry?.webkitRelativePath || fileEntry?.name || "").trim());
+        const normalizedPath = normalizeFileName(rawPath, FILE_DEFAULT_NAME);
+        if (!isSupportedLocalFolderFileName(normalizedPath)) {
+            skippedUnsupported += 1;
+            continue;
+        }
+
+        if (fileSlotsRemaining <= 0) {
+            skippedByCap += 1;
+            continue;
+        }
+
+        let code = String(await fileEntry.text() || "");
+        const originalLength = code.length;
+        if (code.length > WORKSPACE_MAX_FILE_CODE_CHARS) {
+            code = code.slice(0, WORKSPACE_MAX_FILE_CODE_CHARS);
+            trimmedByPerFileCap += 1;
+        }
+        if (remainingChars <= 0) {
+            skippedByTotalChars += 1;
+            continue;
+        }
+        if (code.length > remainingChars) {
+            code = code.slice(0, remainingChars);
+            trimmedByTotalCap += 1;
+        }
+        if (code.length === 0 && originalLength > 0) {
+            skippedByTotalChars += 1;
+            continue;
+        }
+
+        const safePath = ensureUniquePathInSet(normalizedPath, reservedPaths);
+        const importedFile = makeFile(safePath, code);
+        importedFile.savedCode = code;
+        imported.push(importedFile);
+
+        remainingChars = Math.max(0, remainingChars - code.length);
+        fileSlotsRemaining = Math.max(0, fileSlotsRemaining - 1);
+    }
+
+    if (!imported.length) {
+        status.set("No supported files imported");
+        logger.append("warn", ["No supported code files were imported."]);
+        return false;
+    }
+
+    files = [...files, ...imported];
+    folders = normalizeFolderList([
+        ...folders,
+        ...collectFolderPaths(imported, []),
+    ]);
+
+    const firstImported = imported[0];
+    if (firstImported) {
+        activeFileId = firstImported.id;
+        setSingleSelection(firstImported.id);
+        ensureTabOpen(firstImported.id);
+        expandFolderAncestors(firstImported.name);
+        setEditorValue(firstImported.code, { silent: true });
+    }
+
+    imported.forEach((entry) => {
+        recordCodeSnapshot(entry.id, entry.code, "import-file", { force: true });
+    });
+
+    persistFiles("import-files");
+    renderFileList();
+    queueEditorLint("import-files");
+    recordFileHistory(`Import ${imported.length} file${imported.length === 1 ? "" : "s"}`, before);
+
+    status.set(`Imported ${imported.length} file${imported.length === 1 ? "" : "s"}`);
+    logger.append("system", [`Imported ${imported.length} code file${imported.length === 1 ? "" : "s"}.`]);
+    if (skippedUnsupported) {
+        logger.append("warn", [`Skipped ${skippedUnsupported} unsupported file${skippedUnsupported === 1 ? "" : "s"}.`]);
+    }
+    if (skippedByCap) {
+        logger.append("warn", [`Skipped ${skippedByCap} file${skippedByCap === 1 ? "" : "s"} due to workspace file cap (${WORKSPACE_MAX_FILES}).`]);
+    }
+    if (skippedByTotalChars) {
+        logger.append("warn", [`Skipped ${skippedByTotalChars} file${skippedByTotalChars === 1 ? "" : "s"} after hitting total workspace code cap.`]);
+    }
+    if (trimmedByPerFileCap) {
+        logger.append("warn", [`Trimmed ${trimmedByPerFileCap} imported file${trimmedByPerFileCap === 1 ? "" : "s"} by per-file code cap (${WORKSPACE_MAX_FILE_CODE_CHARS} chars).`]);
+    }
+    if (trimmedByTotalCap) {
+        logger.append("warn", [`Trimmed ${trimmedByTotalCap} imported file${trimmedByTotalCap === 1 ? "" : "s"} by total workspace code cap.`]);
+    }
+    editor.focus();
+    return true;
 }
 
 async function canUseFileSystemAccess() {
@@ -15780,7 +16375,10 @@ function syncFilesMenuActions() {
         saveAllBtn.textContent = dirtyCount > 0 ? `Save All (${dirtyCount})` : "Save All";
     }
     if (exportWorkspaceBtn) exportWorkspaceBtn.disabled = files.length === 0;
-    if (importWorkspaceBtn) importWorkspaceBtn.disabled = false;
+    if (importWorkspaceBtn) {
+        importWorkspaceBtn.disabled = false;
+        importWorkspaceBtn.title = "Import workspace JSON or code files (.js, .html, .css, .ts, .md, .txt, etc.)";
+    }
     if (undoActionBtn) undoActionBtn.disabled = !canUndoFileHistory();
     if (redoActionBtn) redoActionBtn.disabled = !canRedoFileHistory();
     if (selectAllBtn) {
@@ -18676,7 +19274,38 @@ function exposeDebug() {
                 location: entry.location ? { ...entry.location } : null,
             }));
         },
+        getStateBoundaries() {
+            return getStateBoundariesSnapshot();
+        },
+        getStateBoundary(name) {
+            return getStateBoundary(name);
+        },
+        getUiZoom() {
+            return uiZoomPercent;
+        },
+        setUiZoom(percent = UI_ZOOM_DEFAULT) {
+            return applyUiZoom(percent, { persist: true, announce: true });
+        },
+        zoomIn() {
+            return adjustUiZoom(UI_ZOOM_STEP, { persist: true, announce: true });
+        },
+        zoomOut() {
+            return adjustUiZoom(-UI_ZOOM_STEP, { persist: true, announce: true });
+        },
+        resetUiZoom() {
+            return resetUiZoom({ persist: true, announce: true });
+        },
+        getStorageJournalState() {
+            return getStorageJournalState();
+        },
+        getStorageBackendInfo() {
+            return getStorageBackendInfo();
+        },
+        recoverStorageJournal() {
+            return recoverStorageJournal();
+        },
         getState() {
+            const boundaries = getStateBoundariesSnapshot();
             return {
                 layout: { ...layoutState },
                 activeLayoutPreset: activeLayoutPresetName,
@@ -18698,6 +19327,12 @@ function exposeDebug() {
                 taskRunnerEntries: taskRunnerEntries.length,
                 canUndoFileHistory: canUndoFileHistory(),
                 canRedoFileHistory: canRedoFileHistory(),
+                projectState: boundaries.project,
+                workspaceState: boundaries.workspace,
+                runtimeState: boundaries.runtime,
+                uiZoomPercent,
+                storageJournalKey: STORAGE_JOURNAL_KEY,
+                storageJournal: getStorageJournalState(),
             };
         },
         help() {
@@ -18736,6 +19371,9 @@ function exposeDebug() {
                 "fazide.setPanelGap(px) / fazide.setCornerRadius(px) / fazide.setBottomHeight(px)",
                 "fazide.applyPreset('studio'|'focus'|'review'|'wide'|'debug'|'zen'|'sandbox'|'diagnostics')",
                 "fazide.resetLayout()",
+                "fazide.getStateBoundaries() / fazide.getStateBoundary('project'|'workspace'|'runtime')",
+                "fazide.getUiZoom() / fazide.setUiZoom(110) / fazide.zoomIn() / fazide.zoomOut() / fazide.resetUiZoom()",
+                "fazide.getStorageJournalState() / fazide.recoverStorageJournal()",
                 "fazide.runSample('basic'|'error'|'async'|'inspect')",
             ];
             console.log(lines.join("\n"));
@@ -18825,6 +19463,9 @@ function exposeDebug() {
             setPanelOrder(panel, index);
             return { ...layoutState.panelRows };
         },
+        getPanelLayout() {
+            return JSON.parse(JSON.stringify(layoutState.panelLayout || rowsToPanelLayout(layoutState.panelRows)));
+        },
         dockPanel(panel, row = "top") {
             movePanelToRow(panel, row, 0);
             return { ...layoutState.panelRows };
@@ -18891,6 +19532,7 @@ function exitRunnerFullscreen() {
 }
 
 async function boot() {
+    const recoveredStorageJournal = recoverStorageJournal();
     loadEditorSettings();
     renderEditorSyntaxThemeSelectOptions();
     loadSnippetRegistry();
@@ -18908,6 +19550,7 @@ async function boot() {
     renderHeaderThemeSelectOptions();
     const storedTheme = load(STORAGE.THEME);
     applyTheme(storedTheme || "dark", { persist: false });
+    loadUiZoom();
     initDocking();
     initSplitters();
     exposeDebug();
@@ -18967,6 +19610,7 @@ async function boot() {
     gamesSelectorOpen = false;
     applicationsSelectorOpen = false;
     applyLayout();
+    applyUiZoom(uiZoomPercent, { persist: false, announce: false, syncLayout: true });
     if (!rawLayout) {
         requestAnimationFrame(() => syncDefaultEditorSandboxWidth({ persist: true }));
     }
@@ -19006,6 +19650,12 @@ async function boot() {
     // - Log prints a one-time boot banner for context.
     status.set("Ready");
     logger.append("system", [`${APP.NAME} ${APP.VERSION} loaded - built by ${APP.AUTHOR}`]);
+    if (recoveredStorageJournal.recovered) {
+        setHealth(health.storage, "warn", "Storage: Recovered");
+        pushDiag("warn", `Recovered pending storage journal (${recoveredStorageJournal.entryCount} entries).`);
+        logger.append("warn", [`Recovered pending storage journal (${recoveredStorageJournal.entryCount} entries).`]);
+        status.set("Recovered storage journal");
+    }
     if (initial.source === "snapshot-recovery" || initial.source === "snapshot-fallback") {
         logger.append("system", ["Recovered workspace from snapshot backup."]);
         status.set("Recovered snapshot");
@@ -19160,31 +19810,56 @@ async function boot() {
             }
         }
 
+        if (isSelectAllOccurrencesShortcut(e)) {
+            if (selectAllEditorOccurrences()) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        if (isZoomInShortcut(e)) {
+            e.preventDefault();
+            adjustUiZoom(UI_ZOOM_STEP, { persist: true, announce: true });
+            return;
+        }
+
+        if (isZoomOutShortcut(e)) {
+            e.preventDefault();
+            adjustUiZoom(-UI_ZOOM_STEP, { persist: true, announce: true });
+            return;
+        }
+
+        if (isZoomResetShortcut(e)) {
+            e.preventDefault();
+            resetUiZoom({ persist: true, announce: true });
+            return;
+        }
+
         if (handleEditorTabIndent(e, { outdent: true })) {
             return;
         }
 
         if (isRunShortcut(e)) {
             e.preventDefault();
-            run();
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.RUN_EXECUTE, () => run());
             return;
         }
 
         if (isSaveShortcut(e)) {
             e.preventDefault();
-            saveActiveFile({ announce: true });
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ACTIVE, () => saveActiveFile({ announce: true }));
             return;
         }
 
         if (isSaveAllShortcut(e)) {
             e.preventDefault();
-            saveAllFiles({ announce: true });
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ALL, () => saveAllFiles({ announce: true }));
             return;
         }
 
         if (isNewFileShortcut(e)) {
             e.preventDefault();
-            createFile();
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_NEW, () => createFile());
             return;
         }
 
@@ -19286,7 +19961,9 @@ async function boot() {
     // Buttons
     // Notes:
     // - Buttons call the same underlying actions as shortcuts where possible.
-    el.btnRun.addEventListener("click", run);
+    el.btnRun.addEventListener("click", () => {
+        executeRegisteredCommand(FOUNDATION_COMMAND_IDS.RUN_EXECUTE, () => run());
+    });
 
     el.btnFormat.addEventListener("click", async () => {
         await formatCurrentEditor({ announce: true });
@@ -19370,12 +20047,16 @@ async function boot() {
             if (!btn) return;
             const action = btn.dataset.filesMenu;
             closeFileMenus();
-            if (action === "save-file") saveActiveFile({ announce: true });
-            if (action === "save-all") saveAllFiles({ announce: true });
+            if (action === "save-file") executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ACTIVE, () => saveActiveFile({ announce: true }));
+            if (action === "save-all") executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ALL, () => saveAllFiles({ announce: true }));
             if (action === "export-workspace") exportWorkspace();
-            if (action === "import-workspace") triggerWorkspaceImportPicker();
-            if (action === "undo-action") undoFileHistory();
-            if (action === "redo-action") redoFileHistory();
+            if (action === "import-workspace") executeRegisteredCommand(FOUNDATION_COMMAND_IDS.WORKSPACE_IMPORT, () => triggerWorkspaceImportPicker());
+            if (action === "undo-action") executeRegisteredCommand(FOUNDATION_COMMAND_IDS.HISTORY_UNDO, () => {
+                if (!undoFileHistory()) {
+                    undoLastDelete();
+                }
+            });
+            if (action === "redo-action") executeRegisteredCommand(FOUNDATION_COMMAND_IDS.HISTORY_REDO, () => redoFileHistory());
             if (action === "select-all") selectAllVisibleFiles();
             if (action === "clear-selection") clearFileSelection({ keepActive: true });
             if (action === "trash-selected") bulkTrashSelectedFiles();
@@ -19385,7 +20066,7 @@ async function boot() {
             if (action === "unpin-selected") bulkSetPinned(false);
             if (action === "lock-selected") bulkSetLocked(true);
             if (action === "unlock-selected") bulkSetLocked(false);
-            if (action === "new") createFile();
+            if (action === "new") executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_NEW, () => createFile());
             if (action === "new-folder") createFolder();
             if (action === "duplicate" && activeFileId) {
                 if (getSelectedFiles().length > 1) {
@@ -19497,9 +20178,18 @@ async function boot() {
     }
     if (el.workspaceImportInput) {
         el.workspaceImportInput.addEventListener("change", async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            await importWorkspaceFromFile(file);
+            const selectedFiles = Array.from(event.target.files || []);
+            if (!selectedFiles.length) return;
+            const workspaceJsonFiles = selectedFiles.filter((entry) => isWorkspaceJsonFile(entry));
+
+            if (selectedFiles.length === 1 && workspaceJsonFiles.length === 1) {
+                await tryImportWorkspaceOrFallback(workspaceJsonFiles[0]);
+            } else {
+                if (workspaceJsonFiles.length > 0) {
+                    logger.append("warn", ["Multiple files selected with JSON; importing all as code files. Use single workspace JSON to replace workspace."]);
+                }
+                await importCodeFilesFromPicker(selectedFiles);
+            }
             event.target.value = "";
         });
     }
@@ -19679,6 +20369,47 @@ async function boot() {
             setPanelOrder("sandbox", Number(event.target.value));
         });
     }
+    if (el.layoutOrderTools) {
+        el.layoutOrderTools.addEventListener("change", (event) => {
+            setPanelOrder("tools", Number(event.target.value));
+        });
+    }
+    const setPanelRowFromControl = (panel, value) => {
+        const targetRow = String(value || "top") === "bottom" ? "bottom" : "top";
+        const currentRow = getPanelRow(panel);
+        const rows = layoutState.panelRows || { top: [], bottom: [] };
+        const currentIndex = (rows[currentRow] || []).indexOf(panel);
+        const targetWithoutPanel = (rows[targetRow] || []).filter((name) => name !== panel);
+        const targetIndex = targetRow === currentRow
+            ? Math.max(0, currentIndex)
+            : targetWithoutPanel.length;
+        movePanelToRow(panel, targetRow, targetIndex, { animatePanels: true });
+    };
+    if (el.layoutRowLog) {
+        el.layoutRowLog.addEventListener("change", (event) => {
+            setPanelRowFromControl("log", event.target.value);
+        });
+    }
+    if (el.layoutRowEditor) {
+        el.layoutRowEditor.addEventListener("change", (event) => {
+            setPanelRowFromControl("editor", event.target.value);
+        });
+    }
+    if (el.layoutRowFiles) {
+        el.layoutRowFiles.addEventListener("change", (event) => {
+            setPanelRowFromControl("files", event.target.value);
+        });
+    }
+    if (el.layoutRowSandbox) {
+        el.layoutRowSandbox.addEventListener("change", (event) => {
+            setPanelRowFromControl("sandbox", event.target.value);
+        });
+    }
+    if (el.layoutRowTools) {
+        el.layoutRowTools.addEventListener("change", (event) => {
+            setPanelRowFromControl("tools", event.target.value);
+        });
+    }
     if (el.layoutLogOpen) {
         el.layoutLogOpen.addEventListener("change", (event) => {
             setPanelOpen("log", event.target.checked);
@@ -19795,6 +20526,37 @@ async function boot() {
         el.layoutCornerRadius.addEventListener("input", (event) => apply(event.target.value));
         el.layoutCornerRadiusInput.addEventListener("change", (event) => apply(event.target.value));
     }
+    if (el.layoutBottomHeight && el.layoutBottomHeightInput) {
+        const apply = (value) => {
+            const bounds = getLayoutBounds().bottomHeight;
+            const next = clamp(Number(value), bounds.min, bounds.max);
+            setBottomHeight(next);
+            normalizeLayoutWidths();
+            el.layoutBottomHeight.value = layoutState.bottomHeight;
+            el.layoutBottomHeightInput.value = layoutState.bottomHeight;
+            persistLayout();
+        };
+        el.layoutBottomHeight.addEventListener("input", (event) => apply(event.target.value));
+        el.layoutBottomHeightInput.addEventListener("change", (event) => apply(event.target.value));
+    }
+    if (el.layoutDockMagnet && el.layoutDockMagnetInput) {
+        const apply = (value) => {
+            const bounds = getLayoutBounds().dockMagnet;
+            const next = clamp(Number(value), bounds.min, bounds.max);
+            layoutState.dockMagnetDistance = next;
+            el.layoutDockMagnet.value = layoutState.dockMagnetDistance;
+            el.layoutDockMagnetInput.value = layoutState.dockMagnetDistance;
+            persistLayout();
+        };
+        el.layoutDockMagnet.addEventListener("input", (event) => apply(event.target.value));
+        el.layoutDockMagnetInput.addEventListener("change", (event) => apply(event.target.value));
+    }
+    if (el.layoutPanelAnimation) {
+        el.layoutPanelAnimation.addEventListener("change", (event) => {
+            layoutState.panelReflowAnimation = Boolean(event.target.checked);
+            persistLayout();
+        });
+    }
 
     // Sandbox output listener
     // Notes:
@@ -19811,6 +20573,21 @@ async function boot() {
             document.activeElement?.closest?.(".CodeMirror")
         );
         if (e.defaultPrevented) return;
+        if (isZoomInShortcut(e)) {
+            e.preventDefault();
+            adjustUiZoom(UI_ZOOM_STEP, { persist: true, announce: true });
+            return;
+        }
+        if (isZoomOutShortcut(e)) {
+            e.preventDefault();
+            adjustUiZoom(-UI_ZOOM_STEP, { persist: true, announce: true });
+            return;
+        }
+        if (isZoomResetShortcut(e)) {
+            e.preventDefault();
+            resetUiZoom({ persist: true, announce: true });
+            return;
+        }
         if (promptDialogOpen) {
             if (e.key === "Escape") {
                 e.preventDefault();
@@ -19825,12 +20602,12 @@ async function boot() {
         }
         if (isCommandPaletteShortcut(e)) {
             e.preventDefault();
-            openCommandPalette();
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.SEARCH_COMMAND_PALETTE, () => openCommandPalette());
             return;
         }
         if (isQuickOpenShortcut(e)) {
             e.preventDefault();
-            openQuickOpen();
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.SEARCH_QUICK_OPEN, () => openQuickOpen());
             return;
         }
         if (isFindShortcut(e) && !editorFocused) {
@@ -19860,29 +20637,31 @@ async function boot() {
         }
         if (isSaveAllShortcut(e) && !editorFocused) {
             e.preventDefault();
-            saveAllFiles({ announce: true });
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ALL, () => saveAllFiles({ announce: true }));
             return;
         }
         if (isSaveShortcut(e) && !editorFocused) {
             e.preventDefault();
-            saveActiveFile({ announce: true });
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_SAVE_ACTIVE, () => saveActiveFile({ announce: true }));
             return;
         }
         if (isNewFileShortcut(e) && !editorFocused) {
             e.preventDefault();
-            createFile();
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.FILE_NEW, () => createFile());
             return;
         }
         if (isUndoShortcut(e) && !editorFocused) {
             e.preventDefault();
-            if (!undoFileHistory()) {
-                undoLastDelete();
-            }
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.HISTORY_UNDO, () => {
+                if (!undoFileHistory()) {
+                    undoLastDelete();
+                }
+            });
             return;
         }
         if (isRedoShortcut(e) && !editorFocused) {
             e.preventDefault();
-            redoFileHistory();
+            executeRegisteredCommand(FOUNDATION_COMMAND_IDS.HISTORY_REDO, () => redoFileHistory());
             return;
         }
         if (e.key === "Escape" && commandPaletteOpen) {

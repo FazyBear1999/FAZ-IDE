@@ -15,6 +15,8 @@ export const DEFAULT_LAYOUT_STATE = {
     bottomHeight: 240,
     panelGap: 0,
     panelRadius: 0,
+    dockMagnetDistance: 96,
+    panelReflowAnimation: true,
     headerOpen: true,
     footerOpen: true,
     filesFiltersOpen: false,

@@ -217,6 +217,8 @@ test("typography/sizing: layout numeric controls retain synchronized bounds", as
     ["#layoutSandboxWidth", "#layoutSandboxWidthInput"],
     ["#layoutToolsWidth", "#layoutToolsWidthInput"],
     ["#layoutPanelGap", "#layoutPanelGapInput"],
+    ["#layoutCornerRadius", "#layoutCornerRadiusInput"],
+    ["#layoutBottomHeight", "#layoutBottomHeightInput"],
   ];
 
   for (const [rangeSelector, numberSelector] of pairs) {

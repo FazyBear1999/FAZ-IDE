@@ -497,14 +497,7 @@
     color: rgba(194, 207, 183, 0.82);
 }
 
-:root[data-theme="retro"] #quickOpenInput,
-:root[data-theme="retro"] #commandPaletteInput,
-:root[data-theme="retro"] #topCommandPaletteInput,
-:root[data-theme="retro"] #editorFindInput,
-:root[data-theme="retro"] #editorReplaceInput,
-:root[data-theme="retro"] #symbolSearchInput,
-:root[data-theme="retro"] #projectSearchInput,
-:root[data-theme="retro"] #projectReplaceInput {
+:root[data-theme="retro"] :is(#quickOpenInput, #commandPaletteInput, #topCommandPaletteInput, #editorFindInput, #editorReplaceInput, #symbolSearchInput, #projectSearchInput, #projectReplaceInput) {
     background: #1d2a27;
     color: #e6efdc;
     border-color: rgba(130, 162, 144, 0.38);
@@ -519,12 +512,7 @@
     border-color: rgba(170, 210, 186, 0.52);
 }
 
-:root[data-theme="retro"] .file-section-toggle {
-    background: rgba(130, 162, 144, 0.2);
-    color: rgba(230, 239, 220, 0.95);
-}
-
-:root[data-theme="retro"] .file-section-action {
+:root[data-theme="retro"] :is(.file-section-toggle, .file-section-action) {
     background: rgba(130, 162, 144, 0.2);
     color: rgba(230, 239, 220, 0.95);
 }
@@ -1040,13 +1028,7 @@
     color: rgba(221, 214, 254, 0.78);
 }
 
-:root[data-theme="purple"] #quickOpenInput,
-:root[data-theme="purple"] #commandPaletteInput,
-:root[data-theme="purple"] #editorFindInput,
-:root[data-theme="purple"] #editorReplaceInput,
-:root[data-theme="purple"] #symbolSearchInput,
-:root[data-theme="purple"] #projectSearchInput,
-:root[data-theme="purple"] #projectReplaceInput {
+:root[data-theme="purple"] :is(#quickOpenInput, #commandPaletteInput, #editorFindInput, #editorReplaceInput, #symbolSearchInput, #projectSearchInput, #projectReplaceInput) {
     background: #281a45;
     color: #f3e8ff;
     border-color: rgba(167, 139, 250, 0.38);

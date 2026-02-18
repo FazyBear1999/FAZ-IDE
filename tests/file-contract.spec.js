@@ -15,7 +15,14 @@ test("file contract: core files panel controls exist and are wired", async ({ pa
   await expect(page.locator("#fileSearchClear")).toHaveAttribute("aria-label", "Clear filter");
 
   await expect(page.locator("#workspaceImportInput")).toHaveAttribute("type", "file");
-  await expect(page.locator("#workspaceImportInput")).toHaveAttribute("accept", ".json,application/json");
+  await expect(page.locator("#workspaceImportInput")).toHaveAttribute("multiple", "");
+  const accept = await page.locator("#workspaceImportInput").getAttribute("accept");
+  expect(String(accept || "")).toContain(".json");
+  expect(String(accept || "")).toContain(".js");
+  expect(String(accept || "")).toContain(".html");
+  expect(String(accept || "")).toContain(".css");
+  await page.locator("#filesMenuButton").click();
+  await expect(page.locator('#filesMenu [data-files-menu="import-workspace"]')).toHaveAttribute("title", /workspace JSON|code files/i);
 });
 
 test("file contract: sort options are complete and ordered", async ({ page }) => {

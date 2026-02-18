@@ -113,3 +113,22 @@ export function isDeleteLineShortcut(e) {
 export function isSelectNextOccurrenceShortcut(e) {
     return isModKey(e) && !e.shiftKey && !e.altKey && (e.key === "d" || e.key === "D");
 };
+
+export function isSelectAllOccurrencesShortcut(e) {
+    return isModKey(e) && e.shiftKey && !e.altKey && (e.key === "l" || e.key === "L");
+};
+
+export function isZoomInShortcut(e) {
+    const key = String(e.key || "");
+    return isModKey(e) && !e.shiftKey && !e.altKey && (key === "+" || key === "=");
+};
+
+export function isZoomOutShortcut(e) {
+    const key = String(e.key || "");
+    return isModKey(e) && !e.shiftKey && !e.altKey && (key === "-" || key === "_");
+};
+
+export function isZoomResetShortcut(e) {
+    const key = String(e.key || "");
+    return isModKey(e) && !e.shiftKey && !e.altKey && key === "0";
+};

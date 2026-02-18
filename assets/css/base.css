@@ -259,6 +259,8 @@
     --modal-border-color: var(--border-control);
     --modal-surface: var(--menu-bg);
     --modal-shadow: var(--menu-shadow);
+    --ui-zoom-viewport-ratio: 1;
+    --modal-viewport-max-height: calc((100dvh * var(--ui-zoom-viewport-ratio)) - 24px);
     --modal-max-height: 88vh;
     --modal-header-min-height: 58px;
     --modal-header-padding-y: 8px;
@@ -285,23 +287,24 @@
     --tools-section-min-height: 110px;
 
     /* Radius + shadow */
-    --radius-xxs: 0px;
-    --radius-xs: 0px;
-    --radius-md: 0px;
-    --radius-lg: 0px;
-    --radius-xl: 0px;
-    --radius-2xl: 0px;
-    --radius-3xl: 0px;
-    --radius-pill: 0px;
     --radius: 0px;
     --radius-sm: 0px;
+    --radius-xxs: calc(var(--radius-sm) * 0.45);
+    --radius-xs: calc(var(--radius-sm) * 0.6);
+    --radius-md: calc(var(--radius) * 1.1);
+    --radius-lg: calc(var(--radius) * 1.35);
+    --radius-xl: calc(var(--radius) * 1.6);
+    --radius-2xl: calc(var(--radius) * 1.9);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-pill: 999px;
     --shadow: none;
     --file-depth: 0;
 
     /* Typography */
-    --font: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
-    --mono: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+    --font: "Inter", "Segoe UI Variable", "Segoe UI", "Noto Sans", Roboto, system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --editor-font-family: var(--mono);
+    --app-font-size: 16px;
 }
 
 /* Reset */
@@ -319,6 +322,11 @@ html {
 body {
     margin: 0;
     overflow: hidden;
+    font-family: var(--font);
+    font-size: var(--app-font-size);
+    color: var(--text);
+    line-height: 1.4;
+    background-color: var(--bg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-synthesis-weight: none;
@@ -355,14 +363,6 @@ body {
 *::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
     background-clip: padding-box;
-}
-
-/* Base body style */
-body {
-    font-family: var(--font);
-    color: var(--text);
-    line-height: 1.4;
-    background-color: var(--bg);
 }
 
 button,

@@ -46,6 +46,29 @@ No checkpoint is complete without all five fields.
 - Validation minimum: focused checks per major change + full gate at 3-change checkpoint.
 - Rollback trigger: unresolved path drift or release-script breakage.
 
+### C5 — Architecture spine execution (Master Roadmap Phase 0)
+- Scope boundary: command registry, state-boundary enforcement, journal/recovery foundations; no teaching-flow UX rewrite in this checkpoint.
+- Decision reference: required before each foundation slice (command routing, state model, journal, worker indexing).
+- Validation minimum: focused filesystem/runtime/command tests + `test:integrity` + `test:memory`.
+- Rollback trigger: command action mismatch, undo/journal inconsistency, or boot recovery drift.
+- Status note: initial command-routing slice completed for shared run/save/new/search/workspace/history actions across shortcuts, buttons, file-menu, and command-palette entries.
+- Status note: state-boundary snapshot baseline added (`project`/`workspace`/`runtime`) and exposed through API for safe incremental migration of orchestration logic.
+- Status note: atomic batch persistence + storage recovery journal scaffolding added for layout/workspace writes with boot-time replay and API diagnostics.
+
+### C6 — CM6 ghost lesson engine foundation (Master Roadmap Phase 2 bridge)
+- Scope boundary: decorations/statefield/transaction filters/viewplugin + step-marker parsing; no AI tutor auto-write behavior.
+- Decision reference: required before enabling lesson editing constraints in default editor flow.
+- Validation minimum: focused lesson-editor contracts + typing-zone behavior tests + `test:integrity`.
+- Rollback trigger: blocked normal editing outside lesson mode, non-deterministic step progress, or marker-range corruption.
+
+### C7 — Layout customization + docking stability hardening (Master Roadmap Phase 1 safety lane)
+- Scope boundary: layout token wiring, docking behavior invariants, and test reliability adjustments only; no new runtime products/surfaces.
+- Decision reference: required before each layout behavior or stress-contract adjustment.
+- Validation minimum: `tests/layout-micro.spec.js`, focused docking contracts in `tests/ide.spec.js`, and full `npm run test:all` for release gating.
+- Rollback trigger: any preset-reset regression during docking moves, radius-control drift from UI tokens, or failing full deployment gate.
+- Status note: radius setting now propagates through shared radius tokens and key shell surfaces; docking center pass-through no longer resets layout behavior settings; deterministic docking-route contract replaces flaky pointer-heavy matrix in ide suite.
+- Status note: CSS selector dedupe follow-up completed in `assets/css/layout.css` (grouped scrollbar/footer status selectors) with focused contracts and full `npm run test:all` passing as deployment proof.
+
 ## Exit Rule
 
 - Before handoff, each touched checkpoint must include:

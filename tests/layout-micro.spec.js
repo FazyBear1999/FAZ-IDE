@@ -32,12 +32,24 @@ test("layout micro: preset list includes all release presets", async ({ page }) 
 test("layout micro: all panel order selectors expose four positions", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  const orderSelectors = ["#layoutOrderLog", "#layoutOrderEditor", "#layoutOrderFiles", "#layoutOrderSandbox"];
+  const orderSelectors = ["#layoutOrderLog", "#layoutOrderEditor", "#layoutOrderFiles", "#layoutOrderSandbox", "#layoutOrderTools"];
 
   for (const selector of orderSelectors) {
     await expect(page.locator(`${selector} option`)).toHaveCount(4);
     await expect(page.locator(`${selector} option[value=\"0\"]`)).toContainText("1");
     await expect(page.locator(`${selector} option[value=\"3\"]`)).toContainText("4");
+  }
+});
+
+test("layout micro: panel row selectors expose top and bottom docking rows", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const rowSelectors = ["#layoutRowLog", "#layoutRowEditor", "#layoutRowFiles", "#layoutRowSandbox", "#layoutRowTools"];
+
+  for (const selector of rowSelectors) {
+    await expect(page.locator(`${selector} option`)).toHaveCount(2);
+    await expect(page.locator(`${selector} option[value=\"top\"]`)).toContainText("Top");
+    await expect(page.locator(`${selector} option[value=\"bottom\"]`)).toContainText("Bottom");
   }
 });
 
@@ -50,6 +62,9 @@ test("layout micro: range + number pairs are bounded consistently", async ({ pag
     ["#layoutSandboxWidth", "#layoutSandboxWidthInput", 180, 300],
     ["#layoutToolsWidth", "#layoutToolsWidthInput", 180, 300],
     ["#layoutPanelGap", "#layoutPanelGapInput", 0, 10],
+    ["#layoutCornerRadius", "#layoutCornerRadiusInput", 0, 8],
+    ["#layoutBottomHeight", "#layoutBottomHeightInput", 60, 300],
+    ["#layoutDockMagnet", "#layoutDockMagnetInput", 32, 220],
   ];
 
   for (const [rangeSelector, numberSelector, expectedMinFloor, expectedMaxFloor] of pairs) {
@@ -94,6 +109,7 @@ test("layout micro: layout toggle checkboxes cover all shell visibility flags", 
     "#layoutToolsOpen",
     "#layoutHeaderOpen",
     "#layoutFooterOpen",
+    "#layoutPanelAnimation",
   ];
 
   for (const selector of toggles) {
@@ -124,6 +140,90 @@ test("layout micro: quick layout works when header is hidden", async ({ page }) 
   await page.locator("#quickLayout").click();
   await expect(page.locator("#layoutPanel")).toHaveAttribute("aria-hidden", "false");
   await expect(page.locator("#layoutPanel")).toHaveAttribute("data-open", "true");
+});
+
+test("layout micro: corner radius and bottom dock height controls apply runtime style", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.dockPanel) throw new Error("dockPanel API unavailable");
+    api.dockPanel("log", "bottom");
+  });
+
+  await page.locator("#layoutToggle").click();
+  await expect(page.locator("#layoutPanel")).toHaveAttribute("aria-hidden", "false");
+  await expect(page.locator("#layoutBottomHeight")).not.toBeDisabled();
+  await expect(page.locator("#layoutBottomHeightInput")).not.toBeDisabled();
+
+  await page.locator("#layoutCornerRadius").fill("14");
+  await page.locator("#layoutCornerRadius").dispatchEvent("input");
+
+  await page.locator("#layoutBottomHeightInput").fill("220");
+  await page.locator("#layoutBottomHeightInput").dispatchEvent("change");
+
+  const result = await page.evaluate(() => {
+    const radius = document.documentElement.style.getPropertyValue("--radius").trim();
+    const radiusSm = document.documentElement.style.getPropertyValue("--radius-sm").trim();
+    const bottomHeight = getComputedStyle(document.querySelector("#appShell")).getPropertyValue("--bottom-height").trim();
+    const layoutButtonRadius = getComputedStyle(document.querySelector("#layoutToggle")).borderTopLeftRadius;
+    const topThemeSelectRadius = getComputedStyle(document.querySelector(".top-theme-select")).borderTopLeftRadius;
+    const cardRadius = getComputedStyle(document.querySelector("#editorPanel")).borderTopLeftRadius;
+    return { radius, radiusSm, bottomHeight, layoutButtonRadius, topThemeSelectRadius, cardRadius };
+  });
+
+  expect(result.radius).toBe("14px");
+  expect(result.radiusSm).toBe("11px");
+  expect(result.bottomHeight).toBe("220px");
+  expect(result.layoutButtonRadius).toBe("11px");
+  expect(result.topThemeSelectRadius).toBe("11px");
+  expect(result.cardRadius).toBe("14px");
+});
+
+test("layout micro: dock magnet and panel animation controls sync into layout state", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#layoutToggle").click();
+  await expect(page.locator("#layoutPanel")).toHaveAttribute("aria-hidden", "false");
+
+  await expect(page.locator("#layoutPanelAnimation")).toBeChecked();
+  await page.locator("#layoutDockMagnetInput").fill("144");
+  await page.locator("#layoutDockMagnetInput").dispatchEvent("change");
+  await page.locator("#layoutPanelAnimation").uncheck();
+
+  const result = await page.evaluate(() => {
+    const layout = window.fazide?.getState?.()?.layout || {};
+    return {
+      dockMagnetDistance: Number(layout.dockMagnetDistance || 0),
+      panelReflowAnimation: Boolean(layout.panelReflowAnimation),
+    };
+  });
+
+  expect(result.dockMagnetDistance).toBe(144);
+  expect(result.panelReflowAnimation).toBe(false);
+});
+
+test("layout micro: row selector docks tools panel into bottom row", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.evaluate(() => {
+    window.fazide?.setPanelOpen?.("tools", true);
+  });
+
+  await page.locator("#layoutToggle").click();
+  await expect(page.locator("#layoutPanel")).toHaveAttribute("aria-hidden", "false");
+  await page.locator("#layoutRowTools").selectOption("bottom");
+
+  const result = await page.evaluate(() => {
+    const rows = window.fazide?.getState?.()?.layout?.panelRows || { top: [], bottom: [] };
+    return {
+      top: Array.isArray(rows.top) ? rows.top : [],
+      bottom: Array.isArray(rows.bottom) ? rows.bottom : [],
+    };
+  });
+
+  expect(result.bottom).toContain("tools");
+  expect(result.top).not.toContain("tools");
 });
 
 test("layout micro: narrow viewport hides all splitters including tools splitter", async ({ page }) => {

@@ -205,7 +205,7 @@ button:focus-visible {
     min-width: 0;
     margin: 0;
     border: 1px solid transparent;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background-color: var(--surface-panel);
     color: var(--text-top-control);
     font-family: var(--font);
@@ -2771,14 +2771,6 @@ body[data-resize="row"] {
     user-select: none;
 }
 
-body[data-resize-preview="col"] {
-    cursor: col-resize;
-}
-
-body[data-resize-preview="row"] {
-    cursor: row-resize;
-}
-
 @media (prefers-reduced-motion: reduce) {
     .dock-overlay,
     .dock-zone,
@@ -2808,7 +2800,7 @@ body[data-resize-preview="row"] {
     top: 0;
     right: 0;
     width: min(360px, 92vw);
-    max-height: calc(100vh - 24px);
+    max-height: var(--modal-viewport-max-height);
     display: flex;
     flex-direction: column;
     gap: var(--modal-gap);
@@ -2820,6 +2812,8 @@ body[data-resize-preview="row"] {
     opacity: 0;
     transform: translateY(0);
     pointer-events: none;
+    overflow-x: hidden;
+    overflow-y: auto;
     transition: opacity var(--motion-layout) var(--motion-ease);
     z-index: 1300;
 }
@@ -2829,7 +2823,7 @@ body[data-resize-preview="row"] {
     left: 50%;
     right: auto;
     width: min(420px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
+    max-height: min(var(--modal-max-height), var(--modal-viewport-max-height));
     padding: var(--modal-padding);
     gap: var(--modal-gap);
     border: 1px solid var(--modal-border-color);
@@ -2882,7 +2876,7 @@ body[data-resize-preview="row"] {
     left: 50%;
     transform: translate(-50%, -8px);
     width: min(620px, calc(100vw - 28px));
-    max-height: min(var(--modal-max-height), calc(100vh - 24px));
+    max-height: min(var(--modal-max-height), var(--modal-viewport-max-height));
     display: flex;
     flex-direction: column;
     gap: var(--modal-gap);
@@ -2891,7 +2885,8 @@ body[data-resize-preview="row"] {
     border: 1px solid var(--modal-border-color);
     background: var(--modal-surface);
     box-shadow: var(--modal-shadow);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--motion-base) var(--motion-ease), transform var(--motion-base) var(--motion-ease);
@@ -2978,7 +2973,7 @@ body[data-resize-preview="row"] {
     width: var(--modal-width-lg);
 }
 
-#editorSearchPanel {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) {
     border-radius: 0;
     border-color: var(--border-control);
     background: var(--menu-bg);
@@ -2987,28 +2982,31 @@ body[data-resize-preview="row"] {
     gap: 8px;
 }
 
-#editorSearchPanel .quick-open-head {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) .quick-open-head {
     align-items: center;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border-soft);
 }
 
-#editorSearchPanel .quick-open-title {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) .quick-open-title {
     font-size: var(--text-size-2xs);
     letter-spacing: 0.45px;
 }
 
-#editorSearchPanel .quick-open-sub {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) .quick-open-sub {
     font-size: var(--text-size-2xs);
     color: var(--text-muted-quiet);
 }
 
-#editorSearchPanel .editor-search-grid {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) .editor-search-grid {
     gap: 6px;
 }
 
 #editorSearchPanel #editorFindInput,
-#editorSearchPanel #editorReplaceInput {
+#editorSearchPanel #editorReplaceInput,
+#symbolPalette #symbolSearchInput,
+#projectSearchPanel #projectSearchInput,
+#projectSearchPanel #projectReplaceInput {
     height: var(--control-height-md);
     border-radius: 0;
     border: 1px solid var(--border-control);
@@ -3019,16 +3017,19 @@ body[data-resize-preview="row"] {
 }
 
 #editorSearchPanel #editorFindInput:focus-visible,
-#editorSearchPanel #editorReplaceInput:focus-visible {
+#editorSearchPanel #editorReplaceInput:focus-visible,
+#symbolPalette #symbolSearchInput:focus-visible,
+#projectSearchPanel #projectSearchInput:focus-visible,
+#projectSearchPanel #projectReplaceInput:focus-visible {
     border-color: var(--btn-pressed-border);
     box-shadow: 0 0 0 2px var(--ring-focus-soft);
 }
 
-#editorSearchPanel .editor-search-controls {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) .editor-search-controls {
     gap: 6px;
 }
 
-#editorSearchPanel .editor-search-controls button {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) .editor-search-controls button {
     min-height: var(--control-height-md);
     padding: 6px 8px;
     border-radius: 0;
@@ -3039,7 +3040,7 @@ body[data-resize-preview="row"] {
     letter-spacing: 0.2px;
 }
 
-#editorSearchPanel .editor-search-controls button:hover {
+:is(#editorSearchPanel, #symbolPalette, #projectSearchPanel) .editor-search-controls button:hover {
     border-color: var(--btn-primary-border);
     background: var(--surface-active);
 }
@@ -3058,70 +3059,6 @@ body[data-resize-preview="row"] {
     background: var(--surface-panel);
     color: var(--text-muted-soft);
     font-size: var(--text-size-2xs);
-}
-
-#symbolPalette {
-    border-radius: 0;
-    border-color: var(--border-control);
-    background: var(--menu-bg);
-    box-shadow: var(--menu-shadow);
-    padding: 10px;
-    gap: 8px;
-}
-
-#symbolPalette .quick-open-head {
-    align-items: center;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border-soft);
-}
-
-#symbolPalette .quick-open-title {
-    font-size: var(--text-size-2xs);
-    letter-spacing: 0.45px;
-}
-
-#symbolPalette .quick-open-sub {
-    font-size: var(--text-size-2xs);
-    color: var(--text-muted-quiet);
-}
-
-#symbolPalette .editor-search-grid {
-    gap: 6px;
-}
-
-#symbolPalette #symbolSearchInput {
-    height: var(--control-height-md);
-    border-radius: 0;
-    border: 1px solid var(--border-control);
-    background: var(--surface-panel);
-    color: var(--text);
-    padding: 0 8px;
-    font-size: var(--text-size-xs);
-}
-
-#symbolPalette #symbolSearchInput:focus-visible {
-    border-color: var(--btn-pressed-border);
-    box-shadow: 0 0 0 2px var(--ring-focus-soft);
-}
-
-#symbolPalette .editor-search-controls {
-    gap: 6px;
-}
-
-#symbolPalette .editor-search-controls button {
-    min-height: var(--control-height-md);
-    padding: 6px 8px;
-    border-radius: 0;
-    border: 1px solid transparent;
-    background: transparent;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-}
-
-#symbolPalette .editor-search-controls button:hover {
-    border-color: var(--btn-primary-border);
-    background: var(--surface-active);
 }
 
 #symbolPalette .quick-open-list {
@@ -3169,72 +3106,6 @@ body[data-resize-preview="row"] {
     background: var(--surface-panel);
     color: var(--text-muted-soft);
     font-size: var(--text-size-2xs);
-}
-
-#projectSearchPanel {
-    border-radius: 0;
-    border-color: var(--border-control);
-    background: var(--menu-bg);
-    box-shadow: var(--menu-shadow);
-    padding: 10px;
-    gap: 8px;
-}
-
-#projectSearchPanel .quick-open-head {
-    align-items: center;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border-soft);
-}
-
-#projectSearchPanel .quick-open-title {
-    font-size: var(--text-size-2xs);
-    letter-spacing: 0.45px;
-}
-
-#projectSearchPanel .quick-open-sub {
-    font-size: var(--text-size-2xs);
-    color: var(--text-muted-quiet);
-}
-
-#projectSearchPanel .editor-search-grid {
-    gap: 6px;
-}
-
-#projectSearchPanel #projectSearchInput,
-#projectSearchPanel #projectReplaceInput {
-    height: var(--control-height-md);
-    border-radius: 0;
-    border: 1px solid var(--border-control);
-    background: var(--surface-panel);
-    color: var(--text);
-    padding: 0 8px;
-    font-size: var(--text-size-xs);
-}
-
-#projectSearchPanel #projectSearchInput:focus-visible,
-#projectSearchPanel #projectReplaceInput:focus-visible {
-    border-color: var(--btn-pressed-border);
-    box-shadow: 0 0 0 2px var(--ring-focus-soft);
-}
-
-#projectSearchPanel .editor-search-controls {
-    gap: 6px;
-}
-
-#projectSearchPanel .editor-search-controls button {
-    min-height: var(--control-height-md);
-    padding: 6px 8px;
-    border-radius: 0;
-    border: 1px solid transparent;
-    background: transparent;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-}
-
-#projectSearchPanel .editor-search-controls button:hover {
-    border-color: var(--btn-primary-border);
-    background: var(--surface-active);
 }
 
 #projectSearchPanel .editor-search-controls button[aria-pressed="true"] {
@@ -3733,7 +3604,7 @@ body[data-resize-preview="row"] {
     right: auto;
     top: 50%;
     width: var(--modal-width-sm);
-    max-height: min(var(--modal-max-height), 720px);
+    max-height: min(720px, var(--modal-viewport-max-height));
     transform: translate(-50%, -50%);
     z-index: 1380;
     overflow: hidden;
@@ -3745,7 +3616,7 @@ body[data-resize-preview="row"] {
     right: auto;
     top: 50%;
     width: var(--modal-width-md);
-    max-height: min(var(--modal-max-height), 760px);
+    max-height: min(760px, var(--modal-viewport-max-height));
     transform: translate(-50%, -50%);
     z-index: 1380;
     overflow: hidden;
@@ -3804,9 +3675,7 @@ body[data-resize-preview="row"] {
     line-height: 1.45;
 }
 
-#editorHistoryPanel,
-#shortcutHelpPanel,
-#editorSettingsPanel {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) {
     border-radius: var(--modal-radius);
     border-color: var(--modal-border-color);
     background: var(--modal-surface);
@@ -3815,9 +3684,7 @@ body[data-resize-preview="row"] {
     gap: var(--modal-gap);
 }
 
-#editorHistoryPanel .layout-header,
-#shortcutHelpPanel .layout-header,
-#editorSettingsPanel .layout-header {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-header {
     align-items: flex-start;
     min-height: var(--modal-header-min-height);
     overflow-x: auto;
@@ -3827,34 +3694,23 @@ body[data-resize-preview="row"] {
     border-bottom: 1px solid var(--modal-header-border);
 }
 
-#editorHistoryPanel .layout-header > div,
-#shortcutHelpPanel .layout-header > div,
-#editorSettingsPanel .layout-header > div {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-header > div {
     min-width: 0;
     flex: 1 1 auto;
 }
 
-#editorHistoryPanel .layout-title,
-#shortcutHelpPanel .layout-title,
-#editorSettingsPanel .layout-title {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-title {
     font-size: var(--text-size-2xs);
     letter-spacing: 0.45px;
     text-transform: uppercase;
 }
 
-#editorHistoryPanel .layout-sub,
-#shortcutHelpPanel .layout-sub,
-#editorSettingsPanel .layout-sub {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-sub {
     font-size: var(--text-size-2xs);
     color: var(--text-muted-quiet);
 }
 
-#editorHistoryPanel .layout-title,
-#shortcutHelpPanel .layout-title,
-#editorSettingsPanel .layout-title,
-#editorHistoryPanel .layout-sub,
-#shortcutHelpPanel .layout-sub,
-#editorSettingsPanel .layout-sub {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) :is(.layout-title, .layout-sub) {
     line-height: 1.35;
 }
 
@@ -3864,17 +3720,6 @@ body[data-resize-preview="row"] {
 
 #editorHistoryPanel .editor-history-actions {
     gap: 6px;
-}
-
-#editorHistoryPanel .editor-history-actions button {
-    min-height: var(--control-height-md);
-    padding: 6px 8px;
-    border-radius: 0;
-    border: 1px solid transparent;
-    background: transparent;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
 }
 
 #editorHistoryPanel .editor-history-actions button:hover {
@@ -4012,9 +3857,7 @@ body[data-resize-preview="row"] {
     background: var(--surface-panel);
 }
 
-#editorHistoryPanel .layout-header > button,
-#shortcutHelpPanel .layout-header > button,
-#editorSettingsPanel .layout-header > button {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-header > button {
     align-self: center;
     margin-top: 0;
 }
@@ -4549,6 +4392,7 @@ body[data-resize-preview="row"] {
     display: flex;
     flex-direction: column;
     gap: 14px;
+    min-height: 0;
     overflow-y: auto;
     padding-right: 2px;
 }
