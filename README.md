@@ -3,6 +3,10 @@
 Local, in-browser JavaScript playground with a configurable layout.
 Console, Editor, Files, and Sandbox are separate panels with independent sizing and order.
 
+## Getting Started
+
+For developers using Visual Studio Code, see [VS Code Setup Guide](docs/VSCODE_SETUP.md) for instructions on connecting GitHub Copilot (Spark AI) and setting up your development environment.
+
 ## Author & License
 
 - Author / Maintainer: Faz (FazyBear)
@@ -153,3 +157,22 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run frank:status` shows Franklin memory/check status.
 
 Details are in `desktop/README.md`.
+
+## Development Environment
+
+### VS Code Setup
+
+For the best development experience with AI-powered coding assistance:
+
+1. **Install VS Code**: Download from [code.visualstudio.com](https://code.visualstudio.com/)
+2. **Open the project**: `code .` from the project directory
+3. **Install recommended extensions**: Click "Install All" when prompted
+4. **Set up GitHub Copilot**: Follow the [VS Code Setup Guide](docs/VSCODE_SETUP.md)
+
+The project includes preconfigured VS Code settings for:
+- GitHub Copilot (Spark AI) integration
+- Auto-formatting with Prettier
+- CSS and JavaScript linting
+- Playwright test integration
+
+See [docs/VSCODE_SETUP.md](docs/VSCODE_SETUP.md) for detailed setup instructions and troubleshooting.

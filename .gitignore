@@ -19,7 +19,6 @@ logs/
 .DS_Store
 Thumbs.db
 Desktop.ini
-.vscode/
 .idea/
 
 # Temporary files
