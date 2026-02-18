@@ -269,7 +269,7 @@ The workspace is configured to:
 
 - **Command Palette:** `Ctrl+Shift+P` / `Cmd+Shift+P`
 - **Quick Open:** `Ctrl+P` / `Cmd+P`
-- **Terminal:** `Ctrl+`` / `Cmd+``
+- **Terminal:** ``Ctrl+` `` / ``Cmd+` ``
 - **Source Control:** `Ctrl+Shift+G` / `Cmd+Shift+G`
 
 ## Need Help?

@@ -5,8 +5,7 @@
     "dbaeumer.vscode-eslint",
     "esbenp.prettier-vscode",
     "stylelint.vscode-stylelint",
-    "ms-playwright.playwright",
-    "bradlc.vscode-tailwindcss"
+    "ms-playwright.playwright"
   ],
   "unwantedRecommendations": []
 }
