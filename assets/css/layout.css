@@ -58,38 +58,42 @@
 .splitter::before {
     content: "";
     position: absolute;
-    background: transparent;
+    background: var(--border-soft);
     pointer-events: none;
-    transition: background-color var(--splitter-transition);
+    transition: background-color var(--splitter-transition), opacity var(--splitter-transition);
+    opacity: 0.72;
 }
 
 .splitter-vertical::before {
     top: 0;
     bottom: 0;
-    left: 50%;
-    transform: translateX(-0.5px);
+    left: calc(50% - 0.5px);
+    transform: none;
     width: 1px;
 }
 
 .splitter-horizontal::before {
     left: 0;
     right: 0;
-    top: 50%;
-    transform: translateY(-0.5px);
+    top: calc(50% - 0.5px);
+    transform: none;
     height: 1px;
 }
 
 .splitter::after {
+    content: none;
     display: none;
 }
 
 .splitter:hover::before,
 .splitter:focus-visible::before {
     background: var(--border-strong);
+    opacity: 1;
 }
 
 body[data-resize] .splitter::before {
     background: var(--border-focus);
+    opacity: 1;
 }
 
 body[data-resize] .card[data-resize-active="true"],
@@ -358,6 +362,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     #splitLog,
     #splitFiles,
     #splitSandbox,
+    #splitTools,
     #splitRow {
         display: none;
     }

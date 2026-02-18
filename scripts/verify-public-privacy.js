@@ -73,18 +73,7 @@ function lineNumberAt(content, index) {
   return content.slice(0, index).split(/\r?\n/).length;
 }
 
-function isAllowedVendorPathMatch(relPath, patternLabel, matchValue) {
-  const rel = String(relPath || "").replace(/\\/g, "/").toLowerCase();
-  const value = String(matchValue || "").toLowerCase();
-  const label = String(patternLabel || "").toLowerCase();
-
-  const isVendoredPyodide = rel.includes("/assets/vendor/pyodide/") || rel.includes("/vendor/pyodide/");
-  if (!isVendoredPyodide) return false;
-
-  if (label === "absolute linux home path" && value.startsWith("/home/")) {
-    return true;
-  }
-
+function isAllowedVendorPathMatch() {
   return false;
 }
 

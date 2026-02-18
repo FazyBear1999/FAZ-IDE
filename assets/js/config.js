@@ -129,7 +129,6 @@ export const APPLICATIONS = [
             { path: "styles.css", src: "./assets/apps/runtime-full-matrix/styles.css" },
             { path: "app.js", src: "./assets/apps/runtime-full-matrix/app.js" },
             { path: "matrix.css", src: "./assets/apps/runtime-full-matrix/matrix.css" },
-            { path: "main.py", src: "./assets/apps/runtime-full-matrix/main.py" },
             { path: "README.md", src: "./assets/apps/runtime-full-matrix/README.md" },
         ],
         entryFile: "index.html",
@@ -164,15 +163,6 @@ export const APPLICATIONS = [
             { path: "styles.css", src: "./assets/apps/runtime-css-check/styles.css" },
         ],
         entryFile: "styles.css",
-    },
-    {
-        id: "runtime-python-check-app",
-        name: "Runtime Python Check",
-        icon: buildThemedIcon("1f40d"),
-        files: [
-            { path: "main.py", src: "./assets/apps/runtime-python-check/main.py" },
-        ],
-        entryFile: "main.py",
     },
     {
         id: "roofing-tools-app",

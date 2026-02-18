@@ -1,72 +1,41 @@
-# Agent Operations Manual
+# Agent Operations
 
-Purpose: give any AI agent a deterministic, low-risk operating contract for FAZ IDE.
+## Mission
+- Keep FAZ IDE stable, organized, and easy to extend.
+- Prefer small, reversible changes with deterministic validation.
 
-## 1) System Identity and Mission
-- Product: FAZ IDE (local-first browser IDE + optional desktop wrapper).
-- Delivery posture: safety-first, observable, reversible, test-gated.
-- Prime rule: prefer minimal root-cause fixes over broad rewrites.
+## Non-Negotiables
+- Do not broaden product scope without a recorded decision entry.
+- Do not merge behavior changes without focused validation.
+- Do not leave memory docs out of sync with runtime behavior.
+- Do not trade safety gates for speed.
 
-## 2) Core Architecture Map
-- Web orchestrator: `assets/js/app.js` (UI glue, run orchestration, state wiring).
-- Sandbox execution: `assets/js/sandbox/*` (runner, bridge, Python worker/runner, run-context).
-- Styling system: `assets/css/*` (token-driven contracts for component/layout layers).
-- Test surface: `tests/*.spec.js` (Playwright E2E + contract-style checks).
-- Release scripts: `scripts/*` + package scripts in `package.json`.
+## Architecture Anchors
+- Main orchestrator: `assets/js/app.js`
+- Sandbox runtime: `assets/js/sandbox/runner.js`
+- Preview/inlining helpers: `assets/js/sandbox/workspacePreview.js`
+- Runtime validation templates: `assets/apps/`
 
-## 3) Franklin and Release Gate Mental Model
-- Franklin orchestrator: `scripts/franklin.js`.
-- Full release gate (`frank:full`) runs 13 ordered stages:
-  1. `test:all:contract`
-  2. `sync:dist-site`
-  3. `test:sync:dist-site`
-  4. `test:memory`
-  5. `test:frank:safety`
-  6. `test:integrity`
-  7. `test` (Playwright)
-  8. `test:desktop:icon`
-  9. `test:desktop:pack`
-  10. `test:desktop:dist`
-  11. `deploy:siteground`
-  12. `verify:siteground`
-  13. `test:privacy`
-- Treat stage order as contract, not suggestion.
+## Safe Change Protocol
+1. Audit target surface before edits.
+2. Apply smallest possible patch set.
+3. Update focused tests for changed behavior.
+4. Update memory docs (`decisions`, `feature-map`, `release-notes`, `test-gaps`).
+5. Run focused checks, then broad gate when batch is complete.
 
-## 4) AI Memory Contract (What Must Stay Accurate)
-- `project-context.md`: product identity + constraints.
-- `feature-map.md`: what exists and intended behaviors.
-- `decisions.md`: architecture/behavior choices with rationale.
-- `known-issues.md` + `error-catalog.md`: reproducible faults and deterministic fixes.
-- `test-gaps.md`: highest-risk missing coverage.
-- `release-notes.md`: deploy-impacting timeline.
-- `handoff-checklist.md`: session start/end operational checklist.
+## Risk Tiers
+- **Low risk**: text-only docs and isolated tests; run focused checks + `test:memory`.
+- **Medium risk**: runtime/config behavior changes; run focused checks + `test:integrity` + relevant Playwright specs.
+- **High risk**: orchestration/release/safety flow edits; run full `frank:full` before handoff.
 
-## 5) Safe Change Protocol (Default)
-1. Read: `project-context.md`, `feature-map.md`, latest `decisions.md`, relevant tests.
-2. Localize the change surface (touch as few files as possible).
-3. Add/adjust targeted tests for changed behavior.
-4. Run focused tests first, broader gate second.
-5. Update memory docs only for behavior/architecture/test-policy deltas.
+## Validation Discipline
+- Use focused tests first.
+- Use `test:memory` after memory updates.
+- Run `frank:full` for full-system confirmation after major batches.
+- Capture exact failing stage/log path before attempting fixes.
 
-## 6) High-Risk Zones (Use Extra Caution)
-- `run()` flow and sandbox token gating in `assets/js/app.js`.
-- Python startup/timeout/lifecycle messaging across `app.js` + `pythonRunner.js` + `pythonWorker.js`.
-- Workspace persistence/snapshot/trash flows (`persistFiles`, snapshot restore, import/export paths).
-- Franklin gate contracts and script ordering.
-
-## 7) Definition of “Careful” for This Repository
-- Preserve existing UX semantics unless user explicitly requests behavior change.
-- Keep new logic observable (clear status/log diagnostics).
-- Keep operations reversible when possible (trash/undo/reset confirmation).
-- Never bypass integrity/memory/privacy constraints to make tests pass.
-
-## 8) Optimization Doctrine
-- Optimize for maintainability first (decompose long functions, isolate responsibilities).
-- Optimize performance only with measurable reason and bounded blast radius.
-- Optimization is incomplete without regression coverage.
-
-## 9) Session Exit Requirements
-- Required minimum before handoff:
-  - `npm run test:memory`
-  - relevant focused tests for touched behavior
-- For major batches and release-adjacent work, run `npm run frank:full`.
+## Session Exit Requirements
+- Working tree clearly reflects intended scope.
+- Docs and tests align with implementation.
+- Remaining risks and next actions are explicit.
+- Decision and recovery notes are updated when behavior or failure modes changed.

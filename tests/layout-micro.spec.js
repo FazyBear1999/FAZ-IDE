@@ -125,3 +125,13 @@ test("layout micro: quick layout works when header is hidden", async ({ page }) 
   await expect(page.locator("#layoutPanel")).toHaveAttribute("aria-hidden", "false");
   await expect(page.locator("#layoutPanel")).toHaveAttribute("data-open", "true");
 });
+
+test("layout micro: narrow viewport hides all splitters including tools splitter", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const splitters = ["#splitLog", "#splitFiles", "#splitSandbox", "#splitTools", "#splitRow"];
+  for (const selector of splitters) {
+    await expect(page.locator(selector)).toBeHidden();
+  }
+});

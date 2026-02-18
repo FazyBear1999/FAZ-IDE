@@ -1,59 +1,40 @@
 # Optimization Map (Safe-First)
 
-This map helps AI agents pick high-value optimization work with controlled risk.
-
 ## Tier A: High Value + Medium Risk
 
-### A1. Run Orchestration Decomposition (`assets/js/app.js`)
-- Why: large run-path logic is high-churn and regression-prone.
+### A1. `app.js` orchestration decomposition
+- Why: high churn area with broad blast radius.
 - Safe tactic:
-  - Extract helper boundaries without changing behavior.
-  - Keep token/run-context semantics unchanged.
-  - Add/maintain targeted runtime lifecycle tests.
+  - Extract helper boundaries only.
+  - Keep run semantics and token gates unchanged.
+  - Pair each extraction with focused contract tests.
 
-### A2. Dev Terminal Command Clarity
-- Why: command UX affects support/debug speed.
+### A2. Runtime validation simplification
+- Why: deterministic diagnostics reduce triage time.
 - Safe tactic:
-  - Add explicit usage/help lines and deterministic command outputs.
-  - Keep command allowlist strict; block privileged/eval paths.
-  - Test command output contracts.
+  - Keep runtime template output marker-based.
+  - Keep copy concise and explicit.
+  - Avoid adding extra runtime branches.
 
-### A3. Python Runtime Diagnostics
-- Why: blocked CDN/startup cases can look like silent failures.
+### A3. Filesystem operation hardening
+- Why: file operations are core UX and error-prone.
 - Safe tactic:
-  - Prefer progressive diagnostics (start, loading, blocked hint, timeout).
-  - Keep error messages actionable and short.
-  - Verify fallback behavior for subsequent JS/HTML runs after Python failures.
+  - Preserve reversible operations.
+  - Add focused tests for move/rename/trash edge paths.
+  - Keep state transitions explicit.
 
 ## Tier B: Medium Value + Low Risk
 
-### B1. Memory Doc Navigation
-- Why: improves AI session consistency and reduces repeated missteps.
-- Safe tactic:
-  - Add cross-links and clear ownership of each memory file.
-  - Keep required file contract intact.
+### B1. Memory doc consistency
+- Keep AI memory docs aligned with current architecture.
+- Remove stale references quickly after scope shifts.
 
-### B2. Decision Log Quality
-- Why: future agents rely on rationale, not just outcome.
-- Safe tactic:
-  - Keep entries timestamped and explicit (`Decision`, `Why`, `Follow-up`).
-  - Avoid rewriting historical entries; append new deltas.
+### B2. Command/help clarity
+- Keep command outputs deterministic and concise.
+- Keep help text aligned with actual supported behavior.
 
-## Tier C: High Risk (Only with Strong Test Plan)
-
-### C1. Persistence/Snapshot/Import Paths
-- Risk: data loss or inconsistent workspace recovery.
-- Requirement:
-  - Add deterministic tests for failure paths before refactors.
-
-### C2. Franklin Orchestration Contracts
-- Risk: false green gates or skipped safety checks.
-- Requirement:
-  - Preserve stage ordering and contract verifiers.
-  - Validate with full gate after changes.
-
-## Optimization Readiness Checklist
-- Is the target behavior currently covered by tests?
-- Can the change be split into helper extraction first, behavior change second?
-- Is rollback straightforward if a gate fails?
-- Are memory docs updated to reflect the new architecture boundary?
+## Readiness Checklist
+- Is behavior covered before refactor?
+- Is change split into small reversible steps?
+- Is rollback straightforward?
+- Are memory docs updated immediately after changes?

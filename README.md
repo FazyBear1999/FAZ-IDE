@@ -120,8 +120,6 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run sync:dist-site` copies source web assets into `dist_site/` and removes stale files.
 - `npm run test:sync:dist-site` verifies `dist_site/` stays in sync with source web assets.
 - `npm run test:memory` verifies required AI memory docs are present and structured.
-- `npm run python:runtime:setup` downloads required local Pyodide files into `assets/vendor/pyodide/v0.27.2/full/` for local-first/offline Python runtime.
-- `npm run python:runtime:verify` verifies required local Pyodide runtime files are present.
 - `npm run test:frank:safety` verifies Franklin command safety (allowlist behavior, sanitized memory writes, and docs/ai-memory path boundaries).
 - `npm run test:integrity` verifies test hygiene (no focused/skipped/fixme tests, no trivial assertions, and assertion presence checks).
 - `npm run test:all:contract` verifies `test:all` still includes all required gates in order.

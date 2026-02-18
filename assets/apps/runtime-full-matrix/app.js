@@ -44,7 +44,7 @@ async function runMatrix() {
   setMatrixConfirm(
     "pending",
     `<img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/23f3.svg" alt="" aria-hidden="true" /> Matrix status: Running checks...`,
-    "Testing HTML/JS channel now. CSS and Python checks run in their own files."
+    "Testing HTML/JS channel now. CSS check runs in its own file."
   );
 
   let allPassed = true;
@@ -94,7 +94,7 @@ async function runMatrix() {
     setMatrixConfirm(
       "pass",
       `<img class="lang-icon" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/2705.svg" alt="" aria-hidden="true" /> Matrix status: CORE CHECKS PASSED`,
-      "HTML/JS channel is confirmed. Run matrix.css and main.py to complete CSS/Python confirmation."
+      "HTML/JS channel is confirmed. Run matrix.css to complete CSS confirmation."
     );
   } else {
     report("fail", `${marker}:step-09:done matrix html/js path has failures`);
@@ -106,7 +106,7 @@ async function runMatrix() {
   }
   console.log(`${marker}:html-js:done`);
   if (status) {
-    status.textContent = `Matrix HTML/JS complete (${marker}). Next run matrix.css and main.py.`;
+    status.textContent = `Matrix HTML/JS complete (${marker}). Next run matrix.css.`;
   }
 }
 

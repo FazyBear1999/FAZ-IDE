@@ -26,232 +26,12 @@ import { THEMES, normalizeTheme, applyThemeState, DEFAULT_THEME } from "./ui/the
 import { buildExportWorkspaceData, buildWorkspaceExportFilename, triggerWorkspaceExportDownload, normalizeImportedWorkspacePayload, parseWorkspaceImportText, buildImportWorkspaceConfirmMessage } from "./ui/workspaceTransfer.js";
 import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, normalizeFilesSectionOrder, cloneLayoutState } from "./ui/layoutState.js";
 import { runInSandbox } from "./sandbox/runner.js";
-import { runPythonInSandbox, cancelPythonSandboxRuns, disposePythonSandboxRunner } from "./sandbox/pythonRunner.js";
 import { createRunContext, normalizeRunContext, buildRunContextLabel } from "./sandbox/runContext.js";
+import { buildCssPreviewHtml, createWorkspaceAssetResolver } from "./sandbox/workspacePreview.js";
 import { makeTextareaEditor } from "./editors/textarea.js";
 import { makeCodeMirrorEditor } from "./editors/codemirror5.js";
 import { createCommandRegistry } from "./core/commandRegistry.js";
 
-function sanitizeStyleForHtml(value = "") {
-    return String(value ?? "").replace(/<\/style>/gi, "<\\/style>");
-}
-
-function buildCssPreviewHtml(cssCode) {
-    const safeCss = sanitizeStyleForHtml(cssCode);
-    const shellCss =
-        `:root{` +
-        `--preview-bg:var(--fazide-sandbox-bg,#0b0f14);` +
-        `--preview-fg:var(--fazide-sandbox-fg,#e6edf3);` +
-        `--preview-panel:var(--fazide-sandbox-panel,#111520);` +
-        `--preview-border:var(--fazide-sandbox-border,rgba(148,163,184,.3));` +
-        `--preview-accent:var(--fazide-sandbox-accent,#38bdf8);` +
-        `--preview-muted:var(--fazide-sandbox-muted,rgba(148,163,184,.9));` +
-        `}` +
-        `html,body{margin:0;min-height:100%;}` +
-        `body{padding:20px;background:var(--preview-bg);color:var(--preview-fg);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;}` +
-        `.fazide-css-preview{max-width:760px;margin:0 auto;padding:16px;border:1px solid var(--preview-border);background:var(--preview-panel);}` +
-        `.fazide-css-preview h1{margin:0 0 8px;color:var(--preview-fg);font-size:20px;}` +
-        `.fazide-css-preview p{margin:0 0 12px;color:var(--preview-muted);}` +
-        `.fazide-css-preview button{padding:8px 12px;border:1px solid var(--preview-accent);background:transparent;color:var(--preview-fg);}`;
-    return (
-        `<!doctype html><html><head><meta charset="utf-8" />` +
-        `<style>${shellCss}</style>` +
-        `<style>${safeCss}</style>` +
-        `</head><body>` +
-        `<main class="fazide-css-preview">` +
-        `<h1>CSS Preview</h1>` +
-        `<p>Edit your stylesheet and click Run to refresh this preview.</p>` +
-        `<button type="button">Preview Button</button>` +
-        `</main></body></html>`
-    );
-}
-
-function buildPythonPreviewHtml(fileName = "") {
-    const safeName = escapeHTML(getFileBaseName(fileName || "main.py") || "main.py");
-    const shellCss =
-        `:root{` +
-        `--preview-bg:var(--fazide-sandbox-bg,#0b0f14);` +
-        `--preview-fg:var(--fazide-sandbox-fg,#e6edf3);` +
-        `--preview-panel:var(--fazide-sandbox-panel,#111520);` +
-        `--preview-border:var(--fazide-sandbox-border,rgba(148,163,184,.3));` +
-        `--preview-accent:var(--fazide-sandbox-accent,#38bdf8);` +
-        `--preview-muted:var(--fazide-sandbox-muted,rgba(148,163,184,.9));` +
-        `}` +
-        `html,body{margin:0;min-height:100%;}` +
-        `body{padding:20px;background:var(--preview-bg);color:var(--preview-fg);font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;}` +
-        `.fazide-css-preview{max-width:760px;margin:0 auto;padding:16px;border:1px solid var(--preview-border);background:var(--preview-panel);}` +
-        `.fazide-css-preview h1{margin:0 0 8px;font-size:20px;color:var(--preview-fg);}` +
-        `.fazide-css-preview p{margin:0 0 10px;color:var(--preview-muted);}` +
-        `.fazide-css-preview strong{color:var(--preview-accent);}`;
-    return (
-        `<!doctype html><html><head><meta charset="utf-8" /><style>${shellCss}</style></head><body>` +
-        `<main class="fazide-css-preview">` +
-        `<h1>Python Run</h1>` +
-        `<p>Executing <strong>${safeName}</strong> in sandboxed Python worker.</p>` +
-        `<p>Console output appears in the Console panel.</p>` +
-        `</main></body></html>`
-    );
-}
-
-function createWorkspaceAssetResolver(workspaceFiles = []) {
-    let workspaceFileMap = null;
-    let fromDirSegmentsCache = null;
-    let resolvedAssetFileCache = null;
-    let sourceLanguageCache = null;
-
-    const ensureState = () => {
-        if (workspaceFileMap && fromDirSegmentsCache && resolvedAssetFileCache && sourceLanguageCache) return;
-        workspaceFileMap = new Map(
-            workspaceFiles.map((file) => [
-                normalizePathSlashes(String(file.name || "")).toLowerCase(),
-                file,
-            ])
-        );
-        fromDirSegmentsCache = new Map();
-        resolvedAssetFileCache = new Map();
-        sourceLanguageCache = new Map();
-    };
-
-    const resolveWorkspaceFile = (filePath = "") => {
-        ensureState();
-        const normalized = normalizePathSlashes(String(filePath || "")).toLowerCase();
-        if (!normalized) return null;
-        return workspaceFileMap.get(normalized) || null;
-    };
-
-    const getSourceLanguage = (fileName = "") => {
-        ensureState();
-        const key = String(fileName || "").toLowerCase();
-        if (!key) return "";
-        if (sourceLanguageCache.has(key)) return sourceLanguageCache.get(key);
-        const language = detectLanguageFromFileName(key);
-        sourceLanguageCache.set(key, language);
-        return language;
-    };
-
-    const isExternalAssetRef = (value = "") => {
-        const normalized = String(value || "").trim().toLowerCase();
-        if (!normalized || normalized.startsWith("#") || normalized.startsWith("//")) return true;
-        return /^[a-z][a-z0-9+.-]*:/.test(normalized);
-    };
-
-    const stripAssetDecorators = (value = "") => String(value || "").split("#")[0].split("?")[0];
-
-    const resolveWorkspacePath = (baseSegments = [], refValue = "") => {
-        const segments = Array.isArray(baseSegments) ? [...baseSegments] : [];
-        splitPathSegments(refValue).forEach((segment) => {
-            if (segment === ".") return;
-            if (segment === "..") {
-                if (segments.length) segments.pop();
-                return;
-            }
-            segments.push(segment);
-        });
-        return buildPathFromSegments(segments);
-    };
-
-    const dedupeWorkspacePaths = (values = []) => {
-        const seen = new Set();
-        return (Array.isArray(values) ? values : [])
-            .map((value) => normalizePathSlashes(String(value || "")).replace(/^\/+/, ""))
-            .filter((value) => {
-                const normalized = value.trim();
-                if (!normalized) return false;
-                const key = normalized.toLowerCase();
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
-    };
-
-    const resolveWorkspaceAssetPaths = (fromFileName, assetRef) => {
-        ensureState();
-        if (isExternalAssetRef(assetRef)) return [];
-        const clean = normalizePathSlashes(stripAssetDecorators(assetRef));
-        if (!clean) return [];
-        const rootRelative = clean.startsWith("/");
-        const refValue = rootRelative ? clean.slice(1) : clean;
-        const fromKey = normalizePathSlashes(String(fromFileName || "")).toLowerCase();
-        const fromDirSegments = fromDirSegmentsCache.has(fromKey)
-            ? fromDirSegmentsCache.get(fromKey)
-            : splitPathSegments(getFileDirectory(fromKey));
-        if (!fromDirSegmentsCache.has(fromKey)) {
-            fromDirSegmentsCache.set(fromKey, fromDirSegments);
-        }
-        const directPath = resolveWorkspacePath(rootRelative ? [] : fromDirSegments, refValue);
-        if (rootRelative) return dedupeWorkspacePaths([directPath]);
-
-        const rootFallbackPath = resolveWorkspacePath([], refValue);
-        const looksRootAnchored =
-            refValue.startsWith("./") ||
-            refValue.startsWith("../") ||
-            refValue.startsWith("assets/") ||
-            refValue.startsWith("apps/") ||
-            refValue.startsWith("games/");
-        return dedupeWorkspacePaths(
-            looksRootAnchored || directPath !== rootFallbackPath
-                ? [directPath, rootFallbackPath]
-                : [directPath]
-        );
-    };
-
-    const resolveWorkspaceAssetFile = (fromFileName, assetRef) => {
-        ensureState();
-        const cacheKey = `${normalizePathSlashes(String(fromFileName || "")).toLowerCase()}::${normalizePathSlashes(String(assetRef || "")).trim().toLowerCase()}`;
-        if (resolvedAssetFileCache.has(cacheKey)) {
-            return resolvedAssetFileCache.get(cacheKey);
-        }
-        const candidates = resolveWorkspaceAssetPaths(fromFileName, assetRef);
-        let resolved = null;
-        for (let i = 0; i < candidates.length; i += 1) {
-            const sourceFile = resolveWorkspaceFile(candidates[i]);
-            if (sourceFile) {
-                resolved = sourceFile;
-                break;
-            }
-        }
-        resolvedAssetFileCache.set(cacheKey, resolved);
-        return resolved;
-    };
-
-    const buildHtmlFromWorkspace = (htmlSource, fromFileName) => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(String(htmlSource ?? ""), "text/html");
-
-        Array.from(doc.querySelectorAll("link[href]")).forEach((link) => {
-            const rel = String(link.getAttribute("rel") || "").toLowerCase();
-            if (rel && !rel.split(/\s+/).includes("stylesheet")) return;
-            const href = link.getAttribute("href") || "";
-            const sourceFile = resolveWorkspaceAssetFile(fromFileName, href);
-            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "css") return;
-            const style = doc.createElement("style");
-            style.setAttribute("data-fazide-source", sourceFile.name);
-            style.textContent = sanitizeStyleForHtml(sourceFile.code);
-            link.replaceWith(style);
-        });
-
-        Array.from(doc.querySelectorAll("script[src]")).forEach((script) => {
-            const src = script.getAttribute("src") || "";
-            const sourceFile = resolveWorkspaceAssetFile(fromFileName, src);
-            if (!sourceFile || getSourceLanguage(sourceFile.name) !== "javascript") return;
-            const inline = doc.createElement("script");
-            Array.from(script.attributes).forEach((attr) => {
-                if (String(attr.name || "").toLowerCase() === "src") return;
-                inline.setAttribute(attr.name, attr.value);
-            });
-            inline.setAttribute("data-fazide-source", sourceFile.name);
-            inline.textContent = String(sourceFile.code ?? "");
-            script.replaceWith(inline);
-        });
-
-        const root = doc.documentElement;
-        return `<!doctype html>\n${root ? root.outerHTML : String(htmlSource ?? "")}`;
-    };
-
-    return {
-        buildHtmlFromWorkspace,
-    };
-}
 import { createDebouncedTask } from "./core/debounce.js";
 import { createFormatter } from "./core/formatting.js";
 import { createAstClient } from "./core/astClient.js";
@@ -466,19 +246,17 @@ const UNDO_DELETE_WINDOW_MS = 1000 * 15;
 const FILE_HISTORY_LIMIT = 120;
 const SNAPSHOT_RECOVERY_GRACE_MS = 1500;
 const EDITOR_HISTORY_LIMIT = 80;
+const RUNTIME_PROBLEM_LIMIT = 120;
+const PROBLEM_ENTRY_LIMIT = 200;
+const DOCK_ZONE_MAGNET_DISTANCE = 84;
 const EDITOR_MARK_KIND_DIAGNOSTIC = "diagnostic";
 const EDITOR_MARK_KIND_ERROR_LENS = "error-lens";
 const EDITOR_MARK_KIND_FIND = "find";
 const EDITOR_MARK_KIND_SYMBOL = "symbol";
 const EDITOR_LINT_DEBOUNCE_MS = 220;
-const EDITOR_AUTOSAVE_DEFAULT_MS = 650;
-const PROBLEM_ENTRY_LIMIT = 260;
-const RUNTIME_PROBLEM_LIMIT = 80;
-const TASK_RUNNER_OUTPUT_LIMIT = 180;
-const DEV_TERMINAL_OUTPUT_LIMIT = 200;
-const DEV_TERMINAL_HISTORY_LIMIT = 120;
-const TASK_RUNNER_MESSAGE_MAX_CHARS = 1400;
 const DEV_TERMINAL_MESSAGE_MAX_CHARS = 1400;
+const DEV_TERMINAL_OUTPUT_LIMIT = 240;
+const DEV_TERMINAL_HISTORY_LIMIT = 80;
 const SANDBOX_CONSOLE_MAX_ARGS = 24;
 const SANDBOX_CONSOLE_ARG_MAX_CHARS = 1000;
 const SANDBOX_RUNTIME_MESSAGE_MAX_CHARS = 1400;
@@ -508,19 +286,16 @@ const LOCAL_FOLDER_IMPORT_EXTENSIONS = new Set([
     "jsx",
     "ts",
     "tsx",
-    "json",
     "css",
     "scss",
     "sass",
     "less",
-    "html",
     "htm",
     "md",
     "markdown",
     "txt",
     "svg",
     "xml",
-    "py",
 ]);
 
 const DEFAULT_SNIPPETS = [
@@ -529,10 +304,8 @@ const DEFAULT_SNIPPETS = [
     { trigger: "afn", template: "const ${1:name} = (${2:params}) => {\n  ${0}\n};", scope: "javascript" },
     { trigger: "fori", template: "for (let ${1:i} = 0; ${1:i} < ${2:count}; ${1:i} += 1) {\n  ${0}\n}", scope: "javascript" },
     { trigger: "if", template: "if (${1:condition}) {\n  ${0}\n}", scope: "javascript" },
-    { trigger: "def", template: "def ${1:name}(${2:args}):\n    ${0}", scope: "python" },
-    { trigger: "fori-py", template: "for ${1:i} in range(${2:n}):\n    ${0}", scope: "python" },
 ];
-const SNIPPET_SCOPE_VALUES = new Set(["*", "javascript", "typescript", "json", "html", "css", "markdown", "python", "text"]);
+const SNIPPET_SCOPE_VALUES = new Set(["*", "javascript", "typescript", "json", "html", "css", "markdown", "text"]);
 const EDITOR_COMPLETION_KEYWORDS = Object.freeze({
     javascript: Object.freeze([
         "const", "let", "var", "function", "return", "if", "else", "for", "while", "switch", "case", "default",
@@ -551,10 +324,6 @@ const EDITOR_COMPLETION_KEYWORDS = Object.freeze({
         "grid", "flex", "align-items", "justify-content", "gap", "z-index", "overflow", "opacity", "transform",
     ]),
     markdown: Object.freeze(["#", "##", "###", "-", "*", "```", "[", "]", "(", ")"]),
-    python: Object.freeze([
-        "def", "class", "import", "from", "as", "if", "elif", "else", "for", "while", "try", "except", "finally", "with", "return",
-        "yield", "lambda", "pass", "break", "continue", "True", "False", "None", "print", "len", "range", "enumerate", "list", "dict",
-    ]),
 });
 const EDITOR_COMPLETION_MIN_PREFIX = 2;
 const EDITOR_COMPLETION_MAX_ITEMS = 8;
@@ -653,7 +422,7 @@ const EDITOR_AUTO_PAIR_CLOSE_TO_OPEN = new Map(
 );
 const EDITOR_AUTO_PAIR_QUOTES = new Set(["\"", "'", "`"]);
 const EDITOR_AUTO_PAIR_SAFE_NEXT = new Set([")", "]", "}", ">", ",", ";", ":"]);
-const EDITOR_LINE_COMMENT_PREFIX_LANGS = new Set(["javascript", "typescript", "json", "css", "python"]);
+const EDITOR_LINE_COMMENT_PREFIX_LANGS = new Set(["javascript", "typescript", "json", "css"]);
 const EDITOR_HTML_VOID_TAGS = new Set([
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
 ]);
@@ -1939,6 +1708,9 @@ const PANEL_REFLOW_ANIMATION_MS = 180;
 const PANEL_REFLOW_ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const PANEL_REFLOW_CLEANUP_BUFFER_MS = 96;
 const WORKSPACE_ROW_MIN_HEIGHT = 72;
+const LAYOUT_COLUMN_COUNT = 3;
+const LAYOUT_EDITOR_ROW_MAX_COLUMNS = 2;
+const LAYOUT_NON_EDITOR_ROW_MAX_SHARE = 0.9;
 const PANEL_REDUCED_MOTION_QUERY = typeof window !== "undefined" && typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-reduced-motion: reduce)")
     : null;
@@ -1965,7 +1737,6 @@ const FILE_ICON_PATHS = Object.freeze({
     xml: `${FILE_ICON_BASE_PATH}/xml.svg`,
     image: `${FILE_ICON_BASE_PATH}/image.svg`,
     shell: `${FILE_ICON_BASE_PATH}/shell.svg`,
-    python: `${FILE_ICON_BASE_PATH}/python.svg`,
     java: `${FILE_ICON_BASE_PATH}/java.svg`,
     node: `${FILE_ICON_BASE_PATH}/node.svg`,
     sql: `${FILE_ICON_BASE_PATH}/sql.svg`,
@@ -2010,7 +1781,6 @@ const FILE_EXTENSION_ICON_MAP = Object.freeze({
     ps1: FILE_ICON_PATHS.shell,
     bat: FILE_ICON_PATHS.shell,
     cmd: FILE_ICON_PATHS.shell,
-    py: FILE_ICON_PATHS.python,
     java: FILE_ICON_PATHS.java,
     sql: FILE_ICON_PATHS.sql,
     rs: FILE_ICON_PATHS.rust,
@@ -2078,8 +1848,47 @@ function rowHasOpenPanels(row) {
     return order.some((name) => isPanelOpen(name));
 }
 
+function countOpenPanelsInRow(rows, row) {
+    const order = Array.isArray(rows?.[row]) ? rows[row] : [];
+    return order.reduce((total, panel) => total + (isPanelOpen(panel) ? 1 : 0), 0);
+}
+
+function pickOverflowPanel(rows, rowName, preservePanel = null) {
+    const order = Array.isArray(rows?.[rowName]) ? rows[rowName] : [];
+    const reversed = [...order].reverse();
+    const preferred = reversed.find((panel) => isPanelOpen(panel) && panel !== "editor" && panel !== preservePanel);
+    if (preferred) return preferred;
+    const fallback = reversed.find((panel) => isPanelOpen(panel) && panel !== preservePanel);
+    if (fallback) return fallback;
+    return reversed.find((panel) => isPanelOpen(panel)) || null;
+}
+
+function enforceDockingRowCaps(rows, { preferredRow = null, preservePanel = null } = {}) {
+    const normalized = normalizePanelRows(rows);
+    const maxOpenPerRow = LAYOUT_COLUMN_COUNT;
+    const maxPasses = 12;
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+        const topOpen = countOpenPanelsInRow(normalized, "top");
+        const bottomOpen = countOpenPanelsInRow(normalized, "bottom");
+        if (topOpen <= maxOpenPerRow && bottomOpen <= maxOpenPerRow) break;
+
+        const rowName = topOpen > maxOpenPerRow ? "top" : "bottom";
+        const targetRow = rowName === "top" ? "bottom" : "top";
+        const preserve = rowName === preferredRow ? preservePanel : null;
+        const overflowPanel = pickOverflowPanel(normalized, rowName, preserve);
+        if (!overflowPanel) break;
+
+        normalized[rowName] = normalized[rowName].filter((panel) => panel !== overflowPanel);
+        const targetOrder = normalized[targetRow].filter((panel) => panel !== overflowPanel);
+        const insertionIndex = targetRow === "bottom" ? targetOrder.length : 0;
+        targetOrder.splice(insertionIndex, 0, overflowPanel);
+        normalized[targetRow] = targetOrder;
+    }
+    return normalized;
+}
+
 function applyPanelOrder() {
-    const rows = normalizePanelRows(layoutState.panelRows);
+    const rows = enforceDockingRowCaps(layoutState.panelRows);
     layoutState.panelRows = rows;
     const panels = {
         log: el.logPanel,
@@ -2584,13 +2393,13 @@ function getWidthControl(panel) {
 
 function getLayoutBounds() {
     const workspaceRect = el.workspace?.getBoundingClientRect() ?? { width: window.innerWidth, height: window.innerHeight };
-    const maxSidebar = Math.min(720, Math.max(200, workspaceRect.width * 0.6));
+    const maxSidebar = Math.min(1400, Math.max(FILES_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.85));
     const minSidebar = Math.min(maxSidebar, FILES_PANEL_MIN_WIDTH);
-    const maxLog = Math.min(820, Math.max(220, workspaceRect.width * 0.65));
+    const maxLog = Math.min(1600, Math.max(LOG_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.9));
     const minLog = Math.min(maxLog, LOG_PANEL_MIN_WIDTH);
-    const maxSandbox = Math.min(980, Math.max(260, workspaceRect.width * 0.7));
+    const maxSandbox = Math.min(1600, Math.max(SANDBOX_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.9));
     const minSandbox = Math.min(maxSandbox, SANDBOX_PANEL_MIN_WIDTH);
-    const maxTools = Math.min(820, Math.max(220, workspaceRect.width * 0.5));
+    const maxTools = Math.min(1600, Math.max(TOOLS_PANEL_MIN_WIDTH + 120, workspaceRect.width * 0.9));
     const minTools = Math.min(maxTools, TOOLS_PANEL_MIN_WIDTH);
     const maxBottom = Math.max(160, Math.round(workspaceRect.height * 0.7));
     return {
@@ -2607,6 +2416,23 @@ function getLayoutBounds() {
 function getOpenPanelsInRow(row) {
     const list = layoutState.panelRows?.[row] || [];
     return list.filter((name) => isPanelOpen(name));
+}
+
+function getRowColumnCap(panel, row) {
+    if (!row) return Infinity;
+    const openPanels = getOpenPanelsInRow(row);
+    if (!openPanels.includes(panel)) return Infinity;
+    const rowWidth = getRowWidth(row);
+    if (!Number.isFinite(rowWidth) || rowWidth <= 0) return Infinity;
+    const gapCount = Math.max(0, openPanels.length - 1) * 2;
+    const gapTotal = gapCount * (layoutState.panelGap || 0);
+    const usable = Math.max(0, rowWidth - gapTotal);
+    if (!usable) return Infinity;
+    if (openPanels.length <= 1) return usable;
+    if (openPanels.includes("editor")) {
+        return Math.round((usable * LAYOUT_EDITOR_ROW_MAX_COLUMNS) / LAYOUT_COLUMN_COUNT);
+    }
+    return Math.round(usable * LAYOUT_NON_EDITOR_ROW_MAX_SHARE);
 }
 
 function getRowWidth(row) {
@@ -2639,7 +2465,9 @@ function getEffectiveBounds(panel, row, baseBounds) {
     });
     const rowWidth = getRowWidth(row);
     const maxByRow = rowWidth - gapTotal - fixedOthers - editorMin;
-    const max = Math.min(baseBounds.max, Math.max(baseBounds.min, maxByRow));
+    const columnCap = getRowColumnCap(panel, row);
+    const hardMax = Math.min(baseBounds.max, maxByRow, columnCap);
+    const max = Math.max(baseBounds.min, hardMax);
     return { min: baseBounds.min, max };
 }
 
@@ -2780,13 +2608,28 @@ function sanitizeLayoutState(state = {}) {
 function normalizeRowWidths(row) {
     const openPanels = getOpenPanelsInRow(row);
     if (!openPanels.length) return;
-    const items = openPanels
+    const buildItems = () => openPanels
         .map((name) => {
             const control = getWidthControl(name);
             if (!control) return null;
-            return { name, control, bounds: getLayoutBounds()[control.boundsKey] };
+            const bounds = getLayoutBounds()[control.boundsKey];
+            const effective = getEffectiveBounds(name, row, bounds);
+            return { name, control, bounds, effective };
         })
         .filter(Boolean);
+
+    let items = buildItems();
+    if (!items.length) return;
+
+    items.forEach((item) => {
+        const current = item.control.get();
+        const next = clamp(current, item.effective.min, item.effective.max);
+        if (next !== current) {
+            item.control.set(next);
+        }
+    });
+
+    items = buildItems();
     if (!items.length) return;
 
     const gapCount = Math.max(0, openPanels.length - 1) * 2;
@@ -2801,7 +2644,7 @@ function normalizeRowWidths(row) {
     while (over > 0.5 && guard < 8) {
         const shrinkers = items
             .map((item) => {
-                const min = item.bounds.min;
+                const min = item.effective.min;
                 const can = item.control.get() - min;
                 return can > 0.5 ? { ...item, min, can } : null;
             })
@@ -4141,63 +3984,8 @@ function maskDevTerminalCommand(input = "") {
     return String(input || "").trim();
 }
 
-async function probePythonRuntimeConnectivity(timeoutMs = 6000) {
-    const targets = [
-        { label: "local-bundle", url: new URL("./assets/vendor/pyodide/v0.27.2/full/pyodide.js", window.location.href).href },
-        { label: "cdn-jsdelivr", url: "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js" },
-        { label: "cdn-unpkg", url: "https://unpkg.com/pyodide@0.27.2/pyodide.js" },
-    ];
-    if (typeof fetch !== "function") {
-        return { ok: false, results: [], error: "Fetch API unavailable in this browser context." };
-    }
-    if (typeof AbortController !== "function") {
-        return { ok: false, results: [], error: "AbortController unavailable in this browser context." };
-    }
-
-    const results = [];
-    for (let i = 0; i < targets.length; i += 1) {
-        const target = targets[i];
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 6000));
-        try {
-            const response = await fetch(target.url, {
-                method: "GET",
-                mode: "cors",
-                cache: "no-store",
-                signal: controller.signal,
-            });
-            const ok = Boolean(response?.ok);
-            results.push({
-                label: target.label,
-                url: target.url,
-                ok,
-                status: Number(response?.status || 0),
-                error: ok ? "" : `HTTP ${response.status} ${response.statusText || ""}`.trim(),
-            });
-        } catch (err) {
-            results.push({
-                label: target.label,
-                url: target.url,
-                ok: false,
-                status: 0,
-                error: String(err?.message || err || "Unknown network error"),
-            });
-        } finally {
-            clearTimeout(timer);
-        }
-    }
-
-    const ok = results.some((entry) => entry.ok);
-    return {
-        ok,
-        results,
-        error: ok ? "" : "All Python runtime sources unreachable.",
-    };
-}
-
 async function resetAppToFirstLaunchState() {
     flushEditorAutosave();
-    cancelPythonSandboxRuns("Factory reset requested.");
 
     const keysToRemove = new Set(
         Object.values(STORAGE)
@@ -4367,7 +4155,7 @@ async function executeDevTerminalCommand(input = "") {
             "Commands: help, clear, status, run, format, save, save-all",
             "Commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
             `Commands: open <log|editor|files|sandbox|tools>, theme <${getSupportedThemeUsage()}>, files`,
-            "Commands: python-check, fresh-start confirm",
+            "Commands: fresh-start confirm",
             "Safety: privileged/eval commands are disabled",
         ];
         lines.forEach((line) => appendDevTerminalEntry("info", line));
@@ -4439,29 +4227,6 @@ async function executeDevTerminalCommand(input = "") {
     if (command === "files") {
         appendDevTerminalEntry("info", `Workspace files: ${files.length} • folders: ${collectFolderPaths(files, folders).size} • trash: ${trashFiles.length}`);
         return true;
-    }
-
-    if (command === "python-check") {
-        appendDevTerminalEntry("info", "Checking Python runtime sources (local + CDN fallbacks)...");
-        const result = await probePythonRuntimeConnectivity();
-        if (!Array.isArray(result.results) || !result.results.length) {
-            appendDevTerminalEntry("warn", `Python runtime check unavailable: ${result.error || "No probe data."}`);
-            return false;
-        }
-        result.results.forEach((entry) => {
-            if (entry.ok) {
-                appendDevTerminalEntry("info", `Python source OK: ${entry.label} (HTTP ${entry.status})`);
-            } else {
-                appendDevTerminalEntry("warn", `Python source FAIL: ${entry.label} (${entry.error})`);
-            }
-        });
-        if (result.ok) {
-            appendDevTerminalEntry("info", "Python runtime should be able to start from at least one source.");
-            return true;
-        }
-        appendDevTerminalEntry("warn", "All Python runtime sources unreachable. This is usually network/firewall filtering or missing local bundle.");
-        appendDevTerminalEntry("warn", "Run: npm run python:runtime:setup (project root) to install local Pyodide runtime bundle.");
-        return false;
     }
 
     if (["fresh-start", "factory-reset", "reset-all"].includes(command)) {
@@ -4973,6 +4738,10 @@ function initDocking() {
     const setOverlayOpen = (open) => {
         overlay.setAttribute("data-active", open ? "true" : "false");
         overlay.setAttribute("aria-hidden", open ? "false" : "true");
+        if (!open) {
+            overlay.removeAttribute("data-active-zone");
+            overlay.removeAttribute("data-panel-label");
+        }
     };
 
     let activeZone = null;
@@ -4987,7 +4756,17 @@ function initDocking() {
         if (activeZone === zone) return;
         if (activeZone) activeZone.removeAttribute("data-active");
         activeZone = zone;
-        if (activeZone) activeZone.setAttribute("data-active", "true");
+        if (activeZone) {
+            activeZone.setAttribute("data-active", "true");
+            const zoneName = activeZone.getAttribute("data-dock-zone") || "";
+            if (zoneName) {
+                overlay.setAttribute("data-active-zone", zoneName);
+            } else {
+                overlay.removeAttribute("data-active-zone");
+            }
+        } else {
+            overlay.removeAttribute("data-active-zone");
+        }
     };
 
     const captureDragZoneRects = () => {
@@ -5005,8 +4784,47 @@ function initDocking() {
             }
         }
 
+        const workspaceRect = el.workspace?.getBoundingClientRect();
+        if (workspaceRect && x >= workspaceRect.left && x <= workspaceRect.right && y >= workspaceRect.top && y <= workspaceRect.bottom) {
+            const width = Math.max(1, workspaceRect.width);
+            const height = Math.max(1, workspaceRect.height);
+            const leftEdge = workspaceRect.left + Math.max(36, width * 0.2);
+            const rightEdge = workspaceRect.right - Math.max(36, width * 0.2);
+            const bottomEdge = workspaceRect.bottom - Math.max(44, height * 0.24);
+            const centerX = workspaceRect.left + width / 2;
+            const centerY = workspaceRect.top + height / 2;
+            const centerBandX = Math.max(56, width * 0.14);
+            const centerBandY = Math.max(40, height * 0.14);
+
+            const byName = (name) => zones.find((zone) => zone.getAttribute("data-dock-zone") === name) || null;
+            if (y >= bottomEdge) return byName("bottom");
+            if (x <= leftEdge) return byName("left");
+            if (x >= rightEdge) return byName("right");
+            if (Math.abs(x - centerX) <= centerBandX && Math.abs(y - centerY) <= centerBandY) {
+                return byName("center");
+            }
+        }
+
         const elAt = document.elementFromPoint(x, y);
-        return elAt ? elAt.closest(".dock-zone") : null;
+        const directZone = elAt ? elAt.closest(".dock-zone") : null;
+        if (directZone) return directZone;
+
+        let nearest = null;
+        let nearestDistance = Infinity;
+        dragZoneRects.forEach((entry) => {
+            const rect = entry.rect;
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dx = x - cx;
+            const dy = y - cy;
+            const distance = Math.hypot(dx, dy);
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = entry.zone;
+            }
+        });
+
+        return nearestDistance <= DOCK_ZONE_MAGNET_DISTANCE ? nearest : null;
     };
 
     const movePanelHorizontally = (panel, direction) => {
@@ -5066,7 +4884,10 @@ function initDocking() {
         const zoneName = activeZone.getAttribute("data-dock-zone");
         if (!zoneName) return;
         if (zoneName === "center") {
-            applyLayoutPreset("studio");
+            const topOrder = Array.isArray(layoutState.panelRows?.top) ? layoutState.panelRows.top : [];
+            const orderWithoutPanel = topOrder.filter((name) => name !== activePanel);
+            const dropIndex = Math.floor(orderWithoutPanel.length / 2);
+            movePanelToRow(activePanel, "top", dropIndex);
             return;
         }
         if (zoneName === "left") {
@@ -5123,6 +4944,7 @@ function initDocking() {
             activePanelEl = getPanelEl(panel);
             if (activePanelEl) {
                 activePanelEl.classList.add("panel-floating", "panel-drag-source");
+                overlay.setAttribute("data-panel-label", panelLabels[panel] || panel);
                 const rect = activePanelEl.getBoundingClientRect();
                 dragOffset = {
                     x: event.clientX - rect.left,
@@ -5145,6 +4967,7 @@ function initDocking() {
 
             let dragMoveFrame = null;
             let dragMoveState = null;
+            let ended = false;
 
             const applyDragMove = (state) => {
                 if (!state) return;
@@ -5173,6 +4996,8 @@ function initDocking() {
             };
 
             const onEnd = (endEvent) => {
+                if (ended) return;
+                ended = true;
                 let dropPoint = null;
                 if (dragMoveFrame != null) {
                     cancelAnimationFrame(dragMoveFrame);
@@ -5194,24 +5019,37 @@ function initDocking() {
                 handle.removeEventListener("pointermove", onMove);
                 handle.removeEventListener("pointerup", onEnd);
                 handle.removeEventListener("pointercancel", onEnd);
+                window.removeEventListener("pointerup", onEnd, true);
+                window.removeEventListener("pointercancel", onEnd, true);
+                window.removeEventListener("blur", onWindowBlur, true);
                 document.body?.classList.remove("dock-dragging");
-                applyDrop(dropPoint);
-                updateActiveZone(null);
-                setOverlayOpen(false);
-                if (activePanelEl) activePanelEl.classList.remove("panel-floating", "panel-drag-source");
-                if (dragGhost) {
-                    dragGhost.remove();
-                    dragGhost = null;
+                try {
+                    applyDrop(dropPoint);
+                } finally {
+                    updateActiveZone(null);
+                    setOverlayOpen(false);
+                    if (activePanelEl) activePanelEl.classList.remove("panel-floating", "panel-drag-source");
+                    if (dragGhost) {
+                        dragGhost.remove();
+                        dragGhost = null;
+                    }
+                    activePanel = null;
+                    activePanelEl = null;
+                    dragZoneRects = [];
+                    lastGhostPoint = null;
                 }
-                activePanel = null;
-                activePanelEl = null;
-                dragZoneRects = [];
-                lastGhostPoint = null;
+            };
+
+            const onWindowBlur = () => {
+                onEnd(null);
             };
 
             handle.addEventListener("pointermove", onMove);
             handle.addEventListener("pointerup", onEnd);
             handle.addEventListener("pointercancel", onEnd);
+            window.addEventListener("pointerup", onEnd, true);
+            window.addEventListener("pointercancel", onEnd, true);
+            window.addEventListener("blur", onWindowBlur, true);
         });
     });
 }
@@ -5233,8 +5071,8 @@ function initSplitters() {
             const row = getPanelRow(leftName || rightName || panel);
             const leftBounds = leftControl ? getLayoutBounds()[leftControl.boundsKey] : null;
             const rightBounds = rightControl ? getLayoutBounds()[rightControl.boundsKey] : null;
-            const leftEffective = leftControl && !rightControl ? getEffectiveBounds(leftName, row, leftBounds) : leftBounds;
-            const rightEffective = rightControl && !leftControl ? getEffectiveBounds(rightName, row, rightBounds) : rightBounds;
+            const leftEffective = leftControl ? getEffectiveBounds(leftName, row, leftBounds) : null;
+            const rightEffective = rightControl ? getEffectiveBounds(rightName, row, rightBounds) : null;
             const startLeft = leftControl ? leftControl.get() : 0;
             const startRight = rightControl ? rightControl.get() : 0;
             const leftEl = getPanelElement(leftName);
@@ -5251,12 +5089,12 @@ function initSplitters() {
                 const snapEnabled = !moveEvent.altKey;
                 if (leftControl && rightControl) {
                     const minDelta = Math.max(
-                        leftBounds.min - startLeft,
-                        startRight - rightBounds.max
+                        leftEffective.min - startLeft,
+                        startRight - rightEffective.max
                     );
                     const maxDelta = Math.min(
-                        leftBounds.max - startLeft,
-                        startRight - rightBounds.min
+                        leftEffective.max - startLeft,
+                        startRight - rightEffective.min
                     );
                     const clamped = clamp(delta, minDelta, maxDelta);
                     const snapped = snapEnabled ? Math.round(clamped / RESIZE_SNAP_STEP) * RESIZE_SNAP_STEP : clamped;
@@ -5301,7 +5139,11 @@ function initSplitters() {
                 }
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
-                splitter.releasePointerCapture(event.pointerId);
+                try {
+                    splitter.releasePointerCapture(event.pointerId);
+                } catch (err) {
+                    // no-op
+                }
                 splitter.removeEventListener("pointermove", onMove);
                 splitter.removeEventListener("pointerup", onUp);
                 splitter.removeEventListener("pointercancel", onCancel);
@@ -5319,7 +5161,11 @@ function initSplitters() {
                 }
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
-                splitter.releasePointerCapture(event.pointerId);
+                try {
+                    splitter.releasePointerCapture(event.pointerId);
+                } catch (err) {
+                    // no-op
+                }
                 splitter.removeEventListener("pointermove", onMove);
                 splitter.removeEventListener("pointerup", onUp);
                 splitter.removeEventListener("pointercancel", onCancel);
@@ -5341,6 +5187,7 @@ function initSplitters() {
             if (panel === "log") setWidth(fallback.logWidth);
             if (panel === "files") setWidth(fallback.sidebarWidth);
             if (panel === "sandbox") setWidth(fallback.sandboxWidth);
+            if (panel === "tools") setWidth(fallback.toolsWidth);
             persistLayout();
             pushDiag("info", `${label} width reset.`);
         });
@@ -5357,14 +5204,16 @@ function initSplitters() {
                 if (leftControl && rightControl) {
                     const leftBounds = getLayoutBounds()[leftControl.boundsKey];
                     const rightBounds = getLayoutBounds()[rightControl.boundsKey];
+                    const leftEffective = getEffectiveBounds(leftName, row, leftBounds);
+                    const rightEffective = getEffectiveBounds(rightName, row, rightBounds);
                     const delta = dir * step;
                     const minDelta = Math.max(
-                        leftBounds.min - leftControl.get(),
-                        rightControl.get() - rightBounds.max
+                        leftEffective.min - leftControl.get(),
+                        rightControl.get() - rightEffective.max
                     );
                     const maxDelta = Math.min(
-                        leftBounds.max - leftControl.get(),
-                        rightControl.get() - rightBounds.min
+                        leftEffective.max - leftControl.get(),
+                        rightControl.get() - rightEffective.min
                     );
                     const clamped = clamp(delta, minDelta, maxDelta);
                     leftControl.set(leftControl.get() + clamped);
@@ -5442,7 +5291,11 @@ function initSplitters() {
                 }
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
-                splitter.releasePointerCapture(event.pointerId);
+                try {
+                    splitter.releasePointerCapture(event.pointerId);
+                } catch (err) {
+                    // no-op
+                }
                 splitter.removeEventListener("pointermove", onMove);
                 splitter.removeEventListener("pointerup", onUp);
                 splitter.removeEventListener("pointercancel", onCancel);
@@ -5460,7 +5313,11 @@ function initSplitters() {
                 }
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
-                splitter.releasePointerCapture(event.pointerId);
+                try {
+                    splitter.releasePointerCapture(event.pointerId);
+                } catch (err) {
+                    // no-op
+                }
                 splitter.removeEventListener("pointermove", onMove);
                 splitter.removeEventListener("pointerup", onUp);
                 splitter.removeEventListener("pointercancel", onCancel);
@@ -5615,8 +5472,8 @@ function initEdgeResizing() {
 
         const leftBounds = leftControl ? getLayoutBounds()[leftControl.boundsKey] : null;
         const rightBounds = rightControl ? getLayoutBounds()[rightControl.boundsKey] : null;
-        const leftEffective = leftControl && !rightControl ? getEffectiveBounds(leftName, row, leftBounds) : leftBounds;
-        const rightEffective = rightControl && !leftControl ? getEffectiveBounds(rightName, row, rightBounds) : rightBounds;
+        const leftEffective = leftControl ? getEffectiveBounds(leftName, row, leftBounds) : null;
+        const rightEffective = rightControl ? getEffectiveBounds(rightName, row, rightBounds) : null;
         const startLeft = leftControl ? leftControl.get() : 0;
         const startRight = rightControl ? rightControl.get() : 0;
         const leftEl = getPanelElement(leftName);
@@ -5636,12 +5493,12 @@ function initEdgeResizing() {
             const snapEnabled = !moveEvent.altKey;
             if (leftControl && rightControl) {
                 const minDelta = Math.max(
-                    leftBounds.min - startLeft,
-                    startRight - rightBounds.max
+                    leftEffective.min - startLeft,
+                    startRight - rightEffective.max
                 );
                 const maxDelta = Math.min(
-                    leftBounds.max - startLeft,
-                    startRight - rightBounds.min
+                    leftEffective.max - startLeft,
+                    startRight - rightEffective.min
                 );
                 const clamped = clamp(delta, minDelta, maxDelta);
                 const snapped = snapEnabled ? Math.round(clamped / RESIZE_SNAP_STEP) * RESIZE_SNAP_STEP : clamped;
@@ -5874,6 +5731,10 @@ function setPanelOpen(panel, open) {
         layoutState.sandboxOpen = open;
     }
     if (panel === "tools") layoutState.toolsOpen = open;
+    layoutState.panelRows = enforceDockingRowCaps(layoutState.panelRows, {
+        preferredRow: getPanelRow(panel),
+        preservePanel: open ? panel : null,
+    });
     applyLayout();
     syncPanelToggles();
     persistLayout();
@@ -5894,6 +5755,7 @@ function setPanelOrder(panel, index, { animatePanels = true } = {}) {
     if (currentIndex === -1) return;
     const target = Number(index);
     const clamped = Number.isFinite(target) ? clamp(target, 0, order.length - 1) : currentIndex;
+    if (clamped === currentIndex) return;
     order.splice(currentIndex, 1);
     order.splice(clamped, 0, panel);
     layoutState.panelRows[row] = order;
@@ -5904,6 +5766,16 @@ function setPanelOrder(panel, index, { animatePanels = true } = {}) {
 
 function movePanelToRow(panel, row, index = 0, { animatePanels = true } = {}) {
     const targetRow = row === "bottom" ? "bottom" : "top";
+    const currentRow = getPanelRow(panel);
+    const currentOrder = Array.isArray(layoutState.panelRows?.[currentRow]) ? [...layoutState.panelRows[currentRow]] : [];
+    const currentIndex = currentOrder.indexOf(panel);
+    if (currentIndex !== -1 && currentRow === targetRow) {
+        const target = Number(index);
+        const clampedCurrent = Number.isFinite(target) ? clamp(target, 0, currentOrder.length - 1) : currentIndex;
+        if (clampedCurrent === currentIndex) {
+            return;
+        }
+    }
     const otherRow = targetRow === "top" ? "bottom" : "top";
     const nextRows = normalizePanelRows(layoutState.panelRows);
     nextRows[otherRow] = nextRows[otherRow].filter((name) => name !== panel);
@@ -5911,7 +5783,7 @@ function movePanelToRow(panel, row, index = 0, { animatePanels = true } = {}) {
     const target = nextRows[targetRow];
     const clamped = clamp(Number(index), 0, target.length);
     target.splice(clamped, 0, panel);
-    layoutState.panelRows = nextRows;
+    layoutState.panelRows = enforceDockingRowCaps(nextRows, { preferredRow: targetRow, preservePanel: panel });
     applyLayout({ animatePanels });
     persistLayout();
     syncLayoutControls();
@@ -8501,9 +8373,6 @@ function getStarterCodeForFileName(fileName = "") {
     }
     if (leaf.endsWith(".css")) {
         return "/* New stylesheet */\n";
-    }
-    if (leaf.endsWith(".py")) {
-        return "# New Python file\nprint(\"Hello from Python\")\n";
     }
     return "// New JavaScript file\n";
 }
@@ -12997,15 +12866,7 @@ function detectLanguageFromFileName(fileName = "") {
     if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
     if (lower.endsWith(".css")) return "css";
     if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
-    if (lower.endsWith(".py")) return "python";
     return "text";
-}
-
-function looksLikePythonSource(code = "") {
-    const text = String(code || "");
-    if (!text.trim()) return false;
-    const pyHint = /(^|\n)\s*(from\s+[A-Za-z_][\w.]*\s+import\s+|import\s+[A-Za-z_][\w.]*|def\s+[A-Za-z_][\w]*\s*\(|class\s+[A-Za-z_][\w]*\s*[:(]|print\s*\(|if\s+__name__\s*==\s*["']__main__["']\s*:)/;
-    return pyHint.test(text);
 }
 
 function getLanguageLabel(language = "text") {
@@ -13015,7 +12876,6 @@ function getLanguageLabel(language = "text") {
     if (language === "html") return "HTML";
     if (language === "css") return "CSS";
     if (language === "markdown") return "Markdown";
-    if (language === "python") return "Python";
     return "Text";
 }
 
@@ -13092,7 +12952,6 @@ function getEditorModeForLanguage(language = "text") {
     if (language === "html") return "text/html";
     if (language === "css") return "css";
     if (language === "markdown") return "markdown";
-    if (language === "python") return "python";
     return "text/plain";
 }
 
@@ -17992,30 +17851,38 @@ function exposeDebug() {
             return results;
         },
         setSidebarWidth(px) {
-            const bounds = getLayoutBounds().sidebar;
+            const row = getPanelRow("files");
+            const bounds = getEffectiveBounds("files", row, getLayoutBounds().sidebar);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setSidebarWidth(next);
+            normalizeLayoutWidths();
             persistLayout();
             return next;
         },
         setLogWidth(px) {
-            const bounds = getLayoutBounds().logWidth;
+            const row = getPanelRow("log");
+            const bounds = getEffectiveBounds("log", row, getLayoutBounds().logWidth);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setLogWidth(next);
+            normalizeLayoutWidths();
             persistLayout();
             return next;
         },
         setSandboxWidth(px) {
-            const bounds = getLayoutBounds().sandboxWidth;
+            const row = getPanelRow("sandbox");
+            const bounds = getEffectiveBounds("sandbox", row, getLayoutBounds().sandboxWidth);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setSandboxWidth(next);
+            normalizeLayoutWidths();
             persistLayout();
             return next;
         },
         setToolsWidth(px) {
-            const bounds = getLayoutBounds().toolsWidth;
+            const row = getPanelRow("tools");
+            const bounds = getEffectiveBounds("tools", row, getLayoutBounds().toolsWidth);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setToolsWidth(next);
+            normalizeLayoutWidths();
             persistLayout();
             return next;
         },
@@ -19166,7 +19033,6 @@ async function boot() {
     });
     window.addEventListener("beforeunload", (event) => {
         flushEditorAutosave();
-        disposePythonSandboxRunner();
         if (hasDirtyFiles()) {
             event.preventDefault();
             event.returnValue = "";
@@ -19174,7 +19040,6 @@ async function boot() {
     });
     window.addEventListener("pagehide", () => {
         flushEditorAutosave();
-        disposePythonSandboxRunner();
         setSessionState(false);
     });
 
@@ -19184,92 +19049,11 @@ async function boot() {
     editor.focus();
 }
 
-function runPythonExecution(runnableSource, entryName = "") {
-    cancelPythonSandboxRuns("Python run superseded by new Python execution.");
-    logger.append("system", ["Python runtime: starting worker execution..."]);
-    runInSandbox(getRunnerFrame(), buildPythonPreviewHtml(entryName), currentToken, {
-        mode: "html",
-        runContext: currentRunContext,
-    });
-    ensureSandboxOpen("Sandbox opened for run.");
-
-    const tokenAtRun = currentToken;
-    const isMockedPython = typeof window !== "undefined" && typeof window.__FAZIDE_PYTHON_EXECUTE__ === "function";
-    let sawPythonConsoleOutput = false;
-    const pythonLoadingNoticeTimer = setTimeout(() => {
-        if (currentToken !== tokenAtRun) return;
-        logger.append("system", ["Python runtime: still loading (first start may take longer on restricted networks)..."]);
-    }, 1800);
-    const pythonProbeTimer = isMockedPython ? null : setTimeout(async () => {
-        if (currentToken !== tokenAtRun) return;
-        logger.append("system", ["Python runtime: running connectivity probe..."]);
-        const probe = await probePythonRuntimeConnectivity(4000);
-        if (currentToken !== tokenAtRun) return;
-        if (probe.ok) {
-            logger.append("system", ["Python runtime: CDN reachable. Startup may still take a bit on first load."]);
-            return;
-        }
-        logger.append("warn", [`Python runtime probe failed: ${probe.error}`]);
-        cancelPythonSandboxRuns("Python runtime blocked: Pyodide CDN is unreachable from this network.");
-    }, 3200);
-    const pythonNetworkHintTimer = setTimeout(() => {
-        if (currentToken !== tokenAtRun) return;
-        logger.append("warn", ["Python runtime still loading. Usually this means Pyodide CDN is blocked/unreachable (not Live Server itself). Dev Terminal: python-check"]);
-    }, 8000);
-
-    void runPythonInSandbox({
-        code: runnableSource,
-        runContext: currentRunContext,
-        timeoutMs: isMockedPython ? 10_000 : 30_000,
-        onConsole(level, args) {
-            if (currentToken !== tokenAtRun) return;
-            sawPythonConsoleOutput = true;
-            queueSandboxConsoleLog(level, args);
-        },
-    }).then((result) => {
-        if (currentToken !== tokenAtRun) return;
-        clearTimeout(pythonLoadingNoticeTimer);
-        if (pythonProbeTimer != null) clearTimeout(pythonProbeTimer);
-        clearTimeout(pythonNetworkHintTimer);
-        const output = String(result?.result || "").trim();
-        if (output) {
-            queueSandboxConsoleLog("info", [output]);
-        }
-        if (!sawPythonConsoleOutput && !output) {
-            queueSandboxConsoleLog("system", ["Python runtime: execution finished (no console output). Add print(...) to see output."]);
-        }
-        markSandboxReady();
-        status.set("Ran");
-    }).catch((err) => {
-        if (currentToken !== tokenAtRun) return;
-        clearTimeout(pythonLoadingNoticeTimer);
-        if (pythonProbeTimer != null) clearTimeout(pythonProbeTimer);
-        clearTimeout(pythonNetworkHintTimer);
-        clearSandboxReadyTimer();
-        setHealth(health.sandbox, "error", "Sandbox: Failed");
-        const message = truncateText(String(err?.message || err || "Python runtime error"), SANDBOX_RUNTIME_MESSAGE_MAX_CHARS);
-        ensureLogOpen("Console opened for runtime error.");
-        logger.append("error", [message]);
-        const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
-        pushRuntimeProblem({
-            message,
-            fileId: currentRunFileId,
-            fileName,
-            level: "error",
-            kind: "runtime",
-        });
-        status.set("Error");
-    });
-
-    status.set("Ran");
-}
-
 function resolveRunSource(code = "", activeFile = null, workspaceResolver = null) {
     const entryName = activeFile?.name || FILE_DEFAULT_NAME;
     const activeLanguage = detectLanguageFromFileName(entryName);
     let runnableSource = applyBreakpointsToCode(code);
     let sandboxMode = "javascript";
-    let pythonLikeWarning = "";
 
     if (activeLanguage === "html") {
         const resolver = workspaceResolver || createWorkspaceAssetResolver(files);
@@ -19278,19 +19062,12 @@ function resolveRunSource(code = "", activeFile = null, workspaceResolver = null
     } else if (activeLanguage === "css") {
         runnableSource = buildCssPreviewHtml(code);
         sandboxMode = "html";
-    } else if (activeLanguage === "python") {
-        runnableSource = String(code ?? "");
-        sandboxMode = "python";
-    } else if (looksLikePythonSource(code)) {
-        const languageLabel = normalizeLanguageLabel(activeLanguage);
-        pythonLikeWarning = `Python-like code detected, but this file is running as ${languageLabel}. Rename file to .py to run Python runtime.`;
     }
 
     return {
         entryName,
         runnableSource,
         sandboxMode,
-        pythonLikeWarning,
     };
 }
 
@@ -19321,10 +19098,6 @@ function beginRunSession(sandboxMode) {
     currentRunContext = makeRunContext();
     currentToken = currentRunContext.token;
 
-    if (sandboxMode !== "python") {
-        cancelPythonSandboxRuns("Python run superseded by non-Python execution.");
-    }
-
     ensureLogOpen("Console opened for new run.");
     status.set("Running...");
     setHealth(health.sandbox, "warn", "Sandbox: Running");
@@ -19345,19 +19118,11 @@ function run() {
     const runPayload = resolveRunSource(code, activeFile, workspaceResolver);
     const runnableSource = runPayload.runnableSource;
     const sandboxMode = runPayload.sandboxMode;
-    if (runPayload.pythonLikeWarning) {
-        logger.append("warn", [runPayload.pythonLikeWarning]);
-    }
     currentRunFileId = activeFileId;
     beginRunSession(sandboxMode);
 
     try {
         clearSandboxReadyTimer();
-
-        if (sandboxMode === "python") {
-            runPythonExecution(runnableSource, entryName);
-            return;
-        }
 
         launchStandardSandboxRun(runnableSource, sandboxMode);
     } catch (err) {

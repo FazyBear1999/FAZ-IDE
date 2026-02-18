@@ -2557,6 +2557,12 @@ button:focus-visible {
 .dock-overlay {
     position: fixed;
     inset: 0;
+    --dock-side-inset: 3.5%;
+    --dock-side-width: 23%;
+    --dock-vertical-inset: 6%;
+    --dock-bottom-height: 24%;
+    --dock-bottom-inset: 4.5%;
+    --dock-zone-gap: 2%;
     display: flex;
     align-items: stretch;
     justify-content: stretch;
@@ -2565,7 +2571,6 @@ button:focus-visible {
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--motion-ui) var(--motion-ease), visibility 0s linear var(--motion-ui);
-    will-change: opacity;
     contain: layout style paint;
 }
 
@@ -2574,6 +2579,7 @@ button:focus-visible {
     visibility: visible;
     pointer-events: auto;
     transition: opacity var(--motion-ui) var(--motion-ease);
+    will-change: opacity;
 }
 
 .dock-overlay::before {
@@ -2589,72 +2595,35 @@ button:focus-visible {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 0;
+    border: 1px solid transparent;
     background: transparent;
     color: transparent;
     font-size: 0;
     letter-spacing: 0;
     text-transform: none;
-    opacity: 1;
-    transition: transform var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease);
+    opacity: 0.62;
+    transition:
+        opacity var(--motion-fast) var(--motion-ease),
+        border-color var(--motion-fast) var(--motion-ease),
+        background-color var(--motion-fast) var(--motion-ease);
     pointer-events: auto;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     padding: 0;
     z-index: 2;
-    will-change: transform;
+    box-shadow: inset 0 0 0 1px var(--surface-elevated-alt);
 }
 
 .dock-zone[data-active="true"] {
     opacity: 1;
-    transform: scale(1.015);
+    transform: none;
+    border-color: var(--border-focus);
+    background: var(--ring-focus-soft);
+    box-shadow: inset 0 0 0 1px var(--drop-target-border);
 }
 
 .dock-zone::before,
 .dock-zone::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-strong);
-}
-
-.dock-zone::before {
-    width: 42px;
-    height: 42px;
-    background: var(--surface-elevated);
-    box-shadow: var(--menu-shadow);
-    transition: border-color var(--motion-ui) var(--motion-ease), box-shadow var(--motion-ui) var(--motion-ease), background var(--motion-ui) var(--motion-ease);
-}
-
-.dock-zone::after {
-    content: "";
-    width: 18px;
-    height: 18px;
-    background: var(--surface-elevated-alt);
-    transition: border-color var(--motion-ui) var(--motion-ease), background var(--motion-ui) var(--motion-ease);
-}
-
-.dock-zone[data-active="true"]::before {
-    border-color: var(--border-focus);
-    box-shadow: 0 0 0 1px var(--drop-target-border), 0 0 0 3px var(--ring-focus-soft);
-}
-
-.dock-zone[data-active="true"]::after {
-    border-color: var(--border-focus);
-}
-
-.dock-zone[data-dock-zone="left"]::after {
-    background: linear-gradient(90deg, var(--accent-info) 0 4px, var(--surface-elevated-focus) 4px 100%);
-}
-
-.dock-zone[data-dock-zone="right"]::after {
-    background: linear-gradient(90deg, var(--surface-elevated-focus) 0 calc(100% - 4px), var(--accent-info) calc(100% - 4px));
-}
-
-.dock-zone[data-dock-zone="bottom"]::after {
-    background: linear-gradient(180deg, var(--surface-elevated-focus) 0 calc(100% - 4px), var(--accent-info) calc(100% - 4px));
+    display: none;
 }
 
 .dock-center {
@@ -2663,16 +2632,11 @@ button:focus-visible {
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    width: auto;
-    height: auto;
-    padding: 6px 12px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--border);
-    background: var(--surface-elevated);
-    font-size: var(--text-size-2xs);
-    letter-spacing: 0.4px;
-    color: var(--text-muted-soft);
-    font-weight: 600;
+    width: 120px;
+    height: 84px;
+    border-radius: var(--radius-sm);
+    border-color: var(--border-soft);
+    background: var(--ring-focus-soft);
 }
 
 .dock-center::before,
@@ -2684,33 +2648,39 @@ button:focus-visible {
 .dock-right,
 .dock-bottom {
     position: absolute;
-    font-size: var(--text-size-xs);
-    font-weight: 600;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    color: var(--text-muted-soft);
+    border-color: var(--border-soft);
+    background: var(--surface-elevated-alt);
 }
 
 .dock-left,
 .dock-right {
-    top: 7%;
-    bottom: 7%;
-    width: 24%;
+    top: var(--dock-vertical-inset);
+    bottom: calc(var(--dock-bottom-inset) + var(--dock-bottom-height) + var(--dock-zone-gap));
+    width: var(--dock-side-width);
 }
 
 .dock-left {
-    left: 4%;
+    left: var(--dock-side-inset);
 }
 
 .dock-right {
-    right: 4%;
+    right: var(--dock-side-inset);
 }
 
 .dock-bottom {
-    left: 8%;
-    right: 8%;
-    height: 26%;
-    bottom: 5%;
+    left: calc(var(--dock-side-inset) + var(--dock-side-width) + var(--dock-zone-gap));
+    right: calc(var(--dock-side-inset) + var(--dock-side-width) + var(--dock-zone-gap));
+    height: var(--dock-bottom-height);
+    bottom: var(--dock-bottom-inset);
+}
+
+.dock-overlay[data-active-zone="left"] .dock-left,
+.dock-overlay[data-active-zone="right"] .dock-right,
+.dock-overlay[data-active-zone="bottom"] .dock-bottom,
+.dock-overlay[data-active-zone="center"] .dock-center {
+    border-color: var(--border-focus);
+    background: var(--ring-focus-soft);
+    opacity: 1;
 }
 
 body.dock-dragging {

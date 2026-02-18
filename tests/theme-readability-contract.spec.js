@@ -163,3 +163,36 @@ for (const theme of THEMES) {
     expect(heights.runButton).toBeGreaterThanOrEqual(30);
   });
 }
+
+test("theme/readability: all UI themes keep syntax keyword colors visible", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async ({ themes }) => {
+    const select = document.querySelector("#themeSelect");
+    const api = window.fazide;
+    if (!select || !api?.setCode) return { ready: false, rows: [] };
+
+    api.setCode("const score = 7;\nif (score) { console.log('ok'); }\n");
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await waitForPaint();
+
+    const rows = [];
+    for (const theme of themes) {
+      select.value = theme;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await waitForPaint();
+      const token = document.querySelector(".CodeMirror .cm-keyword");
+      const color = token ? String(getComputedStyle(token).color || "") : "";
+      rows.push({ theme, color });
+    }
+
+    return { ready: true, rows };
+  }, { themes: THEMES });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.rows.length).toBe(THEMES.length);
+  for (const row of result.rows) {
+    expect(String(row.color || "")).toContain("rgb");
+    expect(String(row.color || "")).not.toContain("0, 0, 0, 0");
+  }
+});

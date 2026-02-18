@@ -21,7 +21,9 @@
 
 ## Architecture Notes
 - Web app entry: `assets/js/app.js`
+- Runtime preview + workspace HTML inlining helpers: `assets/js/sandbox/workspacePreview.js`
 - End-to-end tests: `tests/ide.spec.js`, `tests/release.spec.js`
+- Preview contract tests: `tests/workspace-preview-contract.spec.js`
 - Release packaging scripts: `scripts/`
 
 ## Constraints

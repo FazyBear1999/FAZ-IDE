@@ -173,6 +173,41 @@ test("typography/sizing: splitter hit area token stays usable", async ({ page })
   expect(splitterToken).toBeGreaterThanOrEqual(14);
 });
 
+test("typography/sizing: splitter visuals stay clean and line-only", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const read = (selector) => {
+      const node = document.querySelector(selector);
+      if (!(node instanceof HTMLElement)) return null;
+      const before = getComputedStyle(node, "::before");
+      const after = getComputedStyle(node, "::after");
+      return {
+        lineVisible: String(before.backgroundColor || ""),
+        lineShadow: String(before.boxShadow || ""),
+        afterDisplay: String(after.display || ""),
+        afterContent: String(after.content || ""),
+      };
+    };
+
+    return {
+      vertical: read("#splitFiles"),
+      horizontal: read("#splitRow"),
+    };
+  });
+
+  expect(result.vertical).toBeTruthy();
+  expect(result.horizontal).toBeTruthy();
+  expect(result.vertical.lineVisible).not.toContain("0, 0, 0, 0");
+  expect(result.horizontal.lineVisible).not.toContain("0, 0, 0, 0");
+  expect(result.vertical.lineShadow).toBe("none");
+  expect(result.horizontal.lineShadow).toBe("none");
+  expect(result.vertical.afterDisplay).toBe("none");
+  expect(result.horizontal.afterDisplay).toBe("none");
+  expect(result.vertical.afterContent).toContain("none");
+  expect(result.horizontal.afterContent).toContain("none");
+});
+
 test("typography/sizing: layout numeric controls retain synchronized bounds", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
