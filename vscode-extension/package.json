@@ -1,0 +1,126 @@
+{
+  "name": "faz-ide-ai-assistant",
+  "displayName": "FAZ IDE AI Assistant",
+  "description": "AI-powered coding assistant for FAZ IDE development",
+  "version": "0.1.0",
+  "publisher": "FazyBear",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "fazide.ai.chat",
+        "title": "FAZ IDE: Open AI Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "fazide.ai.explainCode",
+        "title": "FAZ IDE: Explain Code"
+      },
+      {
+        "command": "fazide.ai.fixCode",
+        "title": "FAZ IDE: Fix Code Issues"
+      },
+      {
+        "command": "fazide.ai.generateTests",
+        "title": "FAZ IDE: Generate Tests"
+      }
+    ],
+    "configuration": {
+      "title": "FAZ IDE AI Assistant",
+      "properties": {
+        "fazide.ai.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for AI service (e.g., OpenAI, Anthropic)",
+          "order": 1
+        },
+        "fazide.ai.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic",
+            "local"
+          ],
+          "default": "openai",
+          "description": "AI service provider to use",
+          "order": 2
+        },
+        "fazide.ai.model": {
+          "type": "string",
+          "default": "gpt-4",
+          "description": "AI model to use (e.g., gpt-4, claude-3-opus)",
+          "order": 3
+        },
+        "fazide.ai.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI assistant features",
+          "order": 0
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "fazide-ai",
+          "title": "FAZ IDE AI",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "views": {
+      "fazide-ai": [
+        {
+          "id": "fazide.ai.chatView",
+          "name": "AI Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "fazide.ai.explainCode",
+          "when": "editorHasSelection",
+          "group": "fazide@1"
+        },
+        {
+          "command": "fazide.ai.fixCode",
+          "when": "editorHasSelection",
+          "group": "fazide@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "fazide.ai.chat",
+          "when": "view == fazide.ai.chatView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "vsce package",
+    "install-extension": "code --install-extension faz-ide-ai-assistant-0.1.0.vsix"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FazyBear1999/FAZ-IDE.git"
+  },
+  "license": "MIT"
+}
