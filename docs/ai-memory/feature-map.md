@@ -26,6 +26,7 @@
 - Multi-file operations: create/rename/duplicate/move/trash/restore.
 - Search/sort/filter flows in Files panel.
 - Snippet manager + editor power shortcuts + formatting/lint flows.
+- File-tree icon mapping/fallback helper boundary: `assets/js/ui/fileIcons.js`.
 
 ## Franklin + Memory
 - Franklin gate orchestration in `scripts/franklin.js`.

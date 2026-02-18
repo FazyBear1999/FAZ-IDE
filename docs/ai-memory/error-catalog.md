@@ -1,5 +1,12 @@
 # Error Catalog
 
+## Catalog Rules
+
+- Record exact error text first.
+- Attach Checkpoint ID when error is tied to roadmap work.
+- Add one-line meaning and deterministic fix command path.
+- Keep raw run IDs only when they add recovery value.
+
 ## Runtime and Build Errors
 - Error: `http://localhost:4173 is already used`
   - Meaning: Playwright web server collision with existing process.
@@ -34,6 +41,8 @@
 - Add exact error text.
 - Add clear meaning in one line.
 - Add deterministic fix steps.
+- Add Checkpoint ID (if applicable).
+- Add validation command used after fix.
 
 - 2026-02-14: Franklin rescue generated docs/ai-memory/franklin-fix-request.md for failing script npm run definitely-not-a-real-script
 

@@ -45,10 +45,10 @@ test("layout micro: range + number pairs are bounded consistently", async ({ pag
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const pairs = [
-    ["#layoutLogWidth", "#layoutLogWidthInput", 180, 500],
-    ["#layoutSidebarWidth", "#layoutSidebarWidthInput", 180, 400],
-    ["#layoutSandboxWidth", "#layoutSandboxWidthInput", 180, 500],
-    ["#layoutToolsWidth", "#layoutToolsWidthInput", 180, 500],
+    ["#layoutLogWidth", "#layoutLogWidthInput", 180, 300],
+    ["#layoutSidebarWidth", "#layoutSidebarWidthInput", 180, 260],
+    ["#layoutSandboxWidth", "#layoutSandboxWidthInput", 180, 300],
+    ["#layoutToolsWidth", "#layoutToolsWidthInput", 180, 300],
     ["#layoutPanelGap", "#layoutPanelGapInput", 0, 10],
   ];
 

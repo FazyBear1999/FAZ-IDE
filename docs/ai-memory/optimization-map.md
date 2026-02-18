@@ -23,6 +23,14 @@
   - Add focused tests for move/rename/trash edge paths.
   - Keep state transitions explicit.
 
+### A4. Repository file organization program
+- Why: folder structure drift increases maintenance cost and path mistakes.
+- Safe tactic:
+  - Execute in major-change batches with explicit blast radius.
+  - Run focused validations per major change.
+  - Run full gate after every 3 major changes, or immediately if release/safety scripts are touched.
+  - Keep rollback scoped to the last major change when failures appear.
+
 ## Tier B: Medium Value + Low Risk
 
 ### B1. Memory doc consistency
@@ -38,3 +46,5 @@
 - Is change split into small reversible steps?
 - Is rollback straightforward?
 - Are memory docs updated immediately after changes?
+- Was option selection scored using `decision-framework.md`?
+- Is checkpoint state updated in `roadmap-decision-map.md` for roadmap work?

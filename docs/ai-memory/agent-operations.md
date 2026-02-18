@@ -19,9 +19,11 @@
 ## Safe Change Protocol
 1. Audit target surface before edits.
 2. Apply smallest possible patch set.
-3. Update focused tests for changed behavior.
-4. Update memory docs (`decisions`, `feature-map`, `release-notes`, `test-gaps`).
-5. Run focused checks, then broad gate when batch is complete.
+3. Run decision selection using `decision-framework.md` for behavior/safety changes.
+4. Update focused tests for changed behavior.
+5. Update memory docs (`decisions`, `feature-map`, `release-notes`, `test-gaps`).
+6. If roadmap work is involved, update `roadmap-decision-map.md` checkpoint state.
+7. Run focused checks, then broad gate when batch is complete.
 
 ## Risk Tiers
 - **Low risk**: text-only docs and isolated tests; run focused checks + `test:memory`.
@@ -31,7 +33,8 @@
 ## Validation Discipline
 - Use focused tests first.
 - Use `test:memory` after memory updates.
-- Run `frank:full` for full-system confirmation after major batches.
+- For large file-organization work, run full gate after every 3 major changes.
+- Run `frank:full` immediately for any high-risk release/orchestration touch or unresolved focused-test failure.
 - Capture exact failing stage/log path before attempting fixes.
 
 ## Session Exit Requirements
@@ -39,3 +42,4 @@
 - Docs and tests align with implementation.
 - Remaining risks and next actions are explicit.
 - Decision and recovery notes are updated when behavior or failure modes changed.
+- Roadmap checkpoints touched in-session include decision ref + validation evidence.

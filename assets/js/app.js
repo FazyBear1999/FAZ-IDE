@@ -25,12 +25,31 @@ import { makeDiagnostics } from "./ui/diagnostics.js";
 import { THEMES, normalizeTheme, applyThemeState, DEFAULT_THEME } from "./ui/theme.js";
 import { buildExportWorkspaceData, buildWorkspaceExportFilename, triggerWorkspaceExportDownload, normalizeImportedWorkspacePayload, parseWorkspaceImportText, buildImportWorkspaceConfirmMessage } from "./ui/workspaceTransfer.js";
 import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, normalizeFilesSectionOrder, cloneLayoutState } from "./ui/layoutState.js";
+import { getFileIconPath, getFolderIconPath, bindFileListIconFallbacks } from "./ui/fileIcons.js";
 import { runInSandbox } from "./sandbox/runner.js";
+import { normalizeProblemLevel, normalizeSandboxConsolePayload } from "./sandbox/consolePayload.js";
+import { isTrustedSandboxMessageEvent, isSandboxMessageForCurrentRun } from "./sandbox/messageTrust.js";
+import { normalizeRuntimeErrorPayload, normalizePromiseRejectionPayload } from "./sandbox/runtimeDiagnostics.js";
 import { createRunContext, normalizeRunContext, buildRunContextLabel } from "./sandbox/runContext.js";
 import { buildCssPreviewHtml, createWorkspaceAssetResolver } from "./sandbox/workspacePreview.js";
 import { makeTextareaEditor } from "./editors/textarea.js";
 import { makeCodeMirrorEditor } from "./editors/codemirror5.js";
 import { createCommandRegistry } from "./core/commandRegistry.js";
+import {
+    splitLeafExtension,
+    collapseDuplicateTerminalExtension,
+    getFallbackFileExtension,
+    normalizeFileName,
+    normalizeLooseFileName,
+    normalizePathSlashes,
+    splitPathSegments,
+    buildPathFromSegments,
+    getFileBaseName,
+    getFileDirectory,
+    getFolderBaseName,
+    getFolderParentPath,
+    normalizeFolderPath,
+} from "./core/pathing.js";
 
 import { createDebouncedTask } from "./core/debounce.js";
 import { createFormatter } from "./core/formatting.js";
@@ -77,7 +96,7 @@ const status = makeStatus(el.statusText);
 const diagnostics = makeDiagnostics(el.diagnosticsList);
 const commandRegistry = createCommandRegistry({
     onChange() {
-        if (commandPaletteOpen) {
+        if (commandPaletteOpen || topCommandPaletteOpen) {
             updateCommandPaletteResults(commandPaletteQuery);
         }
     },
@@ -227,8 +246,10 @@ let editingError = "";
 let pendingNewFileRenameId = null;
 let editingFolderPath = null;
 let editingFolderDraft = null;
+
 let editingFolderError = "";
 let editingFolderIsNew = false;
+let activeLayoutPresetName = "studio";
 let fileFilter = "";
 let fileSort = "manual";
 const FILE_ROW_SELECTOR = ".file-row[data-file-id]";
@@ -248,7 +269,7 @@ const SNAPSHOT_RECOVERY_GRACE_MS = 1500;
 const EDITOR_HISTORY_LIMIT = 80;
 const RUNTIME_PROBLEM_LIMIT = 120;
 const PROBLEM_ENTRY_LIMIT = 200;
-const DOCK_ZONE_MAGNET_DISTANCE = 84;
+const DOCK_ZONE_MAGNET_DISTANCE = 96;
 const EDITOR_MARK_KIND_DIAGNOSTIC = "diagnostic";
 const EDITOR_MARK_KIND_ERROR_LENS = "error-lens";
 const EDITOR_MARK_KIND_FIND = "find";
@@ -257,6 +278,9 @@ const EDITOR_LINT_DEBOUNCE_MS = 220;
 const DEV_TERMINAL_MESSAGE_MAX_CHARS = 1400;
 const DEV_TERMINAL_OUTPUT_LIMIT = 240;
 const DEV_TERMINAL_HISTORY_LIMIT = 80;
+const CONSOLE_INPUT_MAX_CHARS = 200;
+const CONSOLE_INPUT_HISTORY_LIMIT = 80;
+const CONSOLE_INPUT_HISTORY_STORAGE_KEY = "fazide.console-input-history.v1";
 const SANDBOX_CONSOLE_MAX_ARGS = 24;
 const SANDBOX_CONSOLE_ARG_MAX_CHARS = 1000;
 const SANDBOX_RUNTIME_MESSAGE_MAX_CHARS = 1400;
@@ -1587,6 +1611,7 @@ let promptDialogState = null;
 let promptDialogSecondaryButton = null;
 let promptDialogSecondaryDisarmTimer = null;
 let commandPaletteOpen = false;
+let topCommandPaletteOpen = false;
 let commandPaletteQuery = "";
 let commandPaletteResults = [];
 let commandPaletteIndex = 0;
@@ -1654,6 +1679,14 @@ let devTerminalUI = null;
 let devTerminalBusy = false;
 let devTerminalHistory = [];
 let devTerminalHistoryIndex = -1;
+let consoleInputHistory = [];
+let consoleInputHistoryIndex = -1;
+let consoleInputBusy = false;
+let consoleEvalRequestId = 0;
+let pendingConsoleEvalRequestId = 0;
+let consoleFilterText = "";
+let consoleFilterLevels = { system: true, info: true, warn: true, error: true, log: true };
+let lastRuntimeJumpTarget = null;
 let consoleViewMode = "console";
 let toolsTabMode = "task-runner";
 let toolsProblemsOpen = true;
@@ -1714,102 +1747,12 @@ const LAYOUT_NON_EDITOR_ROW_MAX_SHARE = 0.9;
 const PANEL_REDUCED_MOTION_QUERY = typeof window !== "undefined" && typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-reduced-motion: reduce)")
     : null;
-const EDITOR_SOFT_MIN_WIDTH = 96;
+const EDITOR_SOFT_MIN_WIDTH = 240;
 const LOG_PANEL_MIN_WIDTH = 180;
 const FILES_PANEL_MIN_WIDTH = 180;
 const SANDBOX_PANEL_MIN_WIDTH = 180;
 const TOOLS_PANEL_MIN_WIDTH = 180;
 const RESIZE_GUIDE_COLOR = "var(--resize-guide-color)";
-const FILE_ICON_BASE_PATH = "assets/icons/file-types";
-const FILE_ICON_PATHS = Object.freeze({
-    defaultFile: `${FILE_ICON_BASE_PATH}/file-default.svg`,
-    folderClosed: `${FILE_ICON_BASE_PATH}/folder-closed.svg`,
-    folderOpen: `${FILE_ICON_BASE_PATH}/folder-open.svg`,
-    js: `${FILE_ICON_BASE_PATH}/js.svg`,
-    ts: `${FILE_ICON_BASE_PATH}/ts.svg`,
-    jsx: `${FILE_ICON_BASE_PATH}/jsx.svg`,
-    tsx: `${FILE_ICON_BASE_PATH}/tsx.svg`,
-    html: `${FILE_ICON_BASE_PATH}/html.svg`,
-    css: `${FILE_ICON_BASE_PATH}/css.svg`,
-    json: `${FILE_ICON_BASE_PATH}/json.svg`,
-    markdown: `${FILE_ICON_BASE_PATH}/markdown.svg`,
-    yaml: `${FILE_ICON_BASE_PATH}/yaml.svg`,
-    xml: `${FILE_ICON_BASE_PATH}/xml.svg`,
-    image: `${FILE_ICON_BASE_PATH}/image.svg`,
-    shell: `${FILE_ICON_BASE_PATH}/shell.svg`,
-    java: `${FILE_ICON_BASE_PATH}/java.svg`,
-    node: `${FILE_ICON_BASE_PATH}/node.svg`,
-    sql: `${FILE_ICON_BASE_PATH}/sql.svg`,
-    git: `${FILE_ICON_BASE_PATH}/git.svg`,
-    docker: `${FILE_ICON_BASE_PATH}/docker.svg`,
-    rust: `${FILE_ICON_BASE_PATH}/rust.svg`,
-    go: `${FILE_ICON_BASE_PATH}/go.svg`,
-    php: `${FILE_ICON_BASE_PATH}/php.svg`,
-    cpp: `${FILE_ICON_BASE_PATH}/cpp.svg`,
-    csharp: `${FILE_ICON_BASE_PATH}/csharp.svg`,
-});
-const FILE_EXTENSION_ICON_MAP = Object.freeze({
-    js: FILE_ICON_PATHS.js,
-    mjs: FILE_ICON_PATHS.js,
-    cjs: FILE_ICON_PATHS.js,
-    ts: FILE_ICON_PATHS.ts,
-    mts: FILE_ICON_PATHS.ts,
-    cts: FILE_ICON_PATHS.ts,
-    jsx: FILE_ICON_PATHS.jsx,
-    tsx: FILE_ICON_PATHS.tsx,
-    html: FILE_ICON_PATHS.html,
-    htm: FILE_ICON_PATHS.html,
-    xhtml: FILE_ICON_PATHS.html,
-    css: FILE_ICON_PATHS.css,
-    scss: FILE_ICON_PATHS.css,
-    sass: FILE_ICON_PATHS.css,
-    less: FILE_ICON_PATHS.css,
-    styl: FILE_ICON_PATHS.css,
-    json: FILE_ICON_PATHS.json,
-    json5: FILE_ICON_PATHS.json,
-    jsonc: FILE_ICON_PATHS.json,
-    md: FILE_ICON_PATHS.markdown,
-    markdown: FILE_ICON_PATHS.markdown,
-    mdx: FILE_ICON_PATHS.markdown,
-    yaml: FILE_ICON_PATHS.yaml,
-    yml: FILE_ICON_PATHS.yaml,
-    xml: FILE_ICON_PATHS.xml,
-    sh: FILE_ICON_PATHS.shell,
-    bash: FILE_ICON_PATHS.shell,
-    zsh: FILE_ICON_PATHS.shell,
-    fish: FILE_ICON_PATHS.shell,
-    ps1: FILE_ICON_PATHS.shell,
-    bat: FILE_ICON_PATHS.shell,
-    cmd: FILE_ICON_PATHS.shell,
-    java: FILE_ICON_PATHS.java,
-    sql: FILE_ICON_PATHS.sql,
-    rs: FILE_ICON_PATHS.rust,
-    go: FILE_ICON_PATHS.go,
-    php: FILE_ICON_PATHS.php,
-    phtml: FILE_ICON_PATHS.php,
-    c: FILE_ICON_PATHS.cpp,
-    cc: FILE_ICON_PATHS.cpp,
-    cpp: FILE_ICON_PATHS.cpp,
-    cxx: FILE_ICON_PATHS.cpp,
-    h: FILE_ICON_PATHS.cpp,
-    hh: FILE_ICON_PATHS.cpp,
-    hpp: FILE_ICON_PATHS.cpp,
-    hxx: FILE_ICON_PATHS.cpp,
-    cs: FILE_ICON_PATHS.csharp,
-});
-const IMAGE_FILE_EXTENSIONS = new Set([
-    "png",
-    "jpg",
-    "jpeg",
-    "gif",
-    "webp",
-    "avif",
-    "bmp",
-    "ico",
-    "svg",
-    "tif",
-    "tiff",
-]);
 let rowGuide = null;
 let colGuide = null;
 let panelReflowFrame = null;
@@ -2443,11 +2386,11 @@ function getRowWidth(row) {
 function getEditorMinWidth(row) {
     if (!row) return 0;
     if (!getOpenPanelsInRow(row).includes("editor")) return 0;
-    const editorWidth = el.editorPanel?.getBoundingClientRect().width || 0;
-    if (editorWidth > 0) {
-        return Math.min(EDITOR_SOFT_MIN_WIDTH, Math.floor(editorWidth));
-    }
-    return EDITOR_SOFT_MIN_WIDTH;
+    const minFromStyle = Number.parseFloat(getComputedStyle(el.editorPanel || document.documentElement).minWidth || "0");
+    const cssMin = Number.isFinite(minFromStyle) && minFromStyle > 0
+        ? Math.round(minFromStyle)
+        : EDITOR_SOFT_MIN_WIDTH;
+    return Math.max(EDITOR_SOFT_MIN_WIDTH, cssMin);
 }
 
 function getEffectiveBounds(panel, row, baseBounds) {
@@ -2898,8 +2841,57 @@ function ensureConsoleTabs() {
         logView.setAttribute("aria-hidden", "false");
     }
 
-    if (!logView.contains(el.log)) {
-        logView.appendChild(el.log);
+    let consoleSurface = logView.querySelector("#consoleSurface");
+    if (!consoleSurface) {
+        consoleSurface = document.createElement("div");
+        consoleSurface.id = "consoleSurface";
+        consoleSurface.className = "console-surface";
+    }
+    if (!consoleSurface.contains(el.log)) {
+        consoleSurface.appendChild(el.log);
+    }
+
+    let consoleFilterBar = consoleSurface.querySelector("#consoleFilterBar");
+    if (!consoleFilterBar) {
+        consoleFilterBar = document.createElement("div");
+        consoleFilterBar.id = "consoleFilterBar";
+        consoleFilterBar.className = "console-filter-bar";
+        consoleFilterBar.innerHTML = `
+            <div class="console-filter-levels" role="group" aria-label="Console level filters">
+                <button id="consoleFilterAll" class="console-filter-toggle" type="button" data-console-filter-all="true">All</button>
+                <button class="console-filter-toggle" type="button" data-console-filter-level="system" aria-pressed="true">System</button>
+                <button class="console-filter-toggle" type="button" data-console-filter-level="info" aria-pressed="true">Info</button>
+                <button class="console-filter-toggle" type="button" data-console-filter-level="warn" aria-pressed="true">Warn</button>
+                <button class="console-filter-toggle" type="button" data-console-filter-level="error" aria-pressed="true">Error</button>
+            </div>
+            <label class="sr-only" for="consoleFilterInput">Filter console text</label>
+            <input id="consoleFilterInput" class="console-filter-input" type="search" autocomplete="off" spellcheck="false" placeholder="Filter logs..." />
+            <button id="consoleJumpLastError" class="console-filter-jump" type="button" disabled>Last Error</button>
+        `;
+    }
+    if (!consoleSurface.contains(consoleFilterBar)) {
+        consoleSurface.insertBefore(consoleFilterBar, el.log);
+    }
+
+    let consoleInputShell = consoleSurface.querySelector("#consoleInputShell");
+    if (!consoleInputShell) {
+        consoleInputShell = document.createElement("div");
+        consoleInputShell.id = "consoleInputShell";
+        consoleInputShell.className = "console-input-shell";
+        consoleInputShell.setAttribute("role", "group");
+        consoleInputShell.setAttribute("aria-label", "Console input");
+        consoleInputShell.innerHTML = `
+            <span class="console-input-prompt" aria-hidden="true">FAZ\\IDE ></span>
+            <label class="sr-only" for="consoleInput">Console expression</label>
+            <textarea id="consoleInput" rows="1" autocomplete="off" spellcheck="false" placeholder="Type JavaScript • Enter to run • Shift+Enter newline"></textarea>
+        `;
+    }
+    if (!consoleSurface.contains(consoleInputShell)) {
+        consoleSurface.appendChild(consoleInputShell);
+    }
+
+    if (!logView.contains(consoleSurface)) {
+        logView.appendChild(consoleSurface);
     }
 
     let terminalView = logBody.querySelector("#consoleTerminalView");
@@ -2929,6 +2921,13 @@ function ensureConsoleTabs() {
         terminalView,
         btnConsole: tabs.querySelector("#consoleTabConsole"),
         btnTerminal: tabs.querySelector("#consoleTabTerminal"),
+        consoleSurface,
+        consoleFilterBar,
+        consoleFilterInput: consoleFilterBar.querySelector("#consoleFilterInput"),
+        consoleFilterAll: consoleFilterBar.querySelector("#consoleFilterAll"),
+        consoleJumpLastError: consoleFilterBar.querySelector("#consoleJumpLastError"),
+        consoleInputShell,
+        consoleInput: consoleInputShell.querySelector("#consoleInput"),
     };
 }
 
@@ -2968,7 +2967,8 @@ function setConsoleView(next = "console", { focus = false } = {}) {
     if (focus) {
         requestAnimationFrame(() => {
             if (consoleActive) {
-                ui.btnConsole.focus();
+                autosizeConsoleInput(ui.consoleInput);
+                ui.consoleInput?.focus();
                 return;
             }
             const terminalUi = ensureDevTerminalPanel();
@@ -3174,43 +3174,6 @@ function pruneProblemDiagnostics() {
     });
 }
 
-function normalizeProblemLevel(level) {
-    if (level === "error" || level === "warn") return level;
-    return "info";
-}
-
-function formatSandboxLogPart(value, maxChars = SANDBOX_CONSOLE_ARG_MAX_CHARS) {
-    if (typeof value === "string") return truncateText(value, maxChars);
-    if (value instanceof Error) return truncateText(value.stack || value.message || String(value), maxChars);
-    if (typeof value === "function") return value.name ? `[Function ${value.name}]` : "[Function]";
-    if (
-        value == null
-        || typeof value === "number"
-        || typeof value === "boolean"
-        || typeof value === "bigint"
-        || typeof value === "symbol"
-    ) {
-        return truncateText(String(value), maxChars);
-    }
-    try {
-        return truncateText(JSON.stringify(value, null, 2), maxChars);
-    } catch {
-        return truncateText(String(value), maxChars);
-    }
-}
-
-function normalizeSandboxConsolePayload(payload = {}) {
-    const level = normalizeProblemLevel(payload?.level);
-    const args = Array.isArray(payload?.args) ? payload.args : [payload?.args];
-    const limited = args
-        .slice(0, SANDBOX_CONSOLE_MAX_ARGS)
-        .map((part) => formatSandboxLogPart(part, SANDBOX_CONSOLE_ARG_MAX_CHARS));
-    if (args.length > SANDBOX_CONSOLE_MAX_ARGS) {
-        limited.push(`... [${args.length - SANDBOX_CONSOLE_MAX_ARGS} more argument(s) truncated]`);
-    }
-    return { level, args: limited };
-}
-
 function clearSandboxReadyTimer() {
     if (!sandboxRunReadyTimer) return;
     clearTimeout(sandboxRunReadyTimer);
@@ -3256,18 +3219,6 @@ function queueSandboxConsoleLog(level = "info", args = []) {
     if (sandboxConsoleFlushTimeout == null) {
         sandboxConsoleFlushTimeout = setTimeout(() => flushSandboxConsoleQueue(), SANDBOX_CONSOLE_FLUSH_TIMEOUT_MS);
     }
-}
-
-function isTrustedSandboxMessageEvent(event) {
-    const source = event?.source;
-    const runnerWindow = getRunnerWindow();
-    if (!(source && runnerWindow && source === runnerWindow)) {
-        return false;
-    }
-    const origin = String(event?.origin || "").trim();
-    if (!origin) return false;
-    if (origin === "null") return true;
-    return origin === window.location.origin;
 }
 
 function normalizeProblemDiagnostic(entry = {}) {
@@ -4100,6 +4051,281 @@ function pushDevTerminalHistory(input = "") {
     devTerminalHistoryIndex = devTerminalHistory.length;
 }
 
+function pushConsoleInputHistory(input = "") {
+    const raw = String(input || "").trim();
+    if (!raw) return;
+    const last = consoleInputHistory[consoleInputHistory.length - 1];
+    if (last !== raw) {
+        consoleInputHistory = [...consoleInputHistory, raw].slice(-CONSOLE_INPUT_HISTORY_LIMIT);
+        save(CONSOLE_INPUT_HISTORY_STORAGE_KEY, JSON.stringify(consoleInputHistory));
+    }
+    consoleInputHistoryIndex = consoleInputHistory.length;
+}
+
+function loadConsoleInputHistory() {
+    const raw = load(CONSOLE_INPUT_HISTORY_STORAGE_KEY);
+    if (!raw) {
+        consoleInputHistory = [];
+        consoleInputHistoryIndex = 0;
+        return;
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed)
+            ? parsed.map((entry) => String(entry || "").trim()).filter(Boolean)
+            : [];
+        consoleInputHistory = list.slice(-CONSOLE_INPUT_HISTORY_LIMIT);
+        consoleInputHistoryIndex = consoleInputHistory.length;
+    } catch {
+        consoleInputHistory = [];
+        consoleInputHistoryIndex = 0;
+    }
+}
+
+function setConsoleInputValue(value = "") {
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleInput) return;
+    ui.consoleInput.value = String(value || "");
+    autosizeConsoleInput(ui.consoleInput);
+}
+
+function clearConsoleInputValue({ focus = true } = {}) {
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleInput) return false;
+    ui.consoleInput.value = "";
+    if (focus) ui.consoleInput.focus();
+    return true;
+}
+
+function navigateConsoleInputHistory(direction = 0) {
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleInput) return;
+    if (!consoleInputHistory.length) return;
+    const step = Number(direction) || 0;
+    if (step === 0) return;
+    consoleInputHistoryIndex = clamp(consoleInputHistoryIndex + step, 0, consoleInputHistory.length);
+    if (consoleInputHistoryIndex >= consoleInputHistory.length) {
+        ui.consoleInput.value = "";
+        return;
+    }
+    ui.consoleInput.value = consoleInputHistory[consoleInputHistoryIndex] || "";
+    ui.consoleInput.setSelectionRange(ui.consoleInput.value.length, ui.consoleInput.value.length);
+    autosizeConsoleInput(ui.consoleInput);
+}
+
+function autosizeConsoleInput(inputNode) {
+    if (!(inputNode instanceof HTMLTextAreaElement)) return;
+    const minHeight = 24;
+    if (!String(inputNode.value || "").trim()) {
+        inputNode.style.height = `${minHeight}px`;
+        return;
+    }
+    inputNode.style.height = "auto";
+    const maxHeight = 120;
+    inputNode.style.height = `${Math.min(maxHeight, Math.max(minHeight, inputNode.scrollHeight))}px`;
+}
+
+function setConsoleInputBusy(active) {
+    consoleInputBusy = Boolean(active);
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleInput) return;
+    ui.consoleInput.disabled = consoleInputBusy;
+    if (ui.consoleInputRun) ui.consoleInputRun.disabled = consoleInputBusy;
+}
+
+function setConsoleFilterButtonState(button, active) {
+    if (!button) return;
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.dataset.active = active ? "true" : "false";
+}
+
+function applyConsoleLogFilter() {
+    logger.setFilter?.({
+        text: consoleFilterText,
+        levels: { ...consoleFilterLevels },
+    });
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleFilterBar) return;
+    const levelButtons = [...ui.consoleFilterBar.querySelectorAll("[data-console-filter-level]")];
+    levelButtons.forEach((button) => {
+        const key = String(button.dataset.consoleFilterLevel || "").toLowerCase();
+        setConsoleFilterButtonState(button, consoleFilterLevels[key] !== false);
+    });
+    const allOn = Object.values(consoleFilterLevels).every(Boolean);
+    setConsoleFilterButtonState(ui.consoleFilterAll, allOn);
+    if (ui.consoleFilterInput && ui.consoleFilterInput.value !== consoleFilterText) {
+        ui.consoleFilterInput.value = consoleFilterText;
+    }
+}
+
+function updateConsoleJumpLastErrorButton() {
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleJumpLastError) return;
+    ui.consoleJumpLastError.disabled = !lastRuntimeJumpTarget?.fileId;
+}
+
+function focusConsoleInput({ openLog = true } = {}) {
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleInput) return false;
+    if (openLog) {
+        ensureLogOpen("Console opened.", { view: "console" });
+    } else {
+        setConsoleView("console");
+    }
+    requestAnimationFrame(() => ui.consoleInput?.focus());
+    return true;
+}
+
+function requestConsoleInputEval(input = "") {
+    const rawInput = String(input || "");
+    const raw = rawInput.trim();
+    if (!raw || consoleInputBusy) return false;
+
+    ensureLogOpen("Console opened.", { view: "console" });
+    if (!currentToken) {
+        logger.append("warn", ["Run the sandbox before evaluating console input."]);
+        status.set("Run required");
+        return false;
+    }
+
+    if (raw.length > CONSOLE_INPUT_MAX_CHARS) {
+        logger.append("warn", [`Expression too long (${raw.length}/${CONSOLE_INPUT_MAX_CHARS}).`]);
+        status.set("Expression too long");
+        return false;
+    }
+
+    if (raw === "help") {
+        logger.append("system", ["Console commands: help, clear, cls. Shift+Enter = newline."]);
+        status.set("Console help");
+        return true;
+    }
+    if (raw === "clear" || raw === "cls") {
+        logger.clear();
+        logger.append("system", ["Log cleared."]);
+        status.set("Ready");
+        return true;
+    }
+
+    logger.append("system", [`FAZ\\IDE > ${raw}`]);
+    pushConsoleInputHistory(raw);
+    setConsoleInputBusy(true);
+    pendingConsoleEvalRequestId = ++consoleEvalRequestId;
+    sendSandboxCommand("console_eval", {
+        expression: rawInput,
+        requestId: pendingConsoleEvalRequestId,
+    });
+    status.set("Evaluating...");
+    return true;
+}
+
+function applyConsoleEvalResult(payload) {
+    const requestId = Number(payload?.requestId || 0);
+    if (pendingConsoleEvalRequestId && requestId && requestId !== pendingConsoleEvalRequestId) {
+        return;
+    }
+    pendingConsoleEvalRequestId = 0;
+    setConsoleInputBusy(false);
+
+    const error = String(payload?.error || "").trim();
+    const result = String(payload?.result || "").trim();
+    if (error) {
+        logger.append("error", [error]);
+        status.set("Eval error");
+        return;
+    }
+    if (result && result !== "undefined") {
+        logger.append("info", [result]);
+    }
+    status.set("Eval complete");
+}
+
+function wireConsoleInput() {
+    wireConsoleTabs();
+    const ui = ensureConsoleTabs();
+    if (!ui?.consoleInputShell || !ui.consoleInput) return;
+    if (ui.consoleInputShell.dataset.wired === "true") return;
+
+    loadConsoleInputHistory();
+    setConsoleInputBusy(false);
+    applyConsoleLogFilter();
+    updateConsoleJumpLastErrorButton();
+
+    ui.consoleFilterAll?.addEventListener("click", () => {
+        const allOn = Object.values(consoleFilterLevels).every(Boolean);
+        const next = !allOn;
+        consoleFilterLevels = {
+            system: next,
+            info: next,
+            warn: next,
+            error: next,
+            log: next,
+        };
+        applyConsoleLogFilter();
+    });
+
+    ui.consoleFilterBar?.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-console-filter-level]");
+        if (!button) return;
+        const level = String(button.dataset.consoleFilterLevel || "").toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(consoleFilterLevels, level)) return;
+        consoleFilterLevels[level] = !consoleFilterLevels[level];
+        if (!Object.values(consoleFilterLevels).some(Boolean)) {
+            consoleFilterLevels[level] = true;
+        }
+        applyConsoleLogFilter();
+    });
+
+    ui.consoleFilterInput?.addEventListener("input", (event) => {
+        consoleFilterText = String(event.target?.value || "").trim();
+        applyConsoleLogFilter();
+    });
+
+    ui.consoleJumpLastError?.addEventListener("click", () => {
+        if (!lastRuntimeJumpTarget?.fileId) return;
+        jumpToFileLocation(lastRuntimeJumpTarget.fileId, lastRuntimeJumpTarget.line, lastRuntimeJumpTarget.ch);
+        ensureLogOpen("Console opened for runtime error.", { view: "console" });
+    });
+
+    ui.consoleInput.addEventListener("input", () => {
+        autosizeConsoleInput(ui.consoleInput);
+    });
+    autosizeConsoleInput(ui.consoleInput);
+
+    ui.consoleInput.addEventListener("keydown", (event) => {
+        if ((event.ctrlKey || event.metaKey) && String(event.key || "").toLowerCase() === "l") {
+            event.preventDefault();
+            logger.clear();
+            logger.append("system", ["Log cleared."]);
+            status.set("Ready");
+            return;
+        }
+        if (event.key === "ArrowUp") {
+            event.preventDefault();
+            navigateConsoleInputHistory(-1);
+            return;
+        }
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            navigateConsoleInputHistory(1);
+            return;
+        }
+        if (event.key === "Escape") {
+            event.preventDefault();
+            ui.consoleInput.value = "";
+            autosizeConsoleInput(ui.consoleInput);
+            return;
+        }
+        if (event.key !== "Enter" || event.shiftKey) return;
+        event.preventDefault();
+        const value = ui.consoleInput.value || "";
+        if (!requestConsoleInputEval(value)) return;
+        setConsoleInputValue("");
+        autosizeConsoleInput(ui.consoleInput);
+    });
+
+    ui.consoleInputShell.dataset.wired = "true";
+}
+
 function setDevTerminalInputValue(value = "") {
     const ui = ensureDevTerminalPanel();
     if (!ui?.input) return;
@@ -4259,6 +4485,7 @@ async function executeDevTerminalCommand(input = "") {
 
 function wireDevTerminal() {
     wireConsoleTabs();
+    wireConsoleInput();
     const ui = ensureDevTerminalPanel();
     if (!ui) return;
     if (ui.panel.dataset.wired === "true") return;
@@ -4751,6 +4978,7 @@ function initDocking() {
     let dragOffset = { x: 0, y: 0 };
     let dragZoneRects = [];
     let lastGhostPoint = null;
+    let centerZoneTouched = false;
 
     const updateActiveZone = (zone) => {
         if (activeZone === zone) return;
@@ -4776,6 +5004,35 @@ function initDocking() {
         }));
     };
 
+    const isPointInWorkspaceCenterBand = (x, y) => {
+        const workspaceRect = el.workspace?.getBoundingClientRect();
+        if (!workspaceRect) return false;
+        if (x < workspaceRect.left || x > workspaceRect.right || y < workspaceRect.top || y > workspaceRect.bottom) {
+            return false;
+        }
+        const width = Math.max(1, workspaceRect.width);
+        const height = Math.max(1, workspaceRect.height);
+        const centerX = workspaceRect.left + width / 2;
+        const centerY = workspaceRect.top + height / 2;
+        const centerBandX = Math.max(64, width * 0.24);
+        const centerBandY = Math.max(48, height * 0.24);
+        return Math.abs(x - centerX) <= centerBandX && Math.abs(y - centerY) <= centerBandY;
+    };
+
+    const isPointInCenterZoneRect = (x, y) => {
+        const centerZone = zones.find((zone) => zone.getAttribute("data-dock-zone") === "center") || null;
+        if (!centerZone) return false;
+        const rect = centerZone.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+        const margin = 8;
+        return (
+            x >= rect.left - margin
+            && x <= rect.right + margin
+            && y >= rect.top - margin
+            && y <= rect.bottom + margin
+        );
+    };
+
     const resolveZoneAtPoint = (x, y) => {
         for (const entry of dragZoneRects) {
             const rect = entry.rect;
@@ -4793,16 +5050,16 @@ function initDocking() {
             const bottomEdge = workspaceRect.bottom - Math.max(44, height * 0.24);
             const centerX = workspaceRect.left + width / 2;
             const centerY = workspaceRect.top + height / 2;
-            const centerBandX = Math.max(56, width * 0.14);
-            const centerBandY = Math.max(40, height * 0.14);
+            const centerBandX = Math.max(64, width * 0.2);
+            const centerBandY = Math.max(48, height * 0.2);
 
             const byName = (name) => zones.find((zone) => zone.getAttribute("data-dock-zone") === name) || null;
-            if (y >= bottomEdge) return byName("bottom");
-            if (x <= leftEdge) return byName("left");
-            if (x >= rightEdge) return byName("right");
             if (Math.abs(x - centerX) <= centerBandX && Math.abs(y - centerY) <= centerBandY) {
                 return byName("center");
             }
+            if (y >= bottomEdge) return byName("bottom");
+            if (x <= leftEdge) return byName("left");
+            if (x >= rightEdge) return byName("right");
         }
 
         const elAt = document.elementFromPoint(x, y);
@@ -4880,14 +5137,32 @@ function initDocking() {
     };
 
     const applyDrop = (dropPoint = null) => {
-        if (!activeZone || !activePanel) return;
-        const zoneName = activeZone.getAttribute("data-dock-zone");
+        if (!activePanel) return;
+        const overlayCenterActive = overlay.getAttribute("data-active-zone") === "center";
+        if (
+            centerZoneTouched
+            || overlayCenterActive
+            || (
+                dropPoint
+                && (
+                    isPointInWorkspaceCenterBand(dropPoint.x, dropPoint.y)
+                    || isPointInCenterZoneRect(dropPoint.x, dropPoint.y)
+                )
+            )
+        ) {
+            applyActiveLayoutPreset();
+            return;
+        }
+        const resolvedZone = activeZone || (
+            dropPoint && Number.isFinite(dropPoint.x) && Number.isFinite(dropPoint.y)
+                ? resolveZoneAtPoint(dropPoint.x, dropPoint.y)
+                : null
+        );
+        if (!resolvedZone) return;
+        const zoneName = resolvedZone.getAttribute("data-dock-zone");
         if (!zoneName) return;
         if (zoneName === "center") {
-            const topOrder = Array.isArray(layoutState.panelRows?.top) ? layoutState.panelRows.top : [];
-            const orderWithoutPanel = topOrder.filter((name) => name !== activePanel);
-            const dropIndex = Math.floor(orderWithoutPanel.length / 2);
-            movePanelToRow(activePanel, "top", dropIndex);
+            applyActiveLayoutPreset();
             return;
         }
         if (zoneName === "left") {
@@ -4963,6 +5238,7 @@ function initDocking() {
             captureDragZoneRects();
             setOverlayOpen(true);
             document.body?.classList.add("dock-dragging");
+            centerZoneTouched = false;
             handle.setPointerCapture(event.pointerId);
 
             let dragMoveFrame = null;
@@ -4973,6 +5249,9 @@ function initDocking() {
                 if (!state) return;
                 const zone = resolveZoneAtPoint(state.x, state.y);
                 updateActiveZone(zone);
+                if (zone?.getAttribute("data-dock-zone") === "center" || isPointInWorkspaceCenterBand(state.x, state.y)) {
+                    centerZoneTouched = true;
+                }
                 if (dragGhost) {
                     const nextX = state.x - dragOffset.x;
                     const nextY = state.y - dragOffset.y;
@@ -5037,6 +5316,7 @@ function initDocking() {
                     activePanelEl = null;
                     dragZoneRects = [];
                     lastGhostPoint = null;
+                    centerZoneTouched = false;
                 }
             };
 
@@ -5060,6 +5340,7 @@ function initSplitters() {
         splitter.addEventListener("pointerdown", (event) => {
             if (!isPanelOpen(panel)) return;
             event.preventDefault();
+            const pointerId = event.pointerId;
             document.body?.setAttribute("data-resize", "col");
             const startX = event.clientX;
             const startWidth = getWidth();
@@ -5082,6 +5363,7 @@ function initSplitters() {
             showColGuideForPanels(leftEl, rightEl);
             let moveFrame = null;
             let pendingMoveEvent = null;
+            let ended = false;
 
             const applyMove = (moveEvent) => {
                 if (!moveEvent) return;
@@ -5132,21 +5414,20 @@ function initSplitters() {
                 });
             };
 
-            const onCancel = () => {
+            const cleanup = () => {
                 if (moveFrame != null) {
                     cancelAnimationFrame(moveFrame);
                     moveFrame = null;
                 }
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
-                try {
-                    splitter.releasePointerCapture(event.pointerId);
-                } catch (err) {
-                    // no-op
-                }
                 splitter.removeEventListener("pointermove", onMove);
                 splitter.removeEventListener("pointerup", onUp);
                 splitter.removeEventListener("pointercancel", onCancel);
+                splitter.removeEventListener("lostpointercapture", onLostPointerCapture);
+                window.removeEventListener("pointerup", onWindowPointerEnd, true);
+                window.removeEventListener("pointercancel", onWindowPointerEnd, true);
+                window.removeEventListener("blur", onWindowBlur, true);
                 document.body?.removeAttribute("data-resize");
                 setResizeActive([leftEl, rightEl], false);
                 hideColGuide();
@@ -5154,7 +5435,10 @@ function initSplitters() {
                 persistLayout();
             };
 
-            const onUp = () => {
+            const onCancel = (cancelEvent) => {
+                if (ended) return;
+                if (Number.isFinite(cancelEvent?.pointerId) && cancelEvent.pointerId !== pointerId) return;
+                ended = true;
                 if (moveFrame != null) {
                     cancelAnimationFrame(moveFrame);
                     moveFrame = null;
@@ -5162,24 +5446,53 @@ function initSplitters() {
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
                 try {
-                    splitter.releasePointerCapture(event.pointerId);
+                    splitter.releasePointerCapture(pointerId);
                 } catch (err) {
                     // no-op
                 }
-                splitter.removeEventListener("pointermove", onMove);
-                splitter.removeEventListener("pointerup", onUp);
-                splitter.removeEventListener("pointercancel", onCancel);
-                document.body?.removeAttribute("data-resize");
-                setResizeActive([leftEl, rightEl], false);
-                hideColGuide();
-                hideRowGuide();
-                persistLayout();
+                cleanup();
             };
 
-            splitter.setPointerCapture(event.pointerId);
+            const onUp = (upEvent) => {
+                if (ended) return;
+                if (Number.isFinite(upEvent?.pointerId) && upEvent.pointerId !== pointerId) return;
+                ended = true;
+                if (moveFrame != null) {
+                    cancelAnimationFrame(moveFrame);
+                    moveFrame = null;
+                }
+                applyMove(pendingMoveEvent);
+                pendingMoveEvent = null;
+                try {
+                    splitter.releasePointerCapture(pointerId);
+                } catch (err) {
+                    // no-op
+                }
+                cleanup();
+            };
+
+            const onWindowPointerEnd = (endEvent) => {
+                if (Number.isFinite(endEvent?.pointerId) && endEvent.pointerId !== pointerId) return;
+                onUp(endEvent);
+            };
+
+            const onWindowBlur = () => {
+                onCancel(null);
+            };
+
+            const onLostPointerCapture = (lostEvent) => {
+                if (Number.isFinite(lostEvent?.pointerId) && lostEvent.pointerId !== pointerId) return;
+                onCancel(lostEvent);
+            };
+
+            splitter.setPointerCapture(pointerId);
             splitter.addEventListener("pointermove", onMove);
             splitter.addEventListener("pointerup", onUp);
             splitter.addEventListener("pointercancel", onCancel);
+            splitter.addEventListener("lostpointercapture", onLostPointerCapture);
+            window.addEventListener("pointerup", onWindowPointerEnd, true);
+            window.addEventListener("pointercancel", onWindowPointerEnd, true);
+            window.addEventListener("blur", onWindowBlur, true);
         });
 
         splitter.addEventListener("dblclick", () => {
@@ -5249,6 +5562,7 @@ function initSplitters() {
         splitter.addEventListener("pointerdown", (event) => {
             if (!rowHasOpenPanels("bottom")) return;
             event.preventDefault();
+            const pointerId = event.pointerId;
             document.body?.setAttribute("data-resize", "row");
             const startY = event.clientY;
             const startHeight = layoutState.bottomHeight;
@@ -5263,6 +5577,7 @@ function initSplitters() {
 
             let moveFrame = null;
             let pendingMoveEvent = null;
+            let ended = false;
 
             const applyMove = (moveEvent) => {
                 if (!moveEvent) return;
@@ -5284,21 +5599,20 @@ function initSplitters() {
                 });
             };
 
-            const onCancel = () => {
+            const cleanup = () => {
                 if (moveFrame != null) {
                     cancelAnimationFrame(moveFrame);
                     moveFrame = null;
                 }
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
-                try {
-                    splitter.releasePointerCapture(event.pointerId);
-                } catch (err) {
-                    // no-op
-                }
                 splitter.removeEventListener("pointermove", onMove);
                 splitter.removeEventListener("pointerup", onUp);
                 splitter.removeEventListener("pointercancel", onCancel);
+                splitter.removeEventListener("lostpointercapture", onLostPointerCapture);
+                window.removeEventListener("pointerup", onWindowPointerEnd, true);
+                window.removeEventListener("pointercancel", onWindowPointerEnd, true);
+                window.removeEventListener("blur", onWindowBlur, true);
                 document.body?.removeAttribute("data-resize");
                 setResizeActive([el.workspaceTop, el.workspaceBottom], false);
                 hideRowGuide();
@@ -5306,7 +5620,10 @@ function initSplitters() {
                 persistLayout();
             };
 
-            const onUp = () => {
+            const onCancel = (cancelEvent) => {
+                if (ended) return;
+                if (Number.isFinite(cancelEvent?.pointerId) && cancelEvent.pointerId !== pointerId) return;
+                ended = true;
                 if (moveFrame != null) {
                     cancelAnimationFrame(moveFrame);
                     moveFrame = null;
@@ -5314,24 +5631,53 @@ function initSplitters() {
                 applyMove(pendingMoveEvent);
                 pendingMoveEvent = null;
                 try {
-                    splitter.releasePointerCapture(event.pointerId);
+                    splitter.releasePointerCapture(pointerId);
                 } catch (err) {
                     // no-op
                 }
-                splitter.removeEventListener("pointermove", onMove);
-                splitter.removeEventListener("pointerup", onUp);
-                splitter.removeEventListener("pointercancel", onCancel);
-                document.body?.removeAttribute("data-resize");
-                setResizeActive([el.workspaceTop, el.workspaceBottom], false);
-                hideRowGuide();
-                hideColGuide();
-                persistLayout();
+                cleanup();
             };
 
-            splitter.setPointerCapture(event.pointerId);
+            const onUp = (upEvent) => {
+                if (ended) return;
+                if (Number.isFinite(upEvent?.pointerId) && upEvent.pointerId !== pointerId) return;
+                ended = true;
+                if (moveFrame != null) {
+                    cancelAnimationFrame(moveFrame);
+                    moveFrame = null;
+                }
+                applyMove(pendingMoveEvent);
+                pendingMoveEvent = null;
+                try {
+                    splitter.releasePointerCapture(pointerId);
+                } catch (err) {
+                    // no-op
+                }
+                cleanup();
+            };
+
+            const onWindowPointerEnd = (endEvent) => {
+                if (Number.isFinite(endEvent?.pointerId) && endEvent.pointerId !== pointerId) return;
+                onUp(endEvent);
+            };
+
+            const onWindowBlur = () => {
+                onCancel(null);
+            };
+
+            const onLostPointerCapture = (lostEvent) => {
+                if (Number.isFinite(lostEvent?.pointerId) && lostEvent.pointerId !== pointerId) return;
+                onCancel(lostEvent);
+            };
+
+            splitter.setPointerCapture(pointerId);
             splitter.addEventListener("pointermove", onMove);
             splitter.addEventListener("pointerup", onUp);
             splitter.addEventListener("pointercancel", onCancel);
+            splitter.addEventListener("lostpointercapture", onLostPointerCapture);
+            window.addEventListener("pointerup", onWindowPointerEnd, true);
+            window.addEventListener("pointercancel", onWindowPointerEnd, true);
+            window.addEventListener("blur", onWindowBlur, true);
         });
 
         splitter.addEventListener("dblclick", () => {
@@ -5366,12 +5712,6 @@ function initEdgeResizing() {
     ensureRowGuide();
     ensureColGuide();
 
-    const getEdgeDir = (rect, x) => {
-        if (x - rect.left <= EDGE_RESIZE_GRAB) return "left";
-        if (rect.right - x <= EDGE_RESIZE_GRAB) return "right";
-        return null;
-    };
-
     const getNeighbor = (row, panel, dir) => {
         const list = layoutState.panelRows?.[row] || [];
         const idx = list.indexOf(panel);
@@ -5386,9 +5726,46 @@ function initEdgeResizing() {
         return null;
     };
 
+    const getEdgeDir = (panel, rect, x) => {
+        const adaptiveGrab = rect.width <= EDGE_RESIZE_GRAB * 10
+            ? Math.max(EDGE_RESIZE_GRAB, rect.width / 2)
+            : EDGE_RESIZE_GRAB;
+        const leftDistance = x - rect.left;
+        const rightDistance = rect.right - x;
+        const nearLeft = leftDistance <= adaptiveGrab;
+        const nearRight = rightDistance <= adaptiveGrab;
+        if (!nearLeft && !nearRight) return null;
+
+        const row = getPanelRow(panel);
+        const hasLeftNeighbor = Boolean(getNeighbor(row, panel, "left"));
+        const hasRightNeighbor = Boolean(getNeighbor(row, panel, "right"));
+
+        if (!hasLeftNeighbor && !hasRightNeighbor) return null;
+
+        if (nearLeft && nearRight) {
+            if (hasLeftNeighbor && !hasRightNeighbor) return "left";
+            if (!hasLeftNeighbor && hasRightNeighbor) return "right";
+            const centerX = rect.left + (rect.width / 2);
+            return x < centerX ? "left" : "right";
+        }
+
+        if (nearLeft) {
+            if (hasLeftNeighbor) return "left";
+            return hasRightNeighbor ? "right" : null;
+        }
+
+        if (nearRight) {
+            if (hasRightNeighbor) return "right";
+            return hasLeftNeighbor ? "left" : null;
+        }
+
+        return null;
+    };
+
     const startRowResize = (startEvent) => {
         if (!rowHasOpenPanels("bottom")) return;
         const bounds = getLayoutBounds().bottomHeight;
+        const pointerId = startEvent.pointerId;
         const startY = startEvent.clientY;
         const startHeight = layoutState.bottomHeight;
         const workspaceHeight = el.workspace?.getBoundingClientRect().height || 0;
@@ -5397,11 +5774,13 @@ function initEdgeResizing() {
 
         document.body?.setAttribute("data-resize", "row");
         document.body?.removeAttribute("data-resize-preview");
+        setResizeActive([el.workspaceTop, el.workspaceBottom], true);
         hideColGuide();
         const boundaryStart = getRowBoundaryY();
         if (boundaryStart !== null) showRowGuideAt(boundaryStart);
         let moveFrame = null;
         let pendingMoveEvent = null;
+        let ended = false;
 
         const applyMove = (moveEvent) => {
             if (!moveEvent) return;
@@ -5424,6 +5803,9 @@ function initEdgeResizing() {
         };
 
         const onEnd = (event) => {
+            if (ended) return;
+            if (Number.isFinite(event?.pointerId) && event.pointerId !== pointerId) return;
+            ended = true;
             if (moveFrame != null) {
                 cancelAnimationFrame(moveFrame);
                 moveFrame = null;
@@ -5435,21 +5817,40 @@ function initEdgeResizing() {
             el.workspace.removeEventListener("pointercancel", onEnd);
             document.body?.removeAttribute("data-resize");
             document.body?.removeAttribute("data-resize-preview");
+            setResizeActive([el.workspaceTop, el.workspaceBottom], false);
             hideRowGuide();
             hideColGuide();
             persistLayout();
-            if (event?.pointerId) {
+            if (Number.isFinite(pointerId)) {
                 try {
-                    el.workspace.releasePointerCapture(event.pointerId);
+                    el.workspace.releasePointerCapture(pointerId);
                 } catch (err) {
                     // no-op
                 }
             }
+            el.workspace.removeEventListener("lostpointercapture", onLostPointerCapture);
+            window.removeEventListener("pointerup", onWindowPointerEnd, true);
+            window.removeEventListener("pointercancel", onWindowPointerEnd, true);
+            window.removeEventListener("blur", onWindowBlur, true);
         };
 
-        if (startEvent.pointerId) {
+        const onWindowPointerEnd = (endEvent) => {
+            if (Number.isFinite(endEvent?.pointerId) && endEvent.pointerId !== pointerId) return;
+            onEnd(endEvent);
+        };
+
+        const onWindowBlur = () => {
+            onEnd(null);
+        };
+
+        const onLostPointerCapture = (lostEvent) => {
+            if (Number.isFinite(lostEvent?.pointerId) && lostEvent.pointerId !== pointerId) return;
+            onEnd(lostEvent);
+        };
+
+        if (Number.isFinite(pointerId)) {
             try {
-                el.workspace.setPointerCapture(startEvent.pointerId);
+                el.workspace.setPointerCapture(pointerId);
             } catch (err) {
                 // no-op
             }
@@ -5457,11 +5858,16 @@ function initEdgeResizing() {
         el.workspace.addEventListener("pointermove", onMove);
         el.workspace.addEventListener("pointerup", onEnd);
         el.workspace.addEventListener("pointercancel", onEnd);
+        el.workspace.addEventListener("lostpointercapture", onLostPointerCapture);
+        window.addEventListener("pointerup", onWindowPointerEnd, true);
+        window.addEventListener("pointercancel", onWindowPointerEnd, true);
+        window.addEventListener("blur", onWindowBlur, true);
     };
 
     const startResize = (panel, dir, startEvent) => {
         const row = getPanelRow(panel);
         const neighbor = getNeighbor(row, panel, dir);
+        const pointerId = startEvent.pointerId;
 
         const leftName = dir === "right" ? panel : neighbor;
         const rightName = dir === "right" ? neighbor : panel;
@@ -5482,10 +5888,12 @@ function initEdgeResizing() {
 
         document.body?.setAttribute("data-resize", "col");
         document.body?.removeAttribute("data-resize-preview");
+        setResizeActive([leftEl, rightEl], true);
         hideRowGuide();
         showColGuideForPanels(leftEl, rightEl);
         let moveFrame = null;
         let pendingMoveEvent = null;
+        let ended = false;
 
         const applyMove = (moveEvent) => {
             if (!moveEvent) return;
@@ -5533,6 +5941,9 @@ function initEdgeResizing() {
         };
 
         const onEnd = (event) => {
+            if (ended) return;
+            if (Number.isFinite(event?.pointerId) && event.pointerId !== pointerId) return;
+            ended = true;
             if (moveFrame != null) {
                 cancelAnimationFrame(moveFrame);
                 moveFrame = null;
@@ -5544,21 +5955,40 @@ function initEdgeResizing() {
             el.workspace.removeEventListener("pointercancel", onEnd);
             document.body?.removeAttribute("data-resize");
             document.body?.removeAttribute("data-resize-preview");
+            setResizeActive([leftEl, rightEl], false);
             hideColGuide();
             hideRowGuide();
             persistLayout();
-            if (event?.pointerId) {
+            if (Number.isFinite(pointerId)) {
                 try {
-                    el.workspace.releasePointerCapture(event.pointerId);
+                    el.workspace.releasePointerCapture(pointerId);
                 } catch (err) {
                     // no-op
                 }
             }
+            el.workspace.removeEventListener("lostpointercapture", onLostPointerCapture);
+            window.removeEventListener("pointerup", onWindowPointerEnd, true);
+            window.removeEventListener("pointercancel", onWindowPointerEnd, true);
+            window.removeEventListener("blur", onWindowBlur, true);
         };
 
-        if (startEvent.pointerId) {
+        const onWindowPointerEnd = (endEvent) => {
+            if (Number.isFinite(endEvent?.pointerId) && endEvent.pointerId !== pointerId) return;
+            onEnd(endEvent);
+        };
+
+        const onWindowBlur = () => {
+            onEnd(null);
+        };
+
+        const onLostPointerCapture = (lostEvent) => {
+            if (Number.isFinite(lostEvent?.pointerId) && lostEvent.pointerId !== pointerId) return;
+            onEnd(lostEvent);
+        };
+
+        if (Number.isFinite(pointerId)) {
             try {
-                el.workspace.setPointerCapture(startEvent.pointerId);
+                el.workspace.setPointerCapture(pointerId);
             } catch (err) {
                 // no-op
             }
@@ -5566,6 +5996,10 @@ function initEdgeResizing() {
         el.workspace.addEventListener("pointermove", onMove);
         el.workspace.addEventListener("pointerup", onEnd);
         el.workspace.addEventListener("pointercancel", onEnd);
+        el.workspace.addEventListener("lostpointercapture", onLostPointerCapture);
+        window.addEventListener("pointerup", onWindowPointerEnd, true);
+        window.addEventListener("pointercancel", onWindowPointerEnd, true);
+        window.addEventListener("blur", onWindowBlur, true);
     };
 
     el.workspace.addEventListener("pointerdown", (event) => {
@@ -5582,7 +6016,7 @@ function initEdgeResizing() {
         const panel = getPanelNameFromElement(panelEl);
         if (!panel) return;
         const rect = panelEl.getBoundingClientRect();
-        const dir = getEdgeDir(rect, event.clientX);
+        const dir = getEdgeDir(panel, rect, event.clientX);
         if (!dir) return;
         event.preventDefault();
         startResize(panel, dir, event);
@@ -5614,7 +6048,13 @@ function initEdgeResizing() {
         }
 
         const rect = panelEl.getBoundingClientRect();
-        const dir = getEdgeDir(rect, event.clientX);
+        const panel = getPanelNameFromElement(panelEl);
+        if (!panel) {
+            document.body?.removeAttribute("data-resize-preview");
+            hideColGuide();
+            return;
+        }
+        const dir = getEdgeDir(panel, rect, event.clientX);
         if (dir) {
             document.body?.setAttribute("data-resize-preview", "col");
             const edgeX = dir === "left" ? rect.left : rect.right;
@@ -5807,6 +6247,7 @@ function setPanelRadius(value) {
 function applyLayoutPreset(name, { animatePanels = true } = {}) {
     const preset = LAYOUT_PRESETS[name];
     if (!preset) return;
+    activeLayoutPresetName = name;
     layoutState = sanitizeLayoutState({ ...layoutState, ...preset });
     applyLayout({ animatePanels });
     persistLayout();
@@ -5814,6 +6255,13 @@ function applyLayoutPreset(name, { animatePanels = true } = {}) {
     if (name === "studio") {
         requestAnimationFrame(() => syncDefaultEditorSandboxWidth({ persist: true }));
     }
+}
+
+function applyActiveLayoutPreset({ animatePanels = true } = {}) {
+    const name = Object.prototype.hasOwnProperty.call(LAYOUT_PRESETS, activeLayoutPresetName)
+        ? activeLayoutPresetName
+        : "studio";
+    applyLayoutPreset(name, { animatePanels });
 }
 
 /**
@@ -6194,159 +6642,6 @@ function makeFileId() {
 
 function makeTrashGroupId() {
     return `trash-group-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
-}
-
-function splitLeafExtension(leaf = "") {
-    const value = String(leaf ?? "").trim();
-    const dot = value.lastIndexOf(".");
-    if (dot <= 0 || dot === value.length - 1) {
-        return { stem: value, extension: "" };
-    }
-    return {
-        stem: value.slice(0, dot),
-        extension: value.slice(dot),
-    };
-}
-
-function collapseDuplicateTerminalExtension(filePath = "") {
-    const segments = splitPathSegments(filePath);
-    if (!segments.length) return String(filePath || "");
-    let leaf = segments.pop() || "";
-    const parsed = splitLeafExtension(leaf);
-    const extension = parsed.extension;
-    if (!extension) {
-        segments.push(leaf);
-        return buildPathFromSegments(segments);
-    }
-    const lowerExt = extension.toLowerCase();
-    const repeated = `${lowerExt}${lowerExt}`;
-    let lowerLeaf = leaf.toLowerCase();
-    while (lowerLeaf.endsWith(repeated)) {
-        leaf = leaf.slice(0, -extension.length);
-        lowerLeaf = leaf.toLowerCase();
-    }
-    segments.push(leaf);
-    return buildPathFromSegments(segments);
-}
-
-function getFallbackFileExtension(fallback = FILE_DEFAULT_NAME) {
-    const fallbackName = String(fallback ?? FILE_DEFAULT_NAME).trim() || FILE_DEFAULT_NAME;
-    const fallbackLeaf = getFileBaseName(fallbackName) || FILE_DEFAULT_NAME;
-    const parsed = splitLeafExtension(fallbackLeaf);
-    return parsed.extension || ".js";
-}
-
-function normalizeFileName(name, fallback = FILE_DEFAULT_NAME) {
-    const normalizedFallback = String(fallback ?? FILE_DEFAULT_NAME).trim() || FILE_DEFAULT_NAME;
-    const fallbackExt = getFallbackFileExtension(normalizedFallback);
-    const raw = String(name ?? "").trim();
-    const source = raw || normalizedFallback;
-    const segments = splitPathSegments(source);
-    if (!segments.length) {
-        const fallbackSegments = splitPathSegments(normalizedFallback);
-        if (!fallbackSegments.length) {
-            return `main${fallbackExt}`;
-        }
-        const fallbackLeaf = fallbackSegments.pop() || `main${fallbackExt}`;
-        const parsedFallback = splitLeafExtension(fallbackLeaf);
-        fallbackSegments.push(parsedFallback.extension ? fallbackLeaf : `${fallbackLeaf}${fallbackExt}`);
-        return buildPathFromSegments(fallbackSegments);
-    }
-    let leaf = segments.pop() || FILE_DEFAULT_NAME;
-    const parsedLeaf = splitLeafExtension(leaf);
-    if (!parsedLeaf.extension) {
-        leaf = `${leaf}${fallbackExt}`;
-    }
-    segments.push(leaf);
-    return collapseDuplicateTerminalExtension(buildPathFromSegments(segments));
-}
-
-function normalizeLooseFileName(name, fallback = FILE_DEFAULT_NAME) {
-    const fallbackValue = String(fallback ?? FILE_DEFAULT_NAME).trim() || FILE_DEFAULT_NAME;
-    const raw = String(name ?? "").trim();
-    const source = raw || fallbackValue;
-    const segments = splitPathSegments(source);
-    if (!segments.length) {
-        const fallbackSegments = splitPathSegments(fallbackValue);
-        if (!fallbackSegments.length) return "untitled";
-        return collapseDuplicateTerminalExtension(buildPathFromSegments(fallbackSegments));
-    }
-    return collapseDuplicateTerminalExtension(buildPathFromSegments(segments));
-}
-
-function normalizePathSlashes(value = "") {
-    return String(value ?? "")
-        .replace(/\\/g, "/")
-        .replace(/\/{2,}/g, "/");
-}
-
-function splitPathSegments(value = "") {
-    return normalizePathSlashes(value)
-        .split("/")
-        .map((segment) => segment.trim())
-        .filter(Boolean);
-}
-
-function buildPathFromSegments(segments = []) {
-    return (Array.isArray(segments) ? segments : [])
-        .map((segment) => String(segment || "").trim())
-        .filter(Boolean)
-        .join("/");
-}
-
-function getFileBaseName(fileName) {
-    const segments = splitPathSegments(fileName);
-    return segments.length ? segments[segments.length - 1] : normalizeFileName(fileName, FILE_DEFAULT_NAME);
-}
-
-function getFileDirectory(fileName) {
-    const segments = splitPathSegments(fileName);
-    if (segments.length <= 1) return "";
-    segments.pop();
-    return buildPathFromSegments(segments);
-}
-
-function getSpecialFileIconPath(fileName = "") {
-    const leaf = getFileBaseName(fileName).toLowerCase();
-    if (!leaf) return null;
-    if (leaf === "dockerfile" || leaf.startsWith("dockerfile.")) return FILE_ICON_PATHS.docker;
-    if (leaf === ".gitignore" || leaf === ".gitattributes" || leaf === ".gitmodules") return FILE_ICON_PATHS.git;
-    if (leaf === "package.json" || leaf === "package-lock.json" || leaf === "npm-shrinkwrap.json") return FILE_ICON_PATHS.node;
-    if (leaf === "yarn.lock" || leaf === "pnpm-lock.yaml") return FILE_ICON_PATHS.node;
-    if (leaf.endsWith(".env") || leaf.startsWith(".env.")) return FILE_ICON_PATHS.node;
-    return null;
-}
-
-function getFileIconPath(fileName = "") {
-    const special = getSpecialFileIconPath(fileName);
-    if (special) return special;
-    const leaf = getFileBaseName(fileName);
-    const extension = splitLeafExtension(leaf).extension.toLowerCase().replace(/^\./, "");
-    if (!extension) return FILE_ICON_PATHS.defaultFile;
-    if (IMAGE_FILE_EXTENSIONS.has(extension)) return FILE_ICON_PATHS.image;
-    return FILE_EXTENSION_ICON_MAP[extension] || FILE_ICON_PATHS.defaultFile;
-}
-
-function getFolderIconPath(expanded = false) {
-    return expanded ? FILE_ICON_PATHS.folderOpen : FILE_ICON_PATHS.folderClosed;
-}
-
-function getFolderBaseName(folderPath = "") {
-    const segments = splitPathSegments(folderPath);
-    return segments.length ? segments[segments.length - 1] : "";
-}
-
-function getFolderParentPath(folderPath = "") {
-    const segments = splitPathSegments(folderPath);
-    if (segments.length <= 1) return "";
-    segments.pop();
-    return buildPathFromSegments(segments);
-}
-
-function normalizeFolderPath(value, { allowEmpty = false } = {}) {
-    const parts = splitPathSegments(value);
-    if (!parts.length) return allowEmpty ? "" : "";
-    return buildPathFromSegments(parts);
 }
 
 function validatePathSegments(segments = [], label = "Name") {
@@ -13621,6 +13916,7 @@ function wireDebugger() {
 function getCommandPaletteEntries() {
     const active = getActiveFile();
     const selectedCount = getSelectedWorkspaceEntries().selectedEntryCount;
+    const selectedFilesCount = getSelectedFiles().length;
     const dirtyCount = getDirtyFiles().length;
     const coreEntries = [
         {
@@ -13688,6 +13984,38 @@ function getCommandPaletteEntries() {
             run: async () => formatCurrentEditor({ announce: true }),
         },
         {
+            id: "cmd-run",
+            label: "Run: Execute in Sandbox",
+            keywords: "run execute sandbox preview",
+            shortcut: "Ctrl/Cmd+Enter",
+            enabled: true,
+            run: () => run(),
+        },
+        {
+            id: "cmd-clear-editor",
+            label: "Editor: Clear Active File",
+            keywords: "editor clear reset contents",
+            shortcut: "",
+            enabled: true,
+            run: () => clearEditor(),
+        },
+        {
+            id: "cmd-console-clear",
+            label: "Console: Clear Output",
+            keywords: "console clear logs",
+            shortcut: "",
+            enabled: true,
+            run: () => clearLog(),
+        },
+        {
+            id: "cmd-console-copy",
+            label: "Console: Copy Output",
+            keywords: "console copy logs clipboard",
+            shortcut: "",
+            enabled: true,
+            run: () => copyLog(),
+        },
+        {
             id: "cmd-task-run-all",
             label: "Task: Run All",
             keywords: "task runner run all save format lint run",
@@ -13734,6 +14062,38 @@ function getCommandPaletteEntries() {
             shortcut: "",
             enabled: true,
             run: () => focusDevTerminalInput({ openLog: true }),
+        },
+        {
+            id: "cmd-console-view-logs",
+            label: "Console: Show Logs",
+            keywords: "console logs view",
+            shortcut: "",
+            enabled: true,
+            run: () => ensureLogOpen("Console opened.", { view: "console" }),
+        },
+        {
+            id: "cmd-console-focus-input",
+            label: "Console: Focus Input",
+            keywords: "console input eval expression javascript",
+            shortcut: "",
+            enabled: true,
+            run: () => focusConsoleInput({ openLog: true }),
+        },
+        {
+            id: "cmd-console-view-terminal",
+            label: "Console: Show Terminal",
+            keywords: "console terminal view",
+            shortcut: "",
+            enabled: true,
+            run: () => focusDevTerminalInput({ openLog: true }),
+        },
+        {
+            id: "cmd-open-command-palette",
+            label: "Search: Open Command Palette",
+            keywords: "search command palette",
+            shortcut: "Ctrl/Cmd+Shift+P",
+            enabled: true,
+            run: () => openCommandPalette(),
         },
         {
             id: "cmd-find",
@@ -13853,6 +14213,145 @@ function getCommandPaletteEntries() {
             run: () => openEditorSettings(),
         },
         {
+            id: "cmd-tools-tab-problems",
+            label: "Tools: Focus Problems",
+            keywords: "tools problems diagnostics",
+            shortcut: "",
+            enabled: true,
+            run: () => ensureToolsOpen("Tools opened for problems.", { tab: "problems", problems: true }),
+        },
+        {
+            id: "cmd-tools-tab-task-runner",
+            label: "Tools: Focus Task Runner",
+            keywords: "tools task runner",
+            shortcut: "",
+            enabled: true,
+            run: () => ensureToolsOpen("Tools opened for tasks.", { tab: "task-runner" }),
+        },
+        {
+            id: "cmd-tools-tab-inspect",
+            label: "Tools: Focus Inspect",
+            keywords: "tools inspect",
+            shortcut: "",
+            enabled: true,
+            run: () => ensureToolsOpen("Tools opened for inspect.", { tab: "inspect" }),
+        },
+        {
+            id: "cmd-tools-tab-debug",
+            label: "Tools: Focus Debug",
+            keywords: "tools debug breakpoints watch",
+            shortcut: "",
+            enabled: true,
+            run: () => ensureToolsOpen("Tools opened for debug.", { tab: "debug" }),
+        },
+        {
+            id: "cmd-tools-toggle-problems-dock",
+            label: "Tools: Toggle Problems Dock",
+            keywords: "tools problems dock toggle",
+            shortcut: "",
+            enabled: true,
+            run: () => setToolsProblemsOpen(!toolsProblemsOpen),
+        },
+        {
+            id: "cmd-problems-refresh",
+            label: "Problems: Refresh",
+            keywords: "problems diagnostics lint refresh",
+            shortcut: "",
+            enabled: true,
+            run: async () => {
+                ensureToolsOpen("Tools opened for problems.", { tab: "problems", problems: true });
+                await refreshWorkspaceProblems({ announce: true });
+            },
+        },
+        {
+            id: "cmd-problems-clear",
+            label: "Problems: Clear",
+            keywords: "problems diagnostics clear",
+            shortcut: "",
+            enabled: true,
+            run: () => {
+                ensureToolsOpen("Tools opened for problems.", { tab: "problems", problems: true });
+                clearProblemsPanel();
+            },
+        },
+        {
+            id: "cmd-task-clear-output",
+            label: "Task Runner: Clear Output",
+            keywords: "task runner clear output",
+            shortcut: "",
+            enabled: true,
+            run: () => clearTaskRunnerOutput(),
+        },
+        {
+            id: "cmd-diagnostics-clear",
+            label: "Diagnostics: Clear",
+            keywords: "diagnostics clear",
+            shortcut: "",
+            enabled: true,
+            run: () => {
+                ensureToolsOpen("Tools opened for diagnostics.", { tab: "diagnostics" });
+                diagnostics.clear();
+            },
+        },
+        {
+            id: "cmd-diagnostics-toggle-verbose",
+            label: "Diagnostics: Toggle Verbose",
+            keywords: "diagnostics verbose toggle",
+            shortcut: "",
+            enabled: true,
+            run: () => {
+                ensureToolsOpen("Tools opened for diagnostics.", { tab: "diagnostics" });
+                setDiagnosticsVerbose(!diagnosticsVerbose);
+            },
+        },
+        {
+            id: "cmd-inspect-toggle",
+            label: "Inspect: Toggle",
+            keywords: "inspect toggle selector",
+            shortcut: "",
+            enabled: true,
+            run: () => {
+                ensureToolsOpen("Tools opened for inspect.", { tab: "inspect" });
+                ensureSandboxOpen("Sandbox opened for inspect.");
+                toggleInspect();
+            },
+        },
+        {
+            id: "cmd-inspect-copy-selector",
+            label: "Inspect: Copy Selector",
+            keywords: "inspect copy selector",
+            shortcut: "",
+            enabled: true,
+            run: async () => {
+                ensureToolsOpen("Tools opened for inspect.", { tab: "inspect" });
+                await copyInspectSelectorToClipboard();
+            },
+        },
+        {
+            id: "cmd-runner-toggle-fullscreen",
+            label: "Sandbox: Toggle Fullscreen",
+            keywords: "sandbox runner fullscreen",
+            shortcut: "",
+            enabled: true,
+            run: () => toggleRunnerFullscreen(),
+        },
+        {
+            id: "cmd-runner-exit-fullscreen",
+            label: "Sandbox: Exit Fullscreen",
+            keywords: "sandbox runner exit fullscreen",
+            shortcut: "",
+            enabled: runnerFullscreen,
+            run: () => exitRunnerFullscreen(),
+        },
+        {
+            id: "cmd-sandbox-popout",
+            label: "Sandbox: Toggle Popout",
+            keywords: "sandbox popout window",
+            shortcut: "",
+            enabled: true,
+            run: () => toggleSandboxPopout(),
+        },
+        {
             id: "cmd-trash-selected",
             label: "Selection: Trash Selected",
             keywords: "delete trash selected",
@@ -13877,6 +14376,62 @@ function getCommandPaletteEntries() {
             run: () => selectAllVisibleFiles(),
         },
         {
+            id: "cmd-clear-selection",
+            label: "Selection: Clear Selection",
+            keywords: "selection clear",
+            shortcut: "Esc",
+            enabled: selectedCount > 0,
+            run: () => clearFileSelection({ keepActive: true }),
+        },
+        {
+            id: "cmd-duplicate-selected",
+            label: "Selection: Duplicate Selected",
+            keywords: "duplicate selected files",
+            shortcut: "",
+            enabled: selectedFilesCount > 0,
+            run: () => duplicateSelectedFiles(),
+        },
+        {
+            id: "cmd-pin-selected",
+            label: "Selection: Pin Selected",
+            keywords: "pin selected files",
+            shortcut: "",
+            enabled: selectedFilesCount > 0,
+            run: () => bulkSetPinned(true),
+        },
+        {
+            id: "cmd-unpin-selected",
+            label: "Selection: Unpin Selected",
+            keywords: "unpin selected files",
+            shortcut: "",
+            enabled: selectedFilesCount > 0,
+            run: () => bulkSetPinned(false),
+        },
+        {
+            id: "cmd-lock-selected",
+            label: "Selection: Lock Selected",
+            keywords: "lock selected files",
+            shortcut: "",
+            enabled: selectedFilesCount > 0,
+            run: () => bulkSetLocked(true),
+        },
+        {
+            id: "cmd-unlock-selected",
+            label: "Selection: Unlock Selected",
+            keywords: "unlock selected files",
+            shortcut: "",
+            enabled: selectedFilesCount > 0,
+            run: () => bulkSetLocked(false),
+        },
+        {
+            id: "cmd-delete-all-files",
+            label: "File: Delete All",
+            keywords: "delete all files",
+            shortcut: "",
+            enabled: files.length > 1,
+            run: () => deleteAllFiles(),
+        },
+        {
             id: "cmd-undo-action",
             label: "History: Undo File Action",
             keywords: "undo history",
@@ -13899,6 +14454,30 @@ function getCommandPaletteEntries() {
             shortcut: "",
             enabled: hasPendingDeleteUndo(),
             run: () => undoLastDelete(),
+        },
+        {
+            id: "cmd-restore-last",
+            label: "Trash: Restore Last",
+            keywords: "trash restore last",
+            shortcut: "",
+            enabled: trashFiles.length > 0,
+            run: () => restoreLastDeletedFile(),
+        },
+        {
+            id: "cmd-restore-all",
+            label: "Trash: Restore All",
+            keywords: "trash restore all",
+            shortcut: "",
+            enabled: trashFiles.length > 0,
+            run: () => restoreAllDeletedFiles(),
+        },
+        {
+            id: "cmd-empty-trash",
+            label: "Trash: Empty",
+            keywords: "trash empty delete permanently",
+            shortcut: "",
+            enabled: trashFiles.length > 0,
+            run: () => emptyTrash(),
         },
         {
             id: "cmd-export-workspace",
@@ -13949,12 +14528,104 @@ function getCommandPaletteEntries() {
             run: () => openShortcutHelp(),
         },
         {
+            id: "cmd-layout-reset",
+            label: "Layout: Reset to Default",
+            keywords: "layout reset default",
+            shortcut: "",
+            enabled: true,
+            run: () => {
+                window.fazide?.resetLayout?.();
+                syncLayoutControls();
+            },
+        },
+        {
+            id: "cmd-files-open-menu",
+            label: "Files: Open Actions Menu",
+            keywords: "files actions menu",
+            shortcut: "",
+            enabled: Boolean(el.filesMenuButton),
+            run: () => {
+                if (el.filesMenuButton) openFilesMenu(el.filesMenuButton);
+            },
+        },
+        {
+            id: "cmd-games-load-selected",
+            label: "Games: Load Selected",
+            keywords: "games load selected",
+            shortcut: "",
+            enabled: Boolean(selectedGameId),
+            run: async () => {
+                if (!selectedGameId) return;
+                await loadGameById(selectedGameId, { runAfter: false });
+            },
+        },
+        {
+            id: "cmd-apps-load-selected",
+            label: "Apps: Load Selected",
+            keywords: "applications apps load selected",
+            shortcut: "",
+            enabled: Boolean(selectedApplicationId),
+            run: async () => {
+                if (!selectedApplicationId) return;
+                await loadApplicationById(selectedApplicationId, { runAfter: false });
+            },
+        },
+        {
+            id: "cmd-help-list-commands",
+            label: "Help: List All Commands",
+            keywords: "help commands inventory audit",
+            shortcut: "",
+            enabled: true,
+            run: () => {
+                const entries = getCommandPaletteEntries();
+                ensureLogOpen("Console opened for command inventory.");
+                logger.append("system", [`Commands available: ${entries.length}`]);
+                entries
+                    .map((entry) => `${entry.id} — ${entry.label}`)
+                    .slice(0, 300)
+                    .forEach((line) => logger.append("system", [line]));
+                status.set(`Listed ${entries.length} commands`);
+            },
+        },
+        {
             id: "cmd-toggle-filters",
             label: "View: Toggle Filters",
             keywords: "view filters",
             shortcut: "",
             enabled: true,
             run: () => setFilesFiltersOpen(!layoutState.filesFiltersOpen),
+        },
+        {
+            id: "cmd-toggle-games",
+            label: "View: Toggle Games",
+            keywords: "view games templates",
+            shortcut: "",
+            enabled: true,
+            run: () => setFilesGamesOpen(!layoutState.filesGamesOpen),
+        },
+        {
+            id: "cmd-toggle-apps",
+            label: "View: Toggle Apps",
+            keywords: "view applications apps templates",
+            shortcut: "",
+            enabled: true,
+            run: () => setFilesAppsOpen(!layoutState.filesAppsOpen),
+        },
+        {
+            id: "cmd-toggle-open-editors",
+            label: "View: Toggle Open Editors",
+            keywords: "view open editors",
+            shortcut: "",
+            enabled: true,
+            run: () => setFilesSectionOpen("open-editors", !layoutState.filesOpenEditorsOpen),
+        },
+        {
+            id: "cmd-toggle-files-list",
+            label: "View: Toggle Files List",
+            keywords: "view files list",
+            shortcut: "",
+            enabled: true,
+            run: () => setFilesSectionOpen("files", !layoutState.filesListOpen),
         },
         {
             id: "cmd-toggle-trash",
@@ -13964,6 +14635,70 @@ function getCommandPaletteEntries() {
             enabled: true,
             run: () => setFilesSectionOpen("trash", !layoutState.filesTrashOpen),
         },
+        {
+            id: "cmd-toggle-log-panel",
+            label: "View: Toggle Console Panel",
+            keywords: "toggle panel console log",
+            shortcut: "",
+            enabled: true,
+            run: () => setPanelOpen("log", !layoutState.logOpen),
+        },
+        {
+            id: "cmd-toggle-editor-panel",
+            label: "View: Toggle Editor Panel",
+            keywords: "toggle panel editor",
+            shortcut: "",
+            enabled: true,
+            run: () => setPanelOpen("editor", !layoutState.editorOpen),
+        },
+        {
+            id: "cmd-toggle-files-panel",
+            label: "View: Toggle Files Panel",
+            keywords: "toggle panel files sidebar",
+            shortcut: "",
+            enabled: true,
+            run: () => setPanelOpen("files", !layoutState.filesOpen),
+        },
+        {
+            id: "cmd-toggle-sandbox-panel",
+            label: "View: Toggle Sandbox Panel",
+            keywords: "toggle panel sandbox preview",
+            shortcut: "",
+            enabled: true,
+            run: () => setPanelOpen("sandbox", !layoutState.sandboxOpen),
+        },
+        {
+            id: "cmd-toggle-tools-panel",
+            label: "View: Toggle Tools Panel",
+            keywords: "toggle panel tools diagnostics",
+            shortcut: "",
+            enabled: true,
+            run: () => setPanelOpen("tools", !layoutState.toolsOpen),
+        },
+        {
+            id: "cmd-toggle-layout-panel",
+            label: "View: Toggle Layout Panel",
+            keywords: "toggle layout panel",
+            shortcut: "",
+            enabled: true,
+            run: () => setLayoutPanelOpen(el.layoutPanel?.getAttribute("data-open") !== "true"),
+        },
+        {
+            id: "cmd-toggle-header",
+            label: "View: Toggle Header",
+            keywords: "toggle top header",
+            shortcut: "",
+            enabled: true,
+            run: () => setHeaderOpen(!layoutState.headerOpen),
+        },
+        ...THEMES.map((theme) => ({
+            id: `cmd-theme-${theme}`,
+            label: `Theme: Switch to ${theme.charAt(0).toUpperCase()}${theme.slice(1)}`,
+            keywords: `theme color style ${theme}`,
+            shortcut: "",
+            enabled: currentTheme !== theme,
+            run: () => applyTheme(theme),
+        })),
     ];
     return [...coreEntries, ...getRegisteredCommandEntries()];
 }
@@ -13983,12 +14718,72 @@ function getCommandPaletteMatches(query) {
     return scored.slice(0, 80);
 }
 
-function renderCommandPaletteResults() {
-    if (!el.commandPaletteList) return;
+function getCommandPaletteCategory(entry = {}) {
+    const label = String(entry?.label || "").trim();
+    if (!label) return "General";
+    const idx = label.indexOf(":");
+    if (idx <= 0) return "General";
+    const category = label.slice(0, idx).trim();
+    return category || "General";
+}
+
+function groupCommandPaletteResults(entries = []) {
+    const source = Array.isArray(entries) ? entries : [];
+    if (!source.length) return [];
+    const pinnedCategoryOrder = [
+        "File",
+        "Folders",
+        "Selection",
+        "Trash",
+        "Editor",
+        "Run",
+        "Debug",
+        "Console",
+        "Task",
+        "Project",
+        "Search",
+        "View",
+        "Layout",
+        "Tools",
+        "Diagnostics",
+        "Problems",
+        "Inspect",
+        "Sandbox",
+        "Games",
+        "Apps",
+        "Theme",
+        "Workspace",
+        "History",
+        "Help",
+        "General",
+    ];
+    const categoryOrder = [];
+    const byCategory = new Map();
+    source.forEach((entry) => {
+        const category = getCommandPaletteCategory(entry);
+        if (!byCategory.has(category)) {
+            byCategory.set(category, []);
+        }
+        byCategory.get(category).push(entry);
+    });
+    pinnedCategoryOrder.forEach((category) => {
+        if (byCategory.has(category)) {
+            categoryOrder.push(category);
+        }
+    });
+    [...byCategory.keys()]
+        .filter((category) => !categoryOrder.includes(category))
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((category) => categoryOrder.push(category));
+    return categoryOrder.flatMap((category) => byCategory.get(category) || []);
+}
+
+function renderCommandPaletteResultsList(listNode, hintNode) {
+    if (!listNode) return;
     if (!commandPaletteResults.length) {
-        el.commandPaletteList.innerHTML = `<li class="quick-open-empty">No commands found.</li>`;
-        if (el.commandPaletteHint) {
-            el.commandPaletteHint.textContent = "No match. Try another query.";
+        listNode.innerHTML = `<li class="quick-open-empty">No commands found.</li>`;
+        if (hintNode) {
+            hintNode.textContent = "No match. Try another query.";
         }
         return;
     }
@@ -13998,7 +14793,13 @@ function renderCommandPaletteResults() {
             const active = index === commandPaletteIndex;
             const disabled = !entry.enabled;
             const shortcut = entry.shortcut ? escapeHTML(entry.shortcut) : "Action";
+            const category = getCommandPaletteCategory(entry);
+            const previous = index > 0 ? getCommandPaletteCategory(commandPaletteResults[index - 1]) : null;
+            const categoryRow = category !== previous
+                ? `<li class="quick-open-group" role="presentation" aria-hidden="true">${escapeHTML(category)}</li>`
+                : "";
             return `
+                ${categoryRow}
                 <li class="quick-open-item-wrap" role="presentation">
                     <button type="button" class="quick-open-item command-palette-item" role="option" data-command-id="${entry.id}" data-active="${active}" data-disabled="${disabled}" aria-selected="${active}" ${disabled ? "disabled" : ""}>
                         <span class="quick-open-name">${escapeHTML(entry.label)}</span>
@@ -14008,26 +14809,37 @@ function renderCommandPaletteResults() {
             `;
         })
         .join("");
-    el.commandPaletteList.innerHTML = rows;
-    const activeOption = el.commandPaletteList.querySelector('[data-command-id][data-active="true"]');
+    listNode.innerHTML = rows;
+    const activeOption = listNode.querySelector('[data-command-id][data-active="true"]');
     if (activeOption && typeof activeOption.scrollIntoView === "function") {
         activeOption.scrollIntoView({ block: "nearest" });
     }
-    if (el.commandPaletteHint) {
-        el.commandPaletteHint.textContent = `${commandPaletteResults.length} command${commandPaletteResults.length === 1 ? "" : "s"} • Enter to run`;
+    if (hintNode) {
+        hintNode.textContent = `${commandPaletteResults.length} command${commandPaletteResults.length === 1 ? "" : "s"} • Enter to run`;
     }
+}
+
+function renderCommandPaletteResults() {
+    renderCommandPaletteResultsList(el.commandPaletteList, el.commandPaletteHint);
+    renderCommandPaletteResultsList(el.topCommandPaletteList, el.topCommandPaletteHint);
 }
 
 function updateCommandPaletteResults(query = commandPaletteQuery) {
     commandPaletteQuery = String(query || "");
-    commandPaletteResults = getCommandPaletteMatches(commandPaletteQuery);
+    if (el.commandPaletteInput && el.commandPaletteInput.value !== commandPaletteQuery) {
+        el.commandPaletteInput.value = commandPaletteQuery;
+    }
+    if (el.topCommandPaletteInput && el.topCommandPaletteInput.value !== commandPaletteQuery) {
+        el.topCommandPaletteInput.value = commandPaletteQuery;
+    }
+    commandPaletteResults = groupCommandPaletteResults(getCommandPaletteMatches(commandPaletteQuery));
     if (commandPaletteResults.length && commandPaletteIndex >= commandPaletteResults.length) {
         commandPaletteIndex = 0;
     }
     renderCommandPaletteResults();
 }
 
-function setCommandPaletteOpen(open) {
+function setCommandPaletteOpen(open, { query = "", focusInput = true } = {}) {
     commandPaletteOpen = Boolean(open);
     if (!el.commandPalette || !el.commandPaletteBackdrop) return;
     el.commandPalette.setAttribute("data-open", commandPaletteOpen ? "true" : "false");
@@ -14042,18 +14854,57 @@ function setCommandPaletteOpen(open) {
         if (el.commandPaletteList) el.commandPaletteList.innerHTML = "";
         return;
     }
-    updateCommandPaletteResults("");
+    const nextQuery = String(query || "");
+    commandPaletteIndex = 0;
+    updateCommandPaletteResults(nextQuery);
     requestAnimationFrame(() => {
-        if (el.commandPaletteInput) {
+        if (focusInput && el.commandPaletteInput) {
             el.commandPaletteInput.focus();
             el.commandPaletteInput.select();
         }
     });
 }
 
-function openCommandPalette() {
+function setTopCommandPaletteOpen(open) {
+    topCommandPaletteOpen = Boolean(open);
+    if (!el.topCommandPaletteMenu) return;
+    el.topCommandPaletteMenu.setAttribute("data-open", topCommandPaletteOpen ? "true" : "false");
+    el.topCommandPaletteMenu.setAttribute("aria-hidden", topCommandPaletteOpen ? "false" : "true");
+    if (topCommandPaletteOpen) {
+        positionTopCommandPaletteMenu();
+    }
+    if (!topCommandPaletteOpen) {
+        if (el.topCommandPaletteList) el.topCommandPaletteList.innerHTML = "";
+        if (el.topCommandPaletteHint) el.topCommandPaletteHint.textContent = "Enter to run • Esc to close";
+    }
+}
+
+function positionTopCommandPaletteMenu() {
+    if (!el.topCommandPaletteMenu || !el.topCommandPaletteInput || !topCommandPaletteOpen) return;
+    const rect = el.topCommandPaletteInput.getBoundingClientRect();
+    const viewportPad = 8;
+    const gap = 6;
+    const maxWidth = Math.min(680, Math.max(240, window.innerWidth - (viewportPad * 2)));
+    const width = Math.min(maxWidth, Math.max(240, rect.width));
+    const minLeft = viewportPad;
+    const maxLeft = Math.max(minLeft, window.innerWidth - width - viewportPad);
+    const left = clamp(rect.left, minLeft, maxLeft);
+    const top = Math.min(window.innerHeight - viewportPad, rect.bottom + gap);
+    el.topCommandPaletteMenu.style.left = `${Math.round(left)}px`;
+    el.topCommandPaletteMenu.style.top = `${Math.round(top)}px`;
+    el.topCommandPaletteMenu.style.width = `${Math.round(width)}px`;
+}
+
+function openCommandPalette({ query = "", focusInput = true } = {}) {
+    const nextQuery = String(query || "");
+    setTopCommandPaletteOpen(false);
     if (commandPaletteOpen) {
-        if (el.commandPaletteInput) el.commandPaletteInput.focus();
+        commandPaletteIndex = 0;
+        updateCommandPaletteResults(nextQuery);
+        if (focusInput && el.commandPaletteInput) {
+            el.commandPaletteInput.focus();
+            el.commandPaletteInput.select();
+        }
         return;
     }
     closeQuickOpen({ focusEditor: false });
@@ -14064,7 +14915,7 @@ function openCommandPalette() {
     closeProjectSearch({ focusEditor: false });
     closeEditorHistory({ focusEditor: false });
     closeEditorSettings({ focusEditor: false });
-    setCommandPaletteOpen(true);
+    setCommandPaletteOpen(true, { query: nextQuery, focusInput });
 }
 
 function closeCommandPalette({ focusEditor = true } = {}) {
@@ -14082,8 +14933,14 @@ function activateCommandPalette(index = commandPaletteIndex) {
 }
 
 function onCommandPaletteKeyDown(event) {
+    const fromTopInput = event.target === el.topCommandPaletteInput;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
+        if (fromTopInput && !topCommandPaletteOpen) {
+            setTopCommandPaletteOpen(true);
+            commandPaletteIndex = 0;
+            updateCommandPaletteResults(el.topCommandPaletteInput?.value || "");
+        }
         if (!commandPaletteResults.length) return;
         const step = event.key === "ArrowDown" ? 1 : -1;
         commandPaletteIndex = clamp(commandPaletteIndex + step, 0, commandPaletteResults.length - 1);
@@ -14092,11 +14949,22 @@ function onCommandPaletteKeyDown(event) {
     }
     if (event.key === "Enter") {
         event.preventDefault();
-        activateCommandPalette();
+        const activated = activateCommandPalette();
+        if (fromTopInput) {
+            setTopCommandPaletteOpen(false);
+            if (activated) {
+                el.topCommandPaletteInput?.blur();
+            }
+        }
         return;
     }
     if (event.key === "Escape") {
         event.preventDefault();
+        if (fromTopInput) {
+            setTopCommandPaletteOpen(false);
+            el.topCommandPaletteInput?.blur();
+            return;
+        }
         closeCommandPalette({ focusEditor: true });
     }
 }
@@ -14108,6 +14976,20 @@ function wireCommandPalette() {
             updateCommandPaletteResults(event.target.value || "");
         });
         el.commandPaletteInput.addEventListener("keydown", onCommandPaletteKeyDown);
+    }
+    if (el.topCommandPaletteInput) {
+        el.topCommandPaletteInput.addEventListener("focus", () => {
+            commandPaletteIndex = 0;
+            setTopCommandPaletteOpen(true);
+            updateCommandPaletteResults(el.topCommandPaletteInput.value || "");
+        });
+        el.topCommandPaletteInput.addEventListener("input", (event) => {
+            const value = event.target?.value || "";
+            commandPaletteIndex = 0;
+            setTopCommandPaletteOpen(true);
+            updateCommandPaletteResults(value);
+        });
+        el.topCommandPaletteInput.addEventListener("keydown", onCommandPaletteKeyDown);
     }
     if (el.commandPaletteList) {
         el.commandPaletteList.addEventListener("click", (event) => {
@@ -14122,6 +15004,35 @@ function wireCommandPalette() {
     if (el.commandPaletteBackdrop) {
         el.commandPaletteBackdrop.addEventListener("click", () => closeCommandPalette({ focusEditor: false }));
     }
+    if (el.topCommandPaletteList) {
+        el.topCommandPaletteList.addEventListener("click", (event) => {
+            const row = event.target.closest("[data-command-id]");
+            if (!row) return;
+            const index = commandPaletteResults.findIndex((entry) => entry.id === row.dataset.commandId);
+            if (index === -1) return;
+            commandPaletteIndex = index;
+            const activated = activateCommandPalette(index);
+            setTopCommandPaletteOpen(false);
+            if (activated) {
+                el.topCommandPaletteInput?.blur();
+            }
+        });
+    }
+    document.addEventListener("pointerdown", (event) => {
+        if (!topCommandPaletteOpen) return;
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest("#topCommandPaletteInput") || target.closest("#topCommandPaletteMenu")) return;
+        setTopCommandPaletteOpen(false);
+    });
+    window.addEventListener("resize", () => {
+        if (!topCommandPaletteOpen) return;
+        positionTopCommandPaletteMenu();
+    });
+    document.addEventListener("scroll", () => {
+        if (!topCommandPaletteOpen) return;
+        positionTopCommandPaletteMenu();
+    }, true);
 }
 
 function wireShortcutHelp() {
@@ -15668,6 +16579,7 @@ function renderFileList() {
     const fileListMarkup = `${orderedSections}${trashSection}${emptySection}`;
     if (fileListMarkup !== lastRenderedFileListMarkup) {
         el.fileList.innerHTML = fileListMarkup;
+        bindFileListIconFallbacks(el.fileList);
         lastRenderedFileListMarkup = fileListMarkup;
     }
     mountStaticFilesSection("games", el.filesGames);
@@ -17735,6 +18647,12 @@ function exposeDebug() {
         openDevTerminal() {
             return focusDevTerminalInput({ openLog: true });
         },
+        focusConsoleInput() {
+            return focusConsoleInput({ openLog: true });
+        },
+        evalInConsole(expression = "") {
+            return requestConsoleInputEval(expression);
+        },
         runDevTerminal(command) {
             return executeDevTerminalCommand(command);
         },
@@ -17761,6 +18679,7 @@ function exposeDebug() {
         getState() {
             return {
                 layout: { ...layoutState },
+                activeLayoutPreset: activeLayoutPresetName,
                 inspectEnabled,
                 runCount,
                 editorType: editor.type,
@@ -17981,6 +18900,7 @@ async function boot() {
     wireToolsTabs();
     wireToolsProblemsDock();
     wireTaskRunner();
+    wireConsoleInput();
     wireDevTerminal();
     registerServiceWorker();
     checkStorageHealth();
@@ -19106,6 +20026,10 @@ function beginRunSession(sandboxMode) {
     if (debugMode) {
         logger.append("system", [`Debug mode on • ${debugBreakpoints.size} breakpoint(s)`]);
     }
+    lastRuntimeJumpTarget = null;
+    updateConsoleJumpLastErrorButton();
+    pendingConsoleEvalRequestId = 0;
+    setConsoleInputBusy(false);
 }
 
 function run() {
@@ -19142,15 +20066,16 @@ function onSandboxMessage(event) {
     // Only accept FAZ IDE sandbox message
     // Notes:
     // - Source tag prevents other postMessage traffic from being handled.
-    if (!data || data.source !== "fazide") return;
-    if (!isTrustedSandboxMessageEvent(event)) return;
+    if (!isSandboxMessageForCurrentRun(data, currentToken)) return;
+    if (!isTrustedSandboxMessageEvent(event, {
+        runnerWindow: getRunnerWindow(),
+        currentOrigin: window.location.origin,
+    })) return;
 
     // Token gate: ignore older runs/noise
     // Notes:
     // - If user runs again quickly, old iframe messages can still arrive.
     // - Token gating keeps the console panel "current run only".
-    if (!data.token || data.token !== currentToken) return;
-
     if (data.type === "bridge_ready") {
         const bridgeContext = normalizeRunContext(data?.runContext || data?.payload?.runContext);
         if (bridgeContext && bridgeContext.token === currentToken) {
@@ -19169,7 +20094,10 @@ function onSandboxMessage(event) {
     // Console forwarding
     if (data.type === "console") {
         // payload: { level, args }
-        const safeConsole = normalizeSandboxConsolePayload(data.payload);
+        const safeConsole = normalizeSandboxConsolePayload(data.payload, {
+            maxArgs: SANDBOX_CONSOLE_MAX_ARGS,
+            argMaxChars: SANDBOX_CONSOLE_ARG_MAX_CHARS,
+        });
         queueSandboxConsoleLog(safeConsole.level, safeConsole.args);
         return;
     }
@@ -19201,25 +20129,36 @@ function onSandboxMessage(event) {
         return;
     }
 
+    if (data.type === "console_eval_result") {
+        applyConsoleEvalResult(data.payload);
+        return;
+    }
+
     // Synchronous/runtime errors
     if (data.type === "runtime_error") {
         // payload: { message , filename, lineno, colno }
-        const e = data.payload;
-        const message = truncateText(String(e?.message || "Runtime error"), SANDBOX_RUNTIME_MESSAGE_MAX_CHARS);
-        const fileNameLabel = truncateText(String(e?.filename || "unknown"), 180, { suffix: "..." });
-        const lineNo = Number.isFinite(Number(e?.lineno)) ? Number(e.lineno) : 0;
-        const colNo = Number.isFinite(Number(e?.colno)) ? Number(e.colno) : 0;
-        const formatted = `${message} (${fileNameLabel}:${lineNo}:${colNo})`;
+        const normalized = normalizeRuntimeErrorPayload(data.payload, {
+            messageMaxChars: SANDBOX_RUNTIME_MESSAGE_MAX_CHARS,
+            filenameMaxChars: 180,
+        });
         ensureLogOpen("Console opened for runtime error.");
-        logger.append("error", [formatted]);
+        logger.append("error", [normalized.formatted]);
         const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
+        lastRuntimeJumpTarget = currentRunFileId
+            ? {
+                fileId: currentRunFileId,
+                line: normalized.lineNo > 0 ? normalized.lineNo - 1 : 0,
+                ch: normalized.colNo > 0 ? normalized.colNo - 1 : 0,
+            }
+            : null;
+        updateConsoleJumpLastErrorButton();
         pushRuntimeProblem({
-            message: formatted,
+            message: normalized.formatted,
             fileId: currentRunFileId,
             fileName,
-            line: lineNo > 0 ? lineNo - 1 : null,
-            ch: colNo > 0 ? colNo - 1 : null,
-            endCh: colNo > 0 ? colNo : null,
+            line: normalized.lineNo > 0 ? normalized.lineNo - 1 : null,
+            ch: normalized.colNo > 0 ? normalized.colNo - 1 : null,
+            endCh: normalized.colNo > 0 ? normalized.colNo : null,
             level: "error",
             kind: "runtime",
         });
@@ -19230,12 +20169,22 @@ function onSandboxMessage(event) {
 
     // Async errors (unhandled promise rejection)
     if (data.type === "promise_rejection") {
-        const reason = truncateText(String(data?.payload?.reason || "Unknown rejection"), SANDBOX_PROMISE_REASON_MAX_CHARS);
+        const normalized = normalizePromiseRejectionPayload(data.payload, {
+            reasonMaxChars: SANDBOX_PROMISE_REASON_MAX_CHARS,
+        });
         ensureLogOpen("Console opened for promise rejection.");
-        logger.append("error", [`Unhandled promise rejection: ${reason}`]);
+        logger.append("error", [normalized.formatted]);
         const fileName = getFileById(currentRunFileId)?.name || getActiveFile()?.name || "";
+        lastRuntimeJumpTarget = currentRunFileId
+            ? {
+                fileId: currentRunFileId,
+                line: 0,
+                ch: 0,
+            }
+            : null;
+        updateConsoleJumpLastErrorButton();
         pushRuntimeProblem({
-            message: `Unhandled promise rejection: ${reason}`,
+            message: normalized.formatted,
             fileId: currentRunFileId,
             fileName,
             level: "error",

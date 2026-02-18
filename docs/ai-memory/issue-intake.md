@@ -10,9 +10,13 @@
 
 ## Entry Template
 - Summary
+- Severity (low/medium/high)
 - Repro Steps
 - Expected
 - Actual
 - Suspected Area
+- Options Considered (quick fix vs root fix)
+- Assumptions (verified/partial/unverified)
 - Acceptance Test
+- Rollback Trigger
 - Notes

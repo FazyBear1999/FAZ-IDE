@@ -132,6 +132,45 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run desktop:pack:clean` removes old `dist_pack_check/run-*` folders (skips locked folders safely).
 - `npm run desktop:artifacts:clean` removes old `run-*` folders from desktop artifact dirs (`dist_pack_check`, `dist_release_test`) and skips locked folders safely.
 
+## Codex Safe Workflow (Issue → Change → Rollback)
+
+Use this flow to keep Codex sessions simple and reversible:
+
+- `npm run codex:scan`
+	- Fast snapshot of branch, changed files, and untracked files.
+	- Add `-- --json` for automation-friendly output.
+- `npm run codex:checkpoint -- "before-<task>"`
+	- Creates a rollback patch + metadata under `artifacts/codex/checkpoints/`.
+	- Add `-- --json` for machine-readable output.
+- `npm run codex:savepoint -- "before-<task>"`
+	- Shortcut alias for `codex:checkpoint` during rapid Codex loops.
+- Make the change with focused tests first.
+- Run quality gates:
+	- `npm run test:integrity`
+	- `npm run test:memory`
+- If rollback is needed:
+	- Dry-run: `npm run codex:rollback -- artifacts/codex/checkpoints/<file>.patch`
+	- Dry-run latest checkpoint: `npm run codex:rollback:latest`
+	- Apply rollback: `npm run codex:rollback -- artifacts/codex/checkpoints/<file>.patch --apply`
+	- Apply latest rollback: `npm run codex:rollback:latest:apply`
+
+Checkpoint utilities:
+
+- `npm run codex:checkpoint:list` lists all saved checkpoint patch files.
+- `npm run codex:checkpoint:list -- --limit=10` shows only the latest N checkpoints.
+- `npm run codex:checkpoint:list -- --json` returns list output in JSON format.
+
+If rollback dry-run fails, use this recovery sequence:
+
+1) `npm run codex:scan`
+2) `npm run codex:checkpoint:list`
+3) choose a matching checkpoint for current workspace state (or create a fresh savepoint)
+
+Notes:
+
+- Rollback patches cover tracked file changes (`git diff --binary HEAD`).
+- Untracked files are listed in checkpoint metadata and should be added/stashed separately when needed.
+
 ## Franklin (Terminal AI Ops)
 
 - `npm run frank -- help` shows all Franklin commands.

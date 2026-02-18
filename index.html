@@ -50,14 +50,6 @@
                             <div class="brand">
                                 <h1 aria-label="Project by Faz (FazyBear)"></h1>
                             </div>
-                        </div>
-
-                        <div class="strip-center" aria-label="Run actions">
-                            <div class="strip-group">
-                            </div>
-                        </div>
-
-                        <div class="strip-right">
                             <div class="strip-group" aria-label="Panel toggles">
                                 <button id="toggleLog" type="button" data-panel-toggle="true" aria-controls="logPanel" aria-expanded="true">Console</button>
                                 <button id="toggleEditor" type="button" data-panel-toggle="true" aria-controls="editorPanel" aria-expanded="true">Editor</button>
@@ -88,6 +80,28 @@
                                     <option value="temple">Temple</option>
                                 </select>
                             </div>
+                        </div>
+
+                        <div class="strip-center" aria-label="Command search">
+                            <div class="strip-group strip-command-group">
+                                <label class="sr-only" for="topCommandPaletteInput">Search commands</label>
+                                <input
+                                    id="topCommandPaletteInput"
+                                    class="top-command-input"
+                                    type="search"
+                                    placeholder="Search commands (Ctrl/Cmd + Shift + P)"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                    aria-label="Command palette search"
+                                />
+                                <div id="topCommandPaletteMenu" class="top-command-dropdown" data-open="false" aria-hidden="true">
+                                    <ul id="topCommandPaletteList" class="quick-open-list" role="listbox" aria-label="Header command results"></ul>
+                                    <p id="topCommandPaletteHint" class="quick-open-hint">Enter to run • Esc to close</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="strip-right">
                             <div class="status" aria-label="Status">
                                 <span class="dot" aria-hidden="true"></span>
                                 <span id="statusText">Ready</span>
@@ -485,10 +499,10 @@
                 </div>
             </div>
             <div id="dockOverlay" class="dock-overlay" aria-hidden="true">
-                <button class="dock-zone dock-left" type="button" data-dock-zone="left" aria-label="Dock left" title="Dock left">Left</button>
-                <button class="dock-zone dock-right" type="button" data-dock-zone="right" aria-label="Dock right" title="Dock right">Right</button>
-                <button class="dock-zone dock-bottom" type="button" data-dock-zone="bottom" aria-label="Dock bottom" title="Dock bottom">Bottom</button>
-                <button class="dock-zone dock-center" type="button" data-dock-zone="center" aria-label="Dock center" title="Dock center">Center</button>
+                <button class="dock-zone dock-left" type="button" data-dock-zone="left" aria-label="Dock left" title="LEFT">LEFT</button>
+                <button class="dock-zone dock-right" type="button" data-dock-zone="right" aria-label="Dock right" title="RIGHT">RIGHT</button>
+                <button class="dock-zone dock-bottom" type="button" data-dock-zone="bottom" aria-label="Dock bottom" title="BOTTOM">BOTTOM</button>
+                <button class="dock-zone dock-center" type="button" data-dock-zone="center" aria-label="Reset dock position (center)" title="CENTER (RESET)">CENTER (RESET)</button>
             </div>
             <div id="quickOpenBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>
             <section id="quickOpenPalette" class="quick-open" data-open="false" aria-hidden="true" aria-label="Quick open files">

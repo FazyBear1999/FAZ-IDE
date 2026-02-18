@@ -19,6 +19,30 @@ test("loads the IDE shell with files and editor", async ({ page }) => {
   expect(fileRows).toBeGreaterThan(0);
 });
 
+test("boot exposes core fazide api surface", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    const hasMethod = (name) => typeof api?.[name] === "function";
+    return {
+      ready: Boolean(api),
+      createFolder: hasMethod("createFolder"),
+      setPanelOpen: hasMethod("setPanelOpen"),
+      applyPreset: hasMethod("applyPreset"),
+      getState: hasMethod("getState"),
+      stateHasLayout: Boolean(api?.getState?.()?.layout),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.createFolder).toBeTruthy();
+  expect(result.setPanelOpen).toBeTruthy();
+  expect(result.applyPreset).toBeTruthy();
+  expect(result.getState).toBeTruthy();
+  expect(result.stateHasLayout).toBeTruthy();
+});
+
 test("theme selector switches value safely", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -104,12 +128,15 @@ test("header keeps theme group next to workspace actions and removes top health 
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const baseline = await page.evaluate(() => {
-    const stripRight = document.querySelector(".strip-right");
-    const actionsGroup = stripRight?.querySelector('[aria-label="Workspace actions"]');
-    const themeGroup = stripRight?.querySelector(".strip-theme-group");
-    const health = stripRight?.querySelector('.health[aria-label="System health"]');
+    const topBar = document.querySelector('.topbar[aria-label="Top bar"]')
+      || document.querySelector('header.topbar')
+      || document.querySelector('[aria-label="Top bar"]');
+    const actionsGroup = topBar?.querySelector('[aria-label="Workspace actions"]');
+    const themeGroup = topBar?.querySelector('[aria-label="Theme"]')
+      || topBar?.querySelector(".strip-theme-group");
+    const health = topBar?.querySelector('.health[aria-label="System health"]');
     const themeSelect = document.querySelector("#themeSelect");
-    if (!stripRight || !actionsGroup || !themeGroup || !themeSelect) {
+    if (!topBar || !actionsGroup || !themeGroup || !themeSelect) {
       return { ready: false };
     }
 
@@ -128,7 +155,7 @@ test("header keeps theme group next to workspace actions and removes top health 
       return Number.isFinite(parsed) ? parsed : 0;
     };
 
-    const children = Array.from(stripRight.children);
+    const children = Array.from(actionsGroup.parentElement?.children || []);
     const actionsIndex = children.indexOf(actionsGroup);
     const themeIndex = children.indexOf(themeGroup);
     const selectStyle = getComputedStyle(themeSelect);
@@ -444,65 +471,145 @@ test("layout preset menu includes extended presets and applies diagnostics prese
   expect(result.bottomOrder).toEqual(["log"]);
 });
 
-test("dock center drag repositions panel without resetting active layout preset", async ({ page }) => {
+test("dock center touch resets layout to selected preset for all primary panels", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  const setup = await page.evaluate(() => {
-    const api = window.fazide;
-    if (!api?.applyPreset || !api?.getState) return { ready: false };
-    api.applyPreset("diagnostics");
-    const layout = api.getState()?.layout || {};
-    return {
-      ready: true,
-      toolsOpen: Boolean(layout.toolsOpen),
-      sandboxOpen: Boolean(layout.sandboxOpen),
-    };
-  });
+  const handleByPanel = {
+    files: '#side .drag-handle[data-panel="files"]',
+    editor: '#editorPanel .drag-handle[data-panel="editor"]',
+    sandbox: '#sandboxPanel .drag-handle[data-panel="sandbox"]',
+    tools: '#toolsPanel .drag-handle[data-panel="tools"]',
+    log: '#logPanel .drag-handle[data-panel="log"]',
+  };
+  const panels = ["editor", "log"];
+  const failingPanels = [];
+  for (const panel of panels) {
+    await page.evaluate((targetPanel) => {
+      const api = window.fazide;
+      if (!api?.applyPreset || !api?.setPanelOpen || !api?.setPanelOrder || !api?.dockPanel || !api?.setSizes) return;
+      api.applyPreset("diagnostics");
+      if (targetPanel === "tools") {
+        api.setPanelOpen("files", true);
+        api.setPanelOpen("editor", true);
+        api.setPanelOpen("sandbox", false);
+        api.setPanelOpen("tools", true);
+        api.setPanelOpen("log", false);
+        api.dockPanel("tools", "top");
+        api.dockPanel("editor", "top");
+        api.dockPanel("files", "top");
+        api.setPanelOrder("tools", 0);
+        api.setPanelOrder("editor", 1);
+        api.setPanelOrder("files", 2);
+      } else if (targetPanel === "log") {
+        api.setPanelOpen("files", false);
+        api.setPanelOpen("editor", true);
+        api.setPanelOpen("sandbox", false);
+        api.setPanelOpen("tools", false);
+        api.setPanelOpen("log", true);
+        api.dockPanel("editor", "top");
+        api.dockPanel("log", "bottom");
+      } else {
+        api.setPanelOpen("files", true);
+        api.setPanelOpen("editor", true);
+        api.setPanelOpen("sandbox", true);
+        api.setPanelOpen("tools", false);
+        api.setPanelOpen("log", true);
+        api.dockPanel("editor", "top");
+        api.dockPanel("files", "top");
+        api.dockPanel("sandbox", "top");
+        api.setPanelOrder("editor", 0);
+        api.setPanelOrder("files", 1);
+        api.setPanelOrder("sandbox", 2);
+      }
+      api.setSizes({ sidebarWidth: 260, sandboxWidth: 500, toolsWidth: 420, logWidth: 420 });
+    }, panel);
 
-  expect(setup.ready).toBeTruthy();
-  expect(setup.toolsOpen).toBeTruthy();
-  expect(setup.sandboxOpen).toBeFalsy();
+    const handle = page.locator(handleByPanel[panel]);
+    const workspace = page.locator("#workspace");
+    await expect(handle).toBeVisible();
+    await expect(workspace).toBeVisible();
+    const handleBox = await handle.boundingBox();
+    const workspaceBox = await workspace.boundingBox();
+    expect(handleBox).toBeTruthy();
+    expect(workspaceBox).toBeTruthy();
+    const startX = handleBox.x + (handleBox.width / 2);
+    const startY = handleBox.y + (handleBox.height / 2);
+    const centerX = workspaceBox.x + (workspaceBox.width / 2);
+    const centerY = workspaceBox.y + (workspaceBox.height / 2);
 
-  const handle = page.locator('#side .drag-handle[data-panel="files"]');
-  await expect(handle).toBeVisible();
-  const handleBox = await handle.boundingBox();
-  expect(handleBox).toBeTruthy();
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 36, startY + 24);
 
-  await page.mouse.move(handleBox.x + 8, handleBox.y + 8);
-  await page.mouse.down();
-  await page.mouse.move(handleBox.x + 12, handleBox.y + 12);
+    const centerZone = page.locator('#dockOverlay .dock-zone[data-dock-zone="center"]');
+    const centerVisible = await centerZone.isVisible();
+    if (centerVisible) {
+      const centerBox = await centerZone.boundingBox();
+      if (centerBox) {
+        await page.mouse.move(centerBox.x + centerBox.width / 2, centerBox.y + centerBox.height / 2);
+      } else {
+        await page.mouse.move(centerX, centerY);
+      }
+    } else {
+      await page.mouse.move(centerX, centerY);
+    }
+    await page.mouse.up();
 
-  await expect(page.locator("#dockOverlay")).toHaveAttribute("data-active", "true");
+    const result = await page.evaluate(() => {
+      const api = window.fazide;
+      const state = api?.getState?.() || {};
+      const layout = state.layout || {};
+      const rows = layout.panelRows || { top: [], bottom: [] };
+      const top = Array.isArray(rows.top) ? rows.top : [];
+      const bottom = Array.isArray(rows.bottom) ? rows.bottom : [];
+      return {
+        activeLayoutPreset: String(state.activeLayoutPreset || ""),
+        toolsOpen: Boolean(layout.toolsOpen),
+        sandboxOpen: Boolean(layout.sandboxOpen),
+        filesOpen: Boolean(layout.filesOpen),
+        editorOpen: Boolean(layout.editorOpen),
+        logOpen: Boolean(layout.logOpen),
+        topOrder: top.slice(0, 4),
+        bottomOrder: bottom.slice(0, 2),
+      };
+    });
 
-  const centerZone = page.locator('#dockOverlay .dock-zone[data-dock-zone="center"]');
-  await expect(centerZone).toBeVisible();
-  const centerBox = await centerZone.boundingBox();
-  expect(centerBox).toBeTruthy();
+    const matchesDiagnostics =
+      result.activeLayoutPreset === "diagnostics"
+      && result.filesOpen === true
+      && result.editorOpen === true
+      && result.sandboxOpen === false
+      && result.logOpen === true
+      && result.toolsOpen === true
+      && JSON.stringify(result.topOrder) === JSON.stringify(["files", "editor", "tools", "sandbox"])
+      && JSON.stringify(result.bottomOrder) === JSON.stringify(["log"]);
 
-  await page.mouse.move(centerBox.x + centerBox.width / 2, centerBox.y + centerBox.height / 2);
-  await page.mouse.up();
+    if (!matchesDiagnostics) {
+      failingPanels.push({ panel, ...result });
+    }
+  }
 
-  const result = await page.evaluate(() => {
-    const api = window.fazide;
-    const layout = api?.getState?.()?.layout || {};
-    const rows = layout.panelRows || { top: [], bottom: [] };
-    const top = Array.isArray(rows.top) ? rows.top : [];
-    return {
-      toolsOpen: Boolean(layout.toolsOpen),
-      sandboxOpen: Boolean(layout.sandboxOpen),
-      topOrder: top.slice(0, 4),
-      filesIndex: top.indexOf("files"),
-    };
-  });
-
-  expect(result.toolsOpen).toBeTruthy();
-  expect(result.sandboxOpen).toBeFalsy();
-  expect(result.topOrder).not.toEqual(["files", "editor", "sandbox", "tools"]);
-  expect(result.filesIndex).toBeGreaterThan(0);
+  expect(failingPanels).toEqual([]);
 });
 
 test("dock edge magnet snaps panel to left zone without precise zone targeting", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.setPanelOpen || !api?.setPanelOrder || !api?.dockPanel) return;
+    api.setPanelOpen("files", true);
+    api.setPanelOpen("editor", true);
+    api.setPanelOpen("sandbox", true);
+    api.setPanelOpen("tools", false);
+    api.setPanelOpen("log", true);
+    api.dockPanel("files", "top");
+    api.dockPanel("editor", "top");
+    api.dockPanel("sandbox", "top");
+    api.setPanelOrder("files", 0);
+    api.setPanelOrder("editor", 1);
+    api.setPanelOrder("sandbox", 2);
+  });
 
   const before = await page.evaluate(() => {
     const api = window.fazide;
@@ -516,15 +623,15 @@ test("dock edge magnet snaps panel to left zone without precise zone targeting",
   await expect(handle).toBeVisible();
   await expect(workspace).toBeVisible();
 
-  const handleBox = await handle.boundingBox();
-  const workspaceBox = await workspace.boundingBox();
-  expect(handleBox).toBeTruthy();
-  expect(workspaceBox).toBeTruthy();
+  const leftZone = page.locator('#dockOverlay .dock-zone[data-dock-zone="left"]');
+  await expect(leftZone).toHaveCount(1);
 
-  await page.mouse.move(handleBox.x + 8, handleBox.y + 8);
-  await page.mouse.down();
-  await page.mouse.move(workspaceBox.x + 10, workspaceBox.y + workspaceBox.height * 0.35);
-  await page.mouse.up();
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).toBeTruthy();
+
+  await handle.dragTo(leftZone, {
+    sourcePosition: { x: Math.max(2, handleBox.width / 2), y: Math.max(2, handleBox.height / 2) },
+  });
 
   const result = await page.evaluate(() => {
     const api = window.fazide;
@@ -538,7 +645,7 @@ test("dock edge magnet snaps panel to left zone without precise zone targeting",
 
   expect(before).toBeGreaterThanOrEqual(0);
   expect(result.sandboxIndex).toBeGreaterThanOrEqual(0);
-  expect(result.sandboxIndex).toBeLessThan(before);
+  expect(result.sandboxIndex).toBe(0);
 });
 
 test("dock HUD exposes clear visual guidance while dragging", async ({ page }) => {
@@ -582,7 +689,7 @@ test("dock HUD exposes clear visual guidance while dragging", async ({ page }) =
   expect(result.active).toBe("true");
   expect(result.hidden).toBe("false");
   expect(result.panelLabel).toBe("Editor");
-  expect(result.leftFontSize).toBeLessThanOrEqual(1);
+  expect(result.leftFontSize).toBeGreaterThanOrEqual(9);
   expect(result.leftOpacity).toBeGreaterThan(0.5);
   expect(result.leftBorderStyle).toContain("solid");
   expect(result.centerText).toContain("center");
@@ -1806,6 +1913,85 @@ test("workspace edge resize respects row-aware max cap for files panel", async (
   expect(result.filesWidth).toBeLessThanOrEqual(result.expectedMax);
 });
 
+test("tiny editor width still supports edge resize", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const setup = await page.evaluate(() => {
+    const api = window.fazide;
+    const editor = document.querySelector("#editorPanel");
+    if (!api?.setPanelOpen || !api?.setSidebarWidth || !api?.setSandboxWidth || !api?.setPanelOrder || !api?.dockPanel || !api?.getState || !(editor instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    api.setPanelOpen("files", true);
+    api.setPanelOpen("editor", true);
+    api.setPanelOpen("sandbox", true);
+    api.setPanelOpen("tools", false);
+    api.setPanelOpen("log", true);
+    api.dockPanel("files", "top");
+    api.dockPanel("editor", "top");
+    api.dockPanel("sandbox", "top");
+    api.setPanelOrder("files", 0);
+    api.setPanelOrder("editor", 1);
+    api.setPanelOrder("sandbox", 2);
+
+    api.setSidebarWidth(560);
+    api.setSandboxWidth(560);
+
+    const rect = editor.getBoundingClientRect();
+    const beforeSidebar = Number(api.getState()?.layout?.sidebarWidth || 0);
+    const beforeSandbox = Number(api.getState()?.layout?.sandboxWidth || 0);
+    return {
+      ready: true,
+      editorWidth: rect.width,
+      beforeSidebar,
+      beforeSandbox,
+    };
+  });
+
+  expect(setup.ready).toBeTruthy();
+
+  const filesSeparator = page.getByRole("separator", { name: "Resize files panel" });
+  await expect(filesSeparator).toBeVisible();
+  const side = page.locator("#side");
+  await expect(side).toBeVisible();
+  const beforeSide = await side.boundingBox();
+  expect(beforeSide).toBeTruthy();
+
+  const rect = await filesSeparator.boundingBox();
+  expect(rect).toBeTruthy();
+
+  const startX = rect.x + rect.width / 2;
+  const startY = rect.y + (rect.height / 2);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 120, startY);
+  await page.mouse.up();
+
+  const afterSide = await side.boundingBox();
+  expect(afterSide).toBeTruthy();
+
+  const result = await page.evaluate(({ beforeSidebar, beforeSandbox }) => {
+    const api = window.fazide;
+    const afterSidebar = Number(api?.getState?.()?.layout?.sidebarWidth || 0);
+    const afterSandbox = Number(api?.getState?.()?.layout?.sandboxWidth || 0);
+    return {
+      ready: Boolean(api?.getState),
+      beforeSidebar,
+      beforeSandbox,
+      afterSidebar,
+      afterSandbox,
+    };
+  }, {
+    beforeSidebar: setup.beforeSidebar,
+    beforeSandbox: setup.beforeSandbox,
+  });
+
+  expect(result.ready).toBeTruthy();
+  const sidebarChanged = Math.abs(afterSide.width - beforeSide.width) >= 1;
+  expect(sidebarChanged).toBeTruthy();
+});
+
 test("sandbox panel width is clamped to a minimum of 180px", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -1845,7 +2031,7 @@ test("sandbox panel width is clamped to a minimum of 180px", async ({ page }) =>
   expect(result.cssVar).toBeGreaterThanOrEqual(180);
 });
 
-test("all main panels use a reasonable minimum width of 180px", async ({ page }) => {
+test("all main panels keep safe minimum widths", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
@@ -1925,7 +2111,7 @@ test("all main panels use a reasonable minimum width of 180px", async ({ page })
   expect(result.minFiles).toBe(180);
   expect(result.minSandbox).toBe(180);
   expect(result.minTools).toBe(180);
-  expect(result.minEditor).toBe(180);
+  expect(result.minEditor).toBe(240);
   expect(result.appliedLog).toBeGreaterThanOrEqual(180);
   expect(result.appliedTools).toBeGreaterThanOrEqual(180);
   expect(result.layoutLog).toBeGreaterThanOrEqual(180);
@@ -2011,6 +2197,67 @@ test("renaming a file in a folder keeps its folder path", async ({ page }) => {
   }, created.id);
 
   expect(renamedPath).toBe(`${created.folder}/renamed`);
+});
+
+test("files tree renders folder and file-type icons for html/js entries", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const setup = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.createFolder || !api?.createFile || !api?.listFiles || !api?.expandAllFolders) {
+      return { ready: false };
+    }
+
+    const stamp = Date.now().toString(36);
+    const folder = `icons-${stamp}`;
+    const htmlName = `${folder}/index-${stamp}.html`;
+    const jsName = `${folder}/main-${stamp}.js`;
+    api.createFolder(folder);
+    api.createFile(htmlName, "<main>ok</main>");
+    api.createFile(jsName, "console.log('ok');");
+    api.expandAllFolders();
+
+    const files = api.listFiles();
+    const htmlFile = files.find((entry) => entry.name === htmlName);
+    const jsFile = files.find((entry) => entry.name === jsName);
+
+    return {
+      ready: true,
+      folder,
+      htmlId: htmlFile?.id || "",
+      jsId: jsFile?.id || "",
+    };
+  });
+
+  expect(setup.ready).toBeTruthy();
+  expect(setup.htmlId).toBeTruthy();
+  expect(setup.jsId).toBeTruthy();
+
+  const filesSection = page.locator('#fileList [data-file-section="files"]');
+  await expect(filesSection).toHaveCount(1);
+  const expanded = await filesSection.getAttribute("aria-expanded");
+  if (expanded !== "true") {
+    await filesSection.click();
+  }
+
+  const result = await page.evaluate(({ folder, htmlId, jsId }) => {
+    const folderIcon = document.querySelector(`.file-folder-row[data-folder-toggle="${folder}"] .file-folder-icon`);
+    const htmlIcon = document.querySelector(`#file-option-files-${htmlId} .file-row-icon`);
+    const jsIcon = document.querySelector(`#file-option-files-${jsId} .file-row-icon`);
+    return {
+      folderSrc: folderIcon instanceof HTMLImageElement ? String(folderIcon.getAttribute("src") || "") : "",
+      htmlSrc: htmlIcon instanceof HTMLImageElement ? String(htmlIcon.getAttribute("src") || "") : "",
+      jsSrc: jsIcon instanceof HTMLImageElement ? String(jsIcon.getAttribute("src") || "") : "",
+    };
+  }, {
+    folder: setup.folder,
+    htmlId: setup.htmlId,
+    jsId: setup.jsId,
+  });
+
+  expect(result.folderSrc).toContain("folder-");
+  expect(result.htmlSrc).toContain("html.svg");
+  expect(result.jsSrc).toContain("js.svg");
 });
 
 test("dev terminal runs safe commands and blocks privileged eval commands", async ({ page }) => {

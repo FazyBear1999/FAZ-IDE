@@ -41,6 +41,8 @@ export function bridgeScript(token, runContext = null) {
         const MAX_CONSOLE_ARGS = 120;
         const MAX_CONSOLE_PART_CHARS = 1600;
         const MAX_CONSOLE_DEPTH = 2;
+        const MAX_DEBUG_EVAL_EXPRESSIONS = 40;
+        const MAX_DEBUG_EVAL_CHARS = 200;
         const send = (type, payload) => {
             // Post a structured message to the parent window.
             // Parent should validate: source === "fazide" AND token matches.
@@ -174,6 +176,8 @@ export function bridgeScript(token, runContext = null) {
         let rafId = null;
         let pendingNode = null;
         let lastInspectSignature = "";
+        const SAFE_THEME_TOKEN = /^[a-z0-9_-]{1,32}$/;
+        const MAX_THEME_STYLE_VALUE_CHARS = 256;
         const THEME_SURFACE = {
             dark: {
                 background: "#0b0f14",
@@ -196,16 +200,23 @@ export function bridgeScript(token, runContext = null) {
         };
 
         const normalizeTheme = (value) => {
-            const key = String(value || "").toLowerCase();
-            return key || "dark";
+            const key = String(value || "").trim().toLowerCase();
+            if (!key || !SAFE_THEME_TOKEN.test(key)) return "dark";
+            return key;
+        };
+
+        const sanitizeSurfaceValue = (value, fallback = "") => {
+            const text = String(value || "").trim();
+            if (!text || text.length > MAX_THEME_STYLE_VALUE_CHARS) return String(fallback || "");
+            if (text.includes("<") || text.includes(">")) return String(fallback || "");
+            return text;
         };
 
         const normalizeSurface = (theme, override = null) => {
             const fallback = theme === "light" ? THEME_SURFACE.light : THEME_SURFACE.dark;
             const source = override && typeof override === "object" ? override : {};
             const pick = (key) => {
-                const value = String(source[key] || "").trim();
-                return value || fallback[key];
+                return sanitizeSurfaceValue(source[key], fallback[key]);
             };
             return {
                 background: pick("background"),
@@ -384,7 +395,7 @@ export function bridgeScript(token, runContext = null) {
             hideHighlight();
         };
 
-        window.addEventListener("message", (event) => {
+        window.addEventListener("message", async (event) => {
             const data = event.data;
             if (!event || event.source !== parent) return;
             if (PARENT_ORIGIN !== "*" && event.origin !== PARENT_ORIGIN) return;
@@ -401,18 +412,64 @@ export function bridgeScript(token, runContext = null) {
             } else if (data.type === "debug_eval") {
                 const expressions = Array.isArray(data.payload?.expressions) ? data.payload.expressions : [];
                 const values = {};
-                expressions.forEach((expr) => {
+                expressions.slice(0, MAX_DEBUG_EVAL_EXPRESSIONS).forEach((expr) => {
                     const source = String(expr || "").trim();
                     if (!source) return;
+                    if (source.length > MAX_DEBUG_EVAL_CHARS) {
+                        values[source] = "[error] expression too long";
+                        return;
+                    }
                     try {
                         // eslint-disable-next-line no-eval
                         const value = eval(source);
-                        values[source] = typeof value === "string" ? value : JSON.stringify(value);
+                        values[source] = trimText(toConsoleString(value), MAX_CONSOLE_PART_CHARS);
                     } catch (err) {
                         values[source] = "[error] " + String(err && err.message ? err.message : err);
                     }
                 });
+                if (expressions.length > MAX_DEBUG_EVAL_EXPRESSIONS) {
+                    values.__truncated__ = String(expressions.length - MAX_DEBUG_EVAL_EXPRESSIONS);
+                }
                 send("debug_watch", { values });
+            } else if (data.type === "console_eval") {
+                const requestId = Number(data.payload?.requestId || 0);
+                const source = String(data.payload?.expression || "");
+                const trimmed = source.trim();
+                if (!trimmed) {
+                    send("console_eval_result", {
+                        requestId,
+                        error: "[error] empty expression",
+                    });
+                    return;
+                }
+                if (trimmed.length > MAX_DEBUG_EVAL_CHARS) {
+                    send("console_eval_result", {
+                        requestId,
+                        error: "[error] expression too long",
+                    });
+                    return;
+                }
+                try {
+                    let value;
+                    try {
+                        const evaluateExpression = new Function("return (async () => { return (" + trimmed + "); })();");
+                        value = await evaluateExpression();
+                    } catch {
+                        const evaluateStatement = new Function("return (async () => { " + trimmed + " })();");
+                        value = await evaluateStatement();
+                    }
+                    send("console_eval_result", {
+                        requestId,
+                        expression: trimmed,
+                        result: trimText(toConsoleString(value), MAX_CONSOLE_PART_CHARS),
+                    });
+                } catch (err) {
+                    send("console_eval_result", {
+                        requestId,
+                        expression: trimmed,
+                        error: "[error] " + String(err && err.message ? err.message : err),
+                    });
+                }
             }
         });
 

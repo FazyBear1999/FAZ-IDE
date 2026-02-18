@@ -14,10 +14,12 @@ import { normalizeRunContext } from "./runContext.js";
 
 function sanitizeUserCode(code) {
     // Prevent accidental </script> from terminating our wrapper script tag.
-    return String(code ?? "").replace(/<\/script>/gi, "<\\/script>");
+    const source = String(code ?? "");
+    if (!source || !source.toLowerCase().includes("</script>")) return source;
+    return source.replace(/<\/script>/gi, "<\\/script>");
 }
 
-const SANDBOX_FALLBACK_SURFACE = {
+const SANDBOX_FALLBACK_SURFACE = Object.freeze({
     dark: {
         background: "#0b0f14",
         foreground: "#e6edf3",
@@ -36,18 +38,42 @@ const SANDBOX_FALLBACK_SURFACE = {
         muted: "rgba(71, 85, 105, 0.9)",
         colorScheme: "light",
     },
-};
+});
+
+Object.freeze(SANDBOX_FALLBACK_SURFACE.dark);
+Object.freeze(SANDBOX_FALLBACK_SURFACE.light);
+
+const SAFE_THEME_TOKEN = /^[a-z0-9_-]{1,32}$/;
+const SAFE_SANDBOX_MODES = new Set(["javascript", "html"]);
+const MAX_THEME_TOKEN_CHARS = 256;
+const themeLockScriptCache = new Map();
+
+function sanitizeThemeToken(value) {
+    const token = String(value || "").trim().toLowerCase();
+    if (!token || !SAFE_THEME_TOKEN.test(token)) return "dark";
+    return token;
+}
+
+function normalizeSandboxMode(mode) {
+    const normalized = String(mode || "javascript").trim().toLowerCase();
+    return SAFE_SANDBOX_MODES.has(normalized) ? normalized : "javascript";
+}
+
+function sanitizeThemeStyleValue(value, fallbackValue = "") {
+    const raw = String(value || "").trim();
+    if (!raw || raw.length > MAX_THEME_TOKEN_CHARS) return String(fallbackValue || "");
+    if (raw.includes("<") || raw.includes(">")) return String(fallbackValue || "");
+    return raw;
+}
 
 function getSandboxTheme() {
     const rawTheme = document?.documentElement?.getAttribute("data-theme");
-    const theme = String(rawTheme || "dark").toLowerCase();
-    return theme || "dark";
+    return sanitizeThemeToken(rawTheme || "dark");
 }
 
 function readThemeToken(styles, tokenName, fallbackValue = "") {
     if (!styles || !tokenName) return fallbackValue;
-    const value = String(styles.getPropertyValue(tokenName) || "").trim();
-    return value || fallbackValue;
+    return sanitizeThemeStyleValue(styles.getPropertyValue(tokenName), fallbackValue);
 }
 
 function getSandboxThemeSurface(theme) {
@@ -67,6 +93,10 @@ function getSandboxThemeSurface(theme) {
 }
 
 function buildThemeLockScript(surface, theme) {
+    const cacheKey = `${theme}|${surface.background}|${surface.foreground}|${surface.panel || ""}|${surface.border || ""}|${surface.accent || ""}|${surface.muted || ""}|${surface.colorScheme || ""}`;
+    if (themeLockScriptCache.has(cacheKey)) {
+        return themeLockScriptCache.get(cacheKey);
+    }
     const backgroundColor = JSON.stringify(surface.background);
     const foregroundColor = JSON.stringify(surface.foreground);
     const panelColor = JSON.stringify(surface.panel || surface.background);
@@ -75,7 +105,7 @@ function buildThemeLockScript(surface, theme) {
     const mutedColor = JSON.stringify(surface.muted || "rgba(148, 163, 184, 0.9)");
     const colorScheme = JSON.stringify(surface.colorScheme);
     const themeName = JSON.stringify(theme || "dark");
-    return (
+    const script = (
         `<script>(function __fazLockSandboxBg(){` +
         `const bg=${backgroundColor};` +
         `const fg=${foregroundColor};` +
@@ -114,85 +144,95 @@ function buildThemeLockScript(surface, theme) {
         `if(typeof requestAnimationFrame==="function"){requestAnimationFrame(apply);}` +
         `})();<\/script>`
     );
+    if (themeLockScriptCache.size > 31) {
+        const firstKey = themeLockScriptCache.keys().next().value;
+        if (firstKey) themeLockScriptCache.delete(firstKey);
+    }
+    themeLockScriptCache.set(cacheKey, script);
+    return script;
 }
 
+const SANDBOX_CSP_META_TAG = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; navigate-to 'none'">`;
+
+const SANDBOX_SECURITY_LOCK_SCRIPT =
+    `<script>(function __fazSecurityLock(){` +
+    `const messageBase="blocked by FAZ IDE sandbox policy";` +
+    `const warn=function(api,detail){` +
+    `try{` +
+    `if(typeof console!="undefined"&&console&&typeof console.warn==="function"){` +
+    `const suffix=detail?": "+String(detail):"";` +
+    `console.warn("Sandbox security: blocked API "+String(api||"unknown")+suffix);` +
+    `}` +
+    `}catch(_err){}` +
+    `};` +
+    `const defineBlocked=function(host,key,impl){` +
+    `if(!host)return;` +
+    `try{Object.defineProperty(host,key,{configurable:true,writable:true,value:impl});return;}catch(_err){}` +
+    `try{host[key]=impl;}catch(_err2){}` +
+    `};` +
+    `const blockedError=function(api){return new Error(String(api||"API")+" "+messageBase);};` +
+    `defineBlocked(window,"alert",function(){warn("alert");return undefined;});` +
+    `defineBlocked(window,"confirm",function(){warn("confirm");return false;});` +
+    `defineBlocked(window,"prompt",function(){warn("prompt");return null;});` +
+    `defineBlocked(window,"print",function(){warn("print");return undefined;});` +
+    `defineBlocked(window,"open",function(url){warn("window.open",url);return null;});` +
+    `defineBlocked(window,"fetch",function(){warn("fetch");return Promise.reject(blockedError("fetch"));});` +
+    `defineBlocked(window,"XMLHttpRequest",function(){warn("XMLHttpRequest");throw blockedError("XMLHttpRequest");});` +
+    `defineBlocked(window,"WebSocket",function(){warn("WebSocket");throw blockedError("WebSocket");});` +
+    `defineBlocked(window,"EventSource",function(){warn("EventSource");throw blockedError("EventSource");});` +
+    `defineBlocked(window,"Worker",function(){warn("Worker");throw blockedError("Worker");});` +
+    `defineBlocked(window,"SharedWorker",function(){warn("SharedWorker");throw blockedError("SharedWorker");});` +
+    `if(typeof navigator!=="undefined"&&navigator){` +
+    `try{defineBlocked(navigator,"sendBeacon",function(){warn("navigator.sendBeacon");return false;});}catch(_err){}` +
+    `try{if(navigator.serviceWorker){` +
+    `defineBlocked(navigator.serviceWorker,"register",function(){warn("serviceWorker.register");return Promise.reject(blockedError("serviceWorker.register"));});` +
+    `defineBlocked(navigator.serviceWorker,"getRegistrations",function(){warn("serviceWorker.getRegistrations");return Promise.resolve([]);});` +
+    `}}catch(_err2){}` +
+    `try{if(window.Notification&&typeof window.Notification==="function"){` +
+    `defineBlocked(window.Notification,"requestPermission",function(){warn("Notification.requestPermission");return Promise.resolve("denied");});` +
+    `}}catch(_err3){}` +
+    `try{if(navigator.geolocation){` +
+    `defineBlocked(navigator.geolocation,"getCurrentPosition",function(_success,error){warn("geolocation.getCurrentPosition");if(typeof error==="function"){error({code:1,message:messageBase});}});` +
+    `defineBlocked(navigator.geolocation,"watchPosition",function(_success,error){warn("geolocation.watchPosition");if(typeof error==="function"){error({code:1,message:messageBase});}return -1;});` +
+    `defineBlocked(navigator.geolocation,"clearWatch",function(){return undefined;});` +
+    `}}catch(_err4){}` +
+    `}` +
+    `})();<\/script>`;
+
+const SANDBOX_STORAGE_SHIM_SCRIPT =
+    `<script>(function __fazStorageShim(){` +
+    `const makeStore=function(){` +
+    `const map=new Map();` +
+    `return {` +
+    `get length(){return map.size;},` +
+    `clear:function(){map.clear();},` +
+    `getItem:function(key){const k=String(key);return map.has(k)?map.get(k):null;},` +
+    `key:function(index){const keys=Array.from(map.keys());const i=Number(index)||0;return Number.isInteger(i)&&i>=0&&i<keys.length?keys[i]:null;},` +
+    `removeItem:function(key){map.delete(String(key));},` +
+    `setItem:function(key,value){map.set(String(key),String(value));}` +
+    `};` +
+    `};` +
+    `const install=function(prop){` +
+    `let existing;` +
+    `try{existing=window[prop];if(existing&&typeof existing.getItem==="function"){return;}}catch(_err){}` +
+    `const shim=makeStore();` +
+    `try{Object.defineProperty(window,prop,{configurable:true,enumerable:true,get:function(){return shim;}});}` +
+    `catch(_err){try{window[prop]=shim;}catch(_err2){}}` +
+    `};` +
+    `install("localStorage");` +
+    `install("sessionStorage");` +
+    `})();<\/script>`;
+
 function buildSandboxCspMetaTag() {
-    return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; navigate-to 'none'">`;
+    return SANDBOX_CSP_META_TAG;
 }
 
 function buildSecurityLockScript() {
-    return (
-        `<script>(function __fazSecurityLock(){` +
-        `const messageBase="blocked by FAZ IDE sandbox policy";` +
-        `const warn=function(api,detail){` +
-        `try{` +
-        `if(typeof console!="undefined"&&console&&typeof console.warn==="function"){` +
-        `const suffix=detail?": "+String(detail):"";` +
-        `console.warn("Sandbox security: blocked API "+String(api||"unknown")+suffix);` +
-        `}` +
-        `}catch(_err){}` +
-        `};` +
-        `const defineBlocked=function(host,key,impl){` +
-        `if(!host)return;` +
-        `try{Object.defineProperty(host,key,{configurable:true,writable:true,value:impl});return;}catch(_err){}` +
-        `try{host[key]=impl;}catch(_err2){}` +
-        `};` +
-        `const blockedError=function(api){return new Error(String(api||"API")+" "+messageBase);};` +
-        `defineBlocked(window,"alert",function(){warn("alert");return undefined;});` +
-        `defineBlocked(window,"confirm",function(){warn("confirm");return false;});` +
-        `defineBlocked(window,"prompt",function(){warn("prompt");return null;});` +
-        `defineBlocked(window,"print",function(){warn("print");return undefined;});` +
-        `defineBlocked(window,"open",function(url){warn("window.open",url);return null;});` +
-        `defineBlocked(window,"fetch",function(){warn("fetch");return Promise.reject(blockedError("fetch"));});` +
-        `defineBlocked(window,"XMLHttpRequest",function(){warn("XMLHttpRequest");throw blockedError("XMLHttpRequest");});` +
-        `defineBlocked(window,"WebSocket",function(){warn("WebSocket");throw blockedError("WebSocket");});` +
-        `defineBlocked(window,"EventSource",function(){warn("EventSource");throw blockedError("EventSource");});` +
-        `defineBlocked(window,"Worker",function(){warn("Worker");throw blockedError("Worker");});` +
-        `defineBlocked(window,"SharedWorker",function(){warn("SharedWorker");throw blockedError("SharedWorker");});` +
-        `if(typeof navigator!=="undefined"&&navigator){` +
-        `try{defineBlocked(navigator,"sendBeacon",function(){warn("navigator.sendBeacon");return false;});}catch(_err){}` +
-        `try{if(navigator.serviceWorker){` +
-        `defineBlocked(navigator.serviceWorker,"register",function(){warn("serviceWorker.register");return Promise.reject(blockedError("serviceWorker.register"));});` +
-        `defineBlocked(navigator.serviceWorker,"getRegistrations",function(){warn("serviceWorker.getRegistrations");return Promise.resolve([]);});` +
-        `}}catch(_err2){}` +
-        `try{if(window.Notification&&typeof window.Notification==="function"){` +
-        `defineBlocked(window.Notification,"requestPermission",function(){warn("Notification.requestPermission");return Promise.resolve("denied");});` +
-        `}}catch(_err3){}` +
-        `try{if(navigator.geolocation){` +
-        `defineBlocked(navigator.geolocation,"getCurrentPosition",function(_success,error){warn("geolocation.getCurrentPosition");if(typeof error==="function"){error({code:1,message:messageBase});}});` +
-        `defineBlocked(navigator.geolocation,"watchPosition",function(_success,error){warn("geolocation.watchPosition");if(typeof error==="function"){error({code:1,message:messageBase});}return -1;});` +
-        `defineBlocked(navigator.geolocation,"clearWatch",function(){return undefined;});` +
-        `}}catch(_err4){}` +
-        `}` +
-        `})();<\/script>`
-    );
+    return SANDBOX_SECURITY_LOCK_SCRIPT;
 }
 
 function buildStorageShimScript() {
-    return (
-        `<script>(function __fazStorageShim(){` +
-        `const makeStore=function(){` +
-        `const map=new Map();` +
-        `return {` +
-        `get length(){return map.size;},` +
-        `clear:function(){map.clear();},` +
-        `getItem:function(key){const k=String(key);return map.has(k)?map.get(k):null;},` +
-        `key:function(index){const keys=Array.from(map.keys());const i=Number(index)||0;return Number.isInteger(i)&&i>=0&&i<keys.length?keys[i]:null;},` +
-        `removeItem:function(key){map.delete(String(key));},` +
-        `setItem:function(key,value){map.set(String(key),String(value));}` +
-        `};` +
-        `};` +
-        `const install=function(prop){` +
-        `let existing;` +
-        `try{existing=window[prop];if(existing&&typeof existing.getItem==="function"){return;}}catch(_err){}` +
-        `const shim=makeStore();` +
-        `try{Object.defineProperty(window,prop,{configurable:true,enumerable:true,get:function(){return shim;}});}` +
-        `catch(_err){try{window[prop]=shim;}catch(_err2){}}` +
-        `};` +
-        `install("localStorage");` +
-        `install("sessionStorage");` +
-        `})();<\/script>`
-    );
+    return SANDBOX_STORAGE_SHIM_SCRIPT;
 }
 
 function buildSandboxJsDocument(userCode, token, surface, theme, runContext) {
@@ -254,7 +294,7 @@ function buildSandboxHtmlDocument(userHtml, token, surface, theme, runContext) {
 
 export function runInSandbox(iframeEl, sourceCode, token, options = {}) {
     if (!iframeEl) throw new Error("FAZ IDE: runner iframe missing");
-    const mode = String(options?.mode || "javascript").toLowerCase();
+    const mode = normalizeSandboxMode(options?.mode);
     const theme = getSandboxTheme();
     const surface = getSandboxThemeSurface(theme);
     const runContext = normalizeRunContext(options?.runContext);

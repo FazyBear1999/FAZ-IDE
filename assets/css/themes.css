@@ -499,6 +499,7 @@
 
 :root[data-theme="retro"] #quickOpenInput,
 :root[data-theme="retro"] #commandPaletteInput,
+:root[data-theme="retro"] #topCommandPaletteInput,
 :root[data-theme="retro"] #editorFindInput,
 :root[data-theme="retro"] #editorReplaceInput,
 :root[data-theme="retro"] #symbolSearchInput,
@@ -1736,13 +1737,13 @@
 :root[data-theme="light"] .dock-zone {
     background: rgba(255, 255, 255, 0.5);
     border-color: rgba(148, 163, 184, 0.45);
-    color: transparent;
+    color: #334155;
 }
 
 :root[data-theme="light"] .dock-center {
     background: rgba(255, 255, 255, 0.6);
     border-color: rgba(148, 163, 184, 0.45);
-    color: transparent;
+    color: #0f172a;
 }
 
 :root[data-theme="light"] .dock-zone[data-active="true"] {

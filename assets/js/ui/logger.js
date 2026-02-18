@@ -44,18 +44,57 @@ function emit(event, detail) {
 export function makeLogger(logEl) {
     // Factory returns a tiny API bound a specific UI element.
     // Keeping state inside closure makes it easy to create multiple logs later.
-    let lineCount = String(logEl.textContent || "").split("\n").filter(Boolean).length;
+    let entries = [];
+    let lineCount = 0;
+    let activeFilter = {
+        text: "",
+        levels: {
+            system: true,
+            info: true,
+            warn: true,
+            error: true,
+            log: true,
+        },
+    };
+
+    const normalizeLevel = (value) => {
+        const raw = String(value || "system").trim().toLowerCase();
+        if (raw === "warning") return "warn";
+        if (raw === "err") return "error";
+        if (raw === "debug") return "info";
+        return raw || "system";
+    };
+
+    function levelEnabled(level = "system") {
+        const key = normalizeLevel(level);
+        return activeFilter.levels[key] !== false;
+    }
+
+    function lineMatchesText(line = "") {
+        const query = String(activeFilter.text || "").trim().toLowerCase();
+        if (!query) return true;
+        return String(line || "").toLowerCase().includes(query);
+    }
+
+    function getVisibleEntries() {
+        return entries.filter((entry) => levelEnabled(entry.level) && lineMatchesText(entry.line));
+    }
+
+    function render() {
+        const visible = getVisibleEntries();
+        logEl.textContent = visible.map((entry) => entry.line).join("\n");
+        logEl.scrollTop = logEl.scrollHeight;
+    }
 
     function trimLogIfNeeded() {
         if (lineCount <= LOG_MAX_LINES) return;
-        const lines = String(logEl.textContent || "").split("\n");
-        if (!lines.length) {
+        if (!entries.length) {
             lineCount = 0;
             return;
         }
-        const keep = lines.slice(-LOG_TRIM_TO_LINES);
-        logEl.textContent = keep.join("\n");
-        lineCount = keep.length;
+        entries = entries.slice(-LOG_TRIM_TO_LINES);
+        lineCount = entries.length;
+        render();
     }
 
     function formatLine(type, parts) {
@@ -69,23 +108,20 @@ export function makeLogger(logEl) {
         return `[${ts}] ${level}: ${msg}`;
     }
 
-    function appendLine(line) {
+    function appendLine(level, line) {
         const text = String(line || "");
         if (!text) return;
-
-        // Append line, preserving existing content.
-        // - Adds a newline only if there's already content.
-        // - Forces TYPE uppercase for scanability (LOG/WARN/ERROR/SYSTEM/etc.)
-        logEl.textContent += (logEl.textContent ? "\n" : "") + text;
-        lineCount += 1;
+        entries.push({
+            level: normalizeLevel(level),
+            line: text,
+        });
+        lineCount = entries.length;
         trimLogIfNeeded();
-
-        // Auto-scroll to bottom so new entries are visible.
-        logEl.scrollTop = logEl.scrollHeight;
+        render();
     }
 
     function append(type, parts) {
-        appendLine(formatLine(type, parts));
+        appendLine(type, formatLine(type, parts));
     }
 
     function appendMany(entries = []) {
@@ -94,17 +130,17 @@ export function makeLogger(logEl) {
             .map((entry) => formatLine(entry?.type, entry?.parts))
             .filter(Boolean);
         if (!lines.length) return;
-        const chunk = lines.join("\n");
-        logEl.textContent += (logEl.textContent ? "\n" : "") + chunk;
-        lineCount += lines.length;
+        list.forEach((entry, index) => {
+            appendLine(entry?.type, lines[index]);
+        });
         trimLogIfNeeded();
-        logEl.scrollTop = logEl.scrollHeight;
     }
 
     function clear() {
         // Clear the visible log.
-        logEl.textContent = "";
+        entries = [];
         lineCount = 0;
+        render();
     }
 
     async function copy () {
@@ -132,7 +168,32 @@ export function makeLogger(logEl) {
         }
     }
 
+    function setFilter(filter = {}) {
+        const nextText = String(filter?.text ?? activeFilter.text ?? "").trim();
+        const sourceLevels = filter?.levels && typeof filter.levels === "object"
+            ? filter.levels
+            : activeFilter.levels;
+        activeFilter = {
+            text: nextText,
+            levels: {
+                system: sourceLevels.system !== false,
+                info: sourceLevels.info !== false,
+                warn: sourceLevels.warn !== false,
+                error: sourceLevels.error !== false,
+                log: sourceLevels.log !== false,
+            },
+        };
+        render();
+    }
+
+    function getFilter() {
+        return {
+            text: activeFilter.text,
+            levels: { ...activeFilter.levels },
+        };
+    }
+
     // Expose only what the rest of the app needs.
     // This keeps the module stable even if internals change later.
-    return { append, appendMany, clear, copy };
+    return { append, appendMany, clear, copy, setFilter, getFilter };
 };

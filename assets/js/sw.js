@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fazide-shell-v8";
+const CACHE_VERSION = "fazide-shell-v9";
 const CORE_ASSETS = [
     "./",
     "./index.html",
@@ -38,6 +38,32 @@ const CORE_ASSETS = [
     "./assets/js/workers/editorLint.worker.js",
     "./assets/icons/faz-192.svg",
     "./assets/icons/faz-512.svg",
+    "./assets/icons/file-types/file-default.svg",
+    "./assets/icons/file-types/folder-closed.svg",
+    "./assets/icons/file-types/folder-open.svg",
+    "./assets/icons/file-types/js.svg",
+    "./assets/icons/file-types/ts.svg",
+    "./assets/icons/file-types/jsx.svg",
+    "./assets/icons/file-types/tsx.svg",
+    "./assets/icons/file-types/html.svg",
+    "./assets/icons/file-types/css.svg",
+    "./assets/icons/file-types/json.svg",
+    "./assets/icons/file-types/markdown.svg",
+    "./assets/icons/file-types/yaml.svg",
+    "./assets/icons/file-types/xml.svg",
+    "./assets/icons/file-types/image.svg",
+    "./assets/icons/file-types/shell.svg",
+    "./assets/icons/file-types/java.svg",
+    "./assets/icons/file-types/node.svg",
+    "./assets/icons/file-types/sql.svg",
+    "./assets/icons/file-types/git.svg",
+    "./assets/icons/file-types/docker.svg",
+    "./assets/icons/file-types/rust.svg",
+    "./assets/icons/file-types/go.svg",
+    "./assets/icons/file-types/php.svg",
+    "./assets/icons/file-types/cpp.svg",
+    "./assets/icons/file-types/csharp.svg",
+    "./assets/icons/file-types/python.svg",
 ];
 // sw.js lives at ./assets/js/sw.js, so ../../ points to the app root.
 const APP_BASE_URL = new URL("../../", self.location.href);

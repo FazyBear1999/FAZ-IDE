@@ -14,6 +14,10 @@
 - Scope (In / Out)
 - UX Notes
 - Technical Plan
+- Options Considered (at least 2)
+- Selected Option + Why
+- Assumptions (verified/partial/unverified)
 - Risks
 - Definition of Done
 - Test Plan
+- Gate Level (`test:memory` / `test:integrity` / `frank:full`)

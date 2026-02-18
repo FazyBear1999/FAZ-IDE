@@ -223,9 +223,10 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .top {
     display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+    container-type: inline-size;
     align-items: center;
-    justify-content: start;
+    justify-content: stretch;
     gap: 8px;
     padding-top: 0;
     padding-bottom: 0;
@@ -279,31 +280,39 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .strip-left {
     flex: 0 0 auto;
-    min-width: 0;
+    justify-content: flex-start;
     justify-self: start;
 }
 
 .strip-center {
     flex: 0 0 auto;
-    justify-content: flex-start;
-    min-width: 0;
-    justify-self: start;
+    justify-content: center;
+    min-width: max-content;
+    justify-self: center;
 }
 
 .strip-right {
-    flex: 1 1 auto;
-    justify-content: flex-start;
+    flex: 0 0 auto;
+    justify-content: flex-end;
     min-width: max-content;
     overflow: visible;
-    justify-self: stretch;
+    justify-self: end;
 }
 
 .strip-group {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 5px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+}
+
+.top .strip-right .strip-group {
+    justify-content: flex-start;
+}
+
+.top .strip-left .strip-group {
+    justify-content: flex-start;
 }
 
 .strip-theme-group {

@@ -187,3 +187,182 @@ Keep entries short, dated, and explicit about why the change was made.
 - Repeated optimization/recovery cycles increased update overhead and drift risk; a tighter operator workflow keeps entries fast while preserving strict traceability.
 - Follow-up:
 - Keep this flow lightweight; if memory updates become repetitive again, add a compact command-driven checklist without weakening required-file and heading contracts.
+
+## 2026-02-17T22:20:00Z - Safe file-organization governance + 3-change full-gate cadence
+
+- Date (UTC):
+- 2026-02-17T22:20:00Z
+- Area:
+- Franklin/AI memory operations and repository organization safety
+- Decision:
+- Added a dedicated file-organization playbook and formalized batch validation policy: focused checks per major organization change, full gate after every 3 major changes, and immediate full gate when high-risk release/orchestration surfaces are touched.
+- Why:
+- Large restructuring requires strong rollback and validation discipline to avoid path drift and accidental release regressions while still moving quickly.
+- Follow-up:
+- Execute upcoming repository organization as numbered major changes and checkpoint full-gate runs at each 3-change boundary.
+
+## 2026-02-17T23:20:00Z - Decision framework + roadmap checkpoint governance
+
+- Date (UTC):
+- 2026-02-17T23:20:00Z
+- Area:
+- AI memory decision quality and roadmap execution discipline
+- Decision:
+- Added `decision-framework.md` (option scoring, assumptions, go/no-go, rollback triggers) and `roadmap-decision-map.md` (checkpoint contract linking roadmap tasks to decisions + validation evidence).
+- Updated intake/handoff/operations docs to require explicit option selection and checkpoint completion.
+- Why:
+- Existing memory flow recorded outcomes well but did not consistently enforce decision quality inputs (alternatives, assumptions, rejection criteria), causing avoidable ambiguity during multi-session optimization work.
+- Follow-up:
+- Use checkpoint IDs in future roadmap batches and include command evidence + assumption status before handoff.
+
+## 2026-02-17T23:35:00Z - Memory brain-loop closure (checkpoint-linked gaps/issues/errors)
+
+- Date (UTC):
+- 2026-02-17T23:35:00Z
+- Area:
+- AI memory execution loop quality (planning -> risk -> validation)
+- Decision:
+- Enforced checkpoint-linked tracking across `test-gaps.md`, `known-issues.md`, and `error-catalog.md`, with explicit rules for validation command evidence.
+- Why:
+- Prior docs captured decisions and roadmap checkpoints, but risk and testing artifacts were not guaranteed to reference the same checkpoint IDs, weakening traceability.
+- Follow-up:
+- Require checkpoint ID review during session-close sync and reject unlinked new gap/issue entries.
+
+## 2026-02-17T23:50:00Z - Session Command Center runbook
+
+- Date (UTC):
+- 2026-02-17T23:50:00Z
+- Area:
+- AI session execution consistency and operator clarity
+- Decision:
+- Added `session-command-center.md` as a one-page runbook covering start sequence, decision gate, risk-based validation, memory sync, and exit contract.
+- Wired references from `README.md` and `handoff-checklist.md`.
+- Why:
+- Teams need a deterministic “what to do first/next/last” brain for every session, not just scattered policy docs.
+- Follow-up:
+- Keep command center concise and update it whenever gate policy or checkpoint rules change.
+
+## 2026-02-17T23:58:00Z - Safe AI command-center CLI
+
+- Date (UTC):
+- 2026-02-17T23:58:00Z
+- Area:
+- AI operations ergonomics and decision safety
+- Decision:
+- Added `scripts/ai-command-center.js` and npm aliases (`ai:command-center`, `ai:brain`) to generate risk-aware, checkpoint-linked session guidance in read-only mode by default.
+- Included JSON output and optional session-brief write mode behind explicit flag.
+- Why:
+- Operators needed a fast, consistent “brain boot” command that turns working-tree context into decision and validation guidance without accidental side effects.
+- Follow-up:
+- Keep read-only default; expand checkpoint inference only when additional roadmap checkpoints are introduced.
+
+## 2026-02-18T00:20:00Z - app.js file-icon subsystem extraction (organization wave)
+
+- Date (UTC):
+- 2026-02-18T00:20:00Z
+- Area:
+- App orchestration organization (`optimization-map` A1)
+- Decision:
+- Extracted file icon constants/helpers from `assets/js/app.js` into new module `assets/js/ui/fileIcons.js` and rewired imports/call sites without changing runtime behavior.
+- Why:
+- Reduces monolith pressure in `app.js`, improves discoverability of file-tree icon logic, and creates a reusable boundary for future file-surface cleanup.
+- Follow-up:
+- Continue extracting cohesive helper clusters from `app.js` in small reversible slices; keep focused icon/docking regressions green per slice.
+
+## 2026-02-18T03:40:00Z - Sandbox runner/bridge hardening + fallback contract wave
+
+- Date (UTC):
+- 2026-02-18T03:40:00Z
+- Area:
+- Sandbox execution safety, fallback reliability, and contract-test depth
+- Decision:
+- Hardened `assets/js/sandbox/runner.js` and `assets/js/sandbox/bridge.js` with strict theme-token normalization, surface-value sanitization, safe mode normalization, and bounded theme-lock script caching.
+- Added stability contracts in `tests/stability-contract.spec.js` covering malformed theme tokens, JS/HTML security injection invariants, legacy iframe fallback write-path correctness, explicit fallback error messaging, and parent `theme_update` sanitization.
+- Why:
+- This is the highest-risk runtime surface (cross-window messaging + generated iframe documents). Strong invariants reduce silent regressions and keep fallback paths release-safe.
+- Follow-up:
+- Keep these contracts as required gates for sandbox edits; rollback path is to remove the new sanitizers/cache path while retaining fallback/error tests to diagnose behavior drift.
+
+## 2026-02-18T04:05:00Z - Sandbox micro-performance + debug-eval safety optimization wave
+
+- Date (UTC):
+- 2026-02-18T04:05:00Z
+- Area:
+- Sandbox runtime performance and debug-path resilience
+- Decision:
+- Added a fast-path in `runner.js` `sanitizeUserCode` to skip regex replacement when no `</script>` marker exists.
+- Hardened and optimized `bridge.js` debug evaluation path with bounded expression count/length and robust stringification via existing bridge-safe serializers.
+- Why:
+- Reduces avoidable per-run string work in common paths and prevents expensive/fragile debug serialization from destabilizing sandbox watch diagnostics.
+- Follow-up:
+- Keep debug-eval bounds explicit and maintain targeted sandbox contracts as release blockers for this surface.
+
+## 2026-02-18T04:20:00Z - app.js safe decomposition wave (sandbox console payload helpers)
+
+- Date (UTC):
+- 2026-02-18T04:20:00Z
+- Area:
+- App orchestration organization and sandbox console reliability
+- Decision:
+- Extracted sandbox console payload normalization/truncation helpers from `assets/js/app.js` into new `assets/js/sandbox/consolePayload.js` and rewired `app.js` to import them.
+- Preserved behavior by passing existing app constants (`SANDBOX_CONSOLE_MAX_ARGS`, `SANDBOX_CONSOLE_ARG_MAX_CHARS`) into the new helper.
+- Why:
+- Reduces monolith surface in `app.js` while keeping sandbox console behavior deterministic and testable as a bounded module.
+- Follow-up:
+- Continue decomposition in pure helper clusters only; require sandbox payload/truncation contracts to pass on every extraction slice.
+
+## 2026-02-18T04:32:00Z - app.js safe decomposition wave (sandbox message trust helpers)
+
+- Date (UTC):
+- 2026-02-18T04:32:00Z
+- Area:
+- Sandbox message security and orchestration separation
+- Decision:
+- Extracted sandbox postMessage trust/token gating helpers from `assets/js/app.js` into new `assets/js/sandbox/messageTrust.js`.
+- `app.js` now imports `isTrustedSandboxMessageEvent` and `isSandboxMessageForCurrentRun` for centralized trust checks.
+- Why:
+- Keeps message-security logic in a dedicated sandbox boundary and reduces security-critical duplication inside the monolith.
+- Follow-up:
+- Keep spoofed-message and run-context regressions mandatory for any edits to sandbox message trust logic.
+
+## 2026-02-18T04:45:00Z - app.js safe decomposition wave (runtime diagnostics helpers)
+
+- Date (UTC):
+- 2026-02-18T04:45:00Z
+- Area:
+- Sandbox runtime error handling and monolith risk reduction
+- Decision:
+- Extracted runtime error and promise rejection normalization from `assets/js/app.js` into new `assets/js/sandbox/runtimeDiagnostics.js`.
+- Rewired `onSandboxMessage` runtime/promise branches to consume normalized outputs from the helper module while keeping existing character-limit constants and status/problem flows unchanged.
+- Why:
+- Isolates error-message formatting rules into a pure sandbox helper, improving maintainability and reducing orchestration-file churn in a high-frequency message path.
+- Follow-up:
+- Keep runtime/promise formatting regressions in targeted sandbox test runs for each future extraction slice.
+
+## 2026-02-18T04:52:00Z - Codex operations workflow (scan/checkpoint/rollback)
+
+- Date (UTC):
+- 2026-02-18T04:52:00Z
+- Area:
+- AI ergonomics, issue triage speed, and rollback safety
+- Decision:
+- Added `scripts/codex-ops.js` plus npm aliases (`codex:scan`, `codex:checkpoint`, `codex:checkpoint:list`, `codex:rollback`) to standardize issue discovery, pre-change checkpoints, and guarded rollback.
+- Updated `README.md` with a clear Codex safe workflow section and command sequence.
+- Why:
+- User goal requires a simple and repeatable Codex operating loop: find issues quickly, add features safely, and revert confidently when needed.
+- Follow-up:
+- Keep rollback default as dry-run, preserve metadata warnings for untracked files, and treat command output clarity as a maintenance requirement.
+
+## 2026-02-18T04:56:00Z - Codex-ops v2 usability upgrade (JSON + latest rollback + savepoint alias)
+
+- Date (UTC):
+- 2026-02-18T04:56:00Z
+- Area:
+- Codex ergonomics and recovery workflow clarity
+- Decision:
+- Upgraded `scripts/codex-ops.js` with structured `--json` output modes, status buckets in scan output, `--latest` rollback targeting, list limiting (`--limit`), and clearer rollback failure remediation guidance.
+- Added npm convenience aliases (`codex:status`, `codex:savepoint`, `codex:rollback:latest`, `codex:rollback:latest:apply`) and updated README workflow docs.
+- Why:
+- Faster operator loops and more automation-friendly output reduce friction for Codex-driven feature work while making rollback handling explicit and safer.
+- Follow-up:
+- Keep command outputs stable for scripts/automation and keep dry-run default for rollback commands.
