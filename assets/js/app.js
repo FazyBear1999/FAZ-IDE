@@ -22,6 +22,7 @@ import { load, save, saveBatchAtomic, recoverStorageJournal, getStorageJournalSt
 import { makeLogger } from "./ui/logger.js";
 import { makeStatus } from "./ui/status.js";
 import { makeDiagnostics } from "./ui/diagnostics.js";
+import { syncTemplateSelectorShell, renderTemplateSelectorOptions } from "./ui/templateSelectors.js";
 import { THEMES, normalizeTheme, applyThemeState, DEFAULT_THEME } from "./ui/theme.js";
 import { buildExportWorkspaceData, buildWorkspaceExportFilename, triggerWorkspaceExportDownload, normalizeImportedWorkspacePayload, parseWorkspaceImportText, buildImportWorkspaceConfirmMessage } from "./ui/workspaceTransfer.js";
 import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, normalizeFilesSectionOrder, cloneLayoutState } from "./ui/layoutState.js";
@@ -8256,119 +8257,6 @@ function getLessonById(id) {
     return lessons.find((lesson) => lesson.id === id);
 }
 
-function createTemplateOptionIcon(sources = []) {
-    const iconSources = Array.isArray(sources) ? sources.filter(Boolean).slice(0, TEMPLATE_ICON_SOURCE_LIMIT) : [];
-    if (!iconSources.length) return null;
-
-    const icon = document.createElement("img");
-    icon.className = "files-games-option-icon";
-    icon.alt = "";
-    icon.setAttribute("aria-hidden", "true");
-    icon.loading = "lazy";
-    icon.decoding = "async";
-    icon.referrerPolicy = "no-referrer";
-    let index = 0;
-    const applySource = (nextIndex) => {
-        if (nextIndex >= iconSources.length) {
-            icon.classList.add("is-hidden");
-            icon.removeAttribute("src");
-            return;
-        }
-        index = nextIndex;
-        icon.src = iconSources[index];
-    };
-    icon.addEventListener("error", () => {
-        applySource(index + 1);
-    });
-    applySource(0);
-    return icon;
-}
-
-function renderTemplateOptionLabel(option, name = "", iconSources = []) {
-    const icon = createTemplateOptionIcon(iconSources);
-    if (icon) option.appendChild(icon);
-    const label = document.createElement("span");
-    label.className = "files-games-option-label";
-    label.textContent = String(name || "");
-    option.appendChild(label);
-}
-
-function syncTemplateSelectorShell({
-    section,
-    toggle,
-    list,
-    loadButton,
-    sectionId,
-    sectionOpen,
-    listOpen,
-    hasItems,
-    hasSelection,
-} = {}) {
-    if (!section || !toggle || !list) return false;
-    toggle.setAttribute("draggable", "true");
-    toggle.dataset.filesSectionId = String(sectionId || "");
-    if (!sectionOpen || !hasItems) {
-        setAriaHidden(section, true);
-        section.setAttribute("data-list-open", "false");
-        toggle.disabled = true;
-        toggle.setAttribute("aria-expanded", "false");
-        setAriaHidden(list, true);
-        list.innerHTML = "";
-        list.removeAttribute("aria-activedescendant");
-        if (loadButton) {
-            loadButton.disabled = true;
-            loadButton.hidden = true;
-        }
-        return false;
-    }
-
-    setAriaHidden(section, false);
-    section.setAttribute("data-list-open", toBooleanAttribute(Boolean(listOpen)));
-    toggle.disabled = false;
-    toggle.setAttribute("aria-expanded", toBooleanAttribute(Boolean(listOpen)));
-    setAriaHidden(list, !listOpen);
-    if (loadButton) {
-        loadButton.hidden = !listOpen;
-        loadButton.disabled = !hasSelection || !listOpen;
-    }
-    return true;
-}
-
-function renderTemplateSelectorOptions(listNode, items = [], selectedId = "", {
-    optionIdPrefix = "template-option",
-    optionDatasetKey = "templateId",
-    itemClassName = "files-games-item",
-} = {}) {
-    if (!listNode) return;
-    let activeDescendant = "";
-    listNode.innerHTML = "";
-    items.forEach((entry, index) => {
-        const option = document.createElement("button");
-        const optionId = `${optionIdPrefix}-${index}`;
-        const selected = entry.id === selectedId;
-        option.type = "button";
-        option.className = "files-games-option";
-        option.id = optionId;
-        option.dataset[optionDatasetKey] = entry.id;
-        option.setAttribute("role", "option");
-        option.setAttribute("aria-selected", toBooleanAttribute(selected));
-        option.setAttribute("data-selected", toBooleanAttribute(selected));
-        renderTemplateOptionLabel(option, entry.name, entry.iconSources);
-
-        const item = document.createElement("li");
-        item.className = itemClassName;
-        item.appendChild(option);
-        listNode.appendChild(item);
-
-        if (selected) activeDescendant = optionId;
-    });
-    if (activeDescendant) {
-        listNode.setAttribute("aria-activedescendant", activeDescendant);
-    } else {
-        listNode.removeAttribute("aria-activedescendant");
-    }
-}
-
 function syncGamesUI() {
     if (!el.filesGames || !el.gamesSelectorToggle || !el.gamesList) return;
     const visible = syncTemplateSelectorShell({
@@ -8403,6 +8291,7 @@ function syncGamesUI() {
     renderTemplateSelectorOptions(el.gamesList, games, selectedGameId, {
         optionIdPrefix: "game-option",
         optionDatasetKey: "gameId",
+        iconSourceLimit: TEMPLATE_ICON_SOURCE_LIMIT,
     });
 }
 
@@ -8440,6 +8329,7 @@ function syncApplicationsUI() {
     renderTemplateSelectorOptions(el.applicationsList, applications, selectedApplicationId, {
         optionIdPrefix: "application-option",
         optionDatasetKey: "applicationId",
+        iconSourceLimit: TEMPLATE_ICON_SOURCE_LIMIT,
     });
 }
 
@@ -8477,6 +8367,7 @@ function syncLessonsUI() {
     renderTemplateSelectorOptions(el.lessonsList, lessons, selectedLessonId, {
         optionIdPrefix: "lesson-option",
         optionDatasetKey: "lessonId",
+        iconSourceLimit: TEMPLATE_ICON_SOURCE_LIMIT,
     });
 }
 
