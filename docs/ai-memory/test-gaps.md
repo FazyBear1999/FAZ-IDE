@@ -24,15 +24,6 @@
   - Validation command: `npm run test:integrity` + focused suite audit command
   - Owner/next action: Add with first C8 optimization implementation slice.
 
-- Checkpoint ID: C1
-  - Area: Dev Terminal command contract
-  - Gap: Add lightweight smoke contract for Dev Terminal help text to keep command list aligned with supported runtime scope.
-  - Why it matters: Prevents docs/help drift during orchestration refactors.
-  - Proposed test: Help text includes expected command set and excludes unsupported entries.
-  - Priority (P0/P1/P2): P1
-  - Validation command: focused IDE terminal/help tests
-  - Owner/next action: Add with next command-surface edit.
-
 - Checkpoint ID: C2
   - Area: Sandbox runtime status determinism
   - Gap: Add focused assertion that sandbox run status + console marker pairing stays deterministic for JS/HTML/CSS templates.
@@ -50,6 +41,7 @@
 
 ## Completed Recently
 
+- Closed C1 Dev Terminal help scope gap with focused command help contract in `tests/ide.spec.js` (expected safe command snippets required; unsupported language/unsafe command snippets forbidden).
 - Added release contracts that enforce AI-memory markdown isolation from runtime wiring (`index.html`, `assets/js/app.js`, `assets/js/sw.js`) and lock worker/js setup correctness (service worker path, worker module URLs, cached worker assets, and file existence).
 - Closed C2 runtime validation template scope guard with focused runtime-full-matrix copy/checklist contract in `tests/ide.spec.js` (JS/HTML/CSS references required; unsupported language terms forbidden).
 - Closed C2 applications catalog scope guard with explicit extension allowlist contract in `tests/ide.spec.js` (`html/css/js/md` only; hard-fail on unsupported runtime extensions).

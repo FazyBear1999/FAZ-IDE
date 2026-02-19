@@ -3103,6 +3103,56 @@ test("dev terminal runs safe commands and blocks privileged eval commands", asyn
   expect(result.outputText).toContain("Command disabled for safety: dev-js");
 });
 
+test("dev terminal help stays aligned with safe runtime command scope", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.openDevTerminal || !api?.runDevTerminal) {
+      return { ready: false };
+    }
+
+    api.openDevTerminal();
+    await api.runDevTerminal("help");
+    const outputText = String(document.querySelector("#devTerminalOutput")?.textContent || "");
+    const normalized = outputText.toLowerCase();
+
+    const expectedSnippets = [
+      "commands: help, clear, status, run, format, save, save-all",
+      "commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
+      "commands: open <log|editor|files|sandbox|tools>",
+      "commands: fresh-start confirm",
+      "safety: privileged/eval commands are disabled",
+    ];
+
+    const forbiddenSnippets = [
+      "python",
+      "ruby",
+      "php",
+      "java",
+      "c++",
+      "rust",
+      "go",
+      "dev-js",
+      "command: eval",
+      "commands: eval",
+    ];
+
+    const missingExpected = expectedSnippets.filter((snippet) => !normalized.includes(snippet));
+    const presentForbidden = forbiddenSnippets.filter((snippet) => normalized.includes(snippet));
+
+    return {
+      ready: true,
+      missingExpected,
+      presentForbidden,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.missingExpected).toEqual([]);
+  expect(result.presentForbidden).toEqual([]);
+});
+
 test("fresh-start confirm resets workspace and browser-persisted app state", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

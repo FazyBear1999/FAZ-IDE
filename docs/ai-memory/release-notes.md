@@ -16,6 +16,13 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Closed C1 Dev Terminal help scope gap with explicit allowlist/denylist contract checks.
+- Notable safety/infra updates: Added a focused test in `tests/ide.spec.js` that runs Dev Terminal `help` and validates expected safe command snippets while forbidding unsupported language and unsafe command snippets.
+- Validation status: `npx playwright test --config config/playwright.config.js --grep 'dev terminal help stays aligned with safe runtime command scope' tests/ide.spec.js` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and `npm run test:quick` passed.
+- Follow-up actions: Keep C1 help output contract active for Dev Terminal command-surface refactors; next safe target remains C2 sandbox status determinism.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Hardened runtime against markdown-memory interference and locked worker/javascript wiring contracts.
 - Notable safety/infra updates: Added release tests in `tests/release.spec.js` that verify `docs/ai-memory` markdown paths are isolated from runtime wiring and service-worker core asset cache list; added worker/js wiring checks for module entry script, service-worker registration path, AST/lint worker module URLs, and worker file existence.
 - Validation status: `npx playwright test tests/release.spec.js --config config/playwright.config.js` passed (13/13), `npm run test:integrity` passed, `npm run test:memory` passed, and `npm run test:quick` passed.

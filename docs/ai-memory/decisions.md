@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T16:05:00Z - C1 Dev Terminal help scope contract closure
+
+- Date (UTC):
+- 2026-02-19T16:05:00Z
+- Area:
+- Dev Terminal command-surface governance and scope-drift prevention
+- Decision:
+- Added a focused contract in `tests/ide.spec.js` that runs `help` through Dev Terminal and verifies expected safe command snippets are present.
+- The same contract enforces a denylist so unsupported language terms and unsafe command hints do not reappear in help output.
+- Why:
+- Dev Terminal help is an operator-facing contract; drift in this output can mislead usage and reintroduce out-of-scope runtime expectations.
+- Follow-up:
+- Keep Dev Terminal command/help edits gated by this focused contract plus `test:integrity` and `test:memory`; next open gap remains C2 sandbox status determinism.
+
 ## 2026-02-19T15:30:00Z - Runtime isolation guard for AI-memory markdown + worker/js wiring lock
 
 - Date (UTC):
