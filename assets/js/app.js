@@ -250,7 +250,7 @@ let diagnosticsVerbose = false;
 function setDiagnosticsVerbose(next) {
     diagnosticsVerbose = next;
     if (el.btnToggleDiagnostics) {
-        el.btnToggleDiagnostics.setAttribute("aria-pressed", diagnosticsVerbose ? "true" : "false");
+        setAriaPressed(el.btnToggleDiagnostics, diagnosticsVerbose);
         el.btnToggleDiagnostics.textContent = diagnosticsVerbose ? "Verbose: On" : "Verbose: Off";
     }
 }
@@ -4786,8 +4786,8 @@ function setConsoleInputBusy(active) {
 
 function setConsoleFilterButtonState(button, active) {
     if (!button) return;
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-    button.dataset.active = active ? "true" : "false";
+    setAriaPressed(button, active);
+    setDataActive(button, active);
 }
 
 function applyConsoleLogFilter() {
@@ -5614,8 +5614,8 @@ function initDocking() {
     if (!zones.length || !handles.length) return;
 
     const setOverlayOpen = (open) => {
-        overlay.setAttribute("data-active", open ? "true" : "false");
-        overlay.setAttribute("aria-hidden", open ? "false" : "true");
+        setDataActive(overlay, open);
+        setAriaHidden(overlay, !open);
         if (!open) {
             overlay.removeAttribute("data-active-zone");
             overlay.removeAttribute("data-panel-label");
@@ -9251,7 +9251,7 @@ function setLessonStatsLivePolling(active) {
 function updateLessonHud() {
     if (!el.lessonHud) return;
     const active = isLessonSessionActiveForCurrentFile();
-    el.lessonHud.setAttribute("data-active", active ? "true" : "false");
+    setDataActive(el.lessonHud, active);
     el.lessonHud.hidden = !active;
     if (!active) {
         lessonHudWasActive = false;
@@ -11721,8 +11721,8 @@ function syncEditorHistoryActionState({ hasActiveFile = false, entries = [], sel
 
 function setEditorHistoryRowActiveState(row, active) {
     if (!(row instanceof HTMLElement)) return;
-    row.dataset.active = active ? "true" : "false";
-    row.setAttribute("aria-pressed", active ? "true" : "false");
+    setDataActive(row, active);
+    setAriaPressed(row, active);
     row.tabIndex = active ? 0 : -1;
 }
 
@@ -12157,7 +12157,7 @@ function getFindState() {
 
 function setFindToggleState(button, active) {
     if (!button) return;
-    button.setAttribute("aria-pressed", active ? "true" : "false");
+    setAriaPressed(button, active);
 }
 
 function buildFindRegex(findState, { global = true } = {}) {
@@ -18186,6 +18186,13 @@ function openFolderMenuAt(folderPath, clientX, clientY) {
     positionMenuAt(el.fileFolderMenu, clientX, clientY);
 }
 
+function syncFilesMenuToggleButton(button, { open = false, label = "", disabled = false } = {}) {
+    if (!button) return;
+    setAriaPressed(button, open);
+    button.textContent = String(label || "");
+    button.disabled = Boolean(disabled);
+}
+
 function syncFilesMenuToggles() {
     if (!el.filesMenu) return;
     const filtersBtn = el.filesMenu.querySelector('[data-files-toggle="filters"]');
@@ -18195,44 +18202,37 @@ function syncFilesMenuToggles() {
     const openEditorsBtn = el.filesMenu.querySelector('[data-files-toggle="open-editors"]');
     const filesBtn = el.filesMenu.querySelector('[data-files-toggle="files"]');
     const trashBtn = el.filesMenu.querySelector('[data-files-toggle="trash"]');
-    if (filtersBtn) {
-        const open = layoutState.filesFiltersOpen;
-        filtersBtn.setAttribute("aria-pressed", open ? "true" : "false");
-        filtersBtn.textContent = "Filters";
-    }
-    if (gamesBtn) {
-        const open = layoutState.filesGamesOpen;
-        gamesBtn.setAttribute("aria-pressed", open ? "true" : "false");
-        gamesBtn.textContent = "Games";
-        gamesBtn.disabled = games.length === 0;
-    }
-    if (appsBtn) {
-        const open = layoutState.filesAppsOpen;
-        appsBtn.setAttribute("aria-pressed", open ? "true" : "false");
-        appsBtn.textContent = "Apps";
-        appsBtn.disabled = applications.length === 0;
-    }
-    if (lessonsBtn) {
-        const open = layoutState.filesLessonsOpen;
-        lessonsBtn.setAttribute("aria-pressed", open ? "true" : "false");
-        lessonsBtn.textContent = "Lessons";
-        lessonsBtn.disabled = lessons.length === 0;
-    }
-    if (openEditorsBtn) {
-        const open = layoutState.filesOpenEditorsOpen;
-        openEditorsBtn.setAttribute("aria-pressed", open ? "true" : "false");
-        openEditorsBtn.textContent = "Editors";
-    }
-    if (filesBtn) {
-        const open = layoutState.filesListOpen;
-        filesBtn.setAttribute("aria-pressed", open ? "true" : "false");
-        filesBtn.textContent = "Files";
-    }
-    if (trashBtn) {
-        const open = layoutState.filesTrashOpen;
-        trashBtn.setAttribute("aria-pressed", open ? "true" : "false");
-        trashBtn.textContent = "Trash";
-    }
+    syncFilesMenuToggleButton(filtersBtn, {
+        open: layoutState.filesFiltersOpen,
+        label: "Filters",
+    });
+    syncFilesMenuToggleButton(gamesBtn, {
+        open: layoutState.filesGamesOpen,
+        label: "Games",
+        disabled: games.length === 0,
+    });
+    syncFilesMenuToggleButton(appsBtn, {
+        open: layoutState.filesAppsOpen,
+        label: "Apps",
+        disabled: applications.length === 0,
+    });
+    syncFilesMenuToggleButton(lessonsBtn, {
+        open: layoutState.filesLessonsOpen,
+        label: "Lessons",
+        disabled: lessons.length === 0,
+    });
+    syncFilesMenuToggleButton(openEditorsBtn, {
+        open: layoutState.filesOpenEditorsOpen,
+        label: "Editors",
+    });
+    syncFilesMenuToggleButton(filesBtn, {
+        open: layoutState.filesListOpen,
+        label: "Files",
+    });
+    syncFilesMenuToggleButton(trashBtn, {
+        open: layoutState.filesTrashOpen,
+        label: "Trash",
+    });
 }
 
 function renderEditorTabs() {
@@ -18562,7 +18562,7 @@ function renderFileList() {
     if (el.fileSearch) el.fileSearch.value = fileFilter;
     if (el.fileSort) el.fileSort.value = fileSort;
     if (el.fileSearchClear) {
-        el.fileSearchClear.setAttribute("data-active", query ? "true" : "false");
+        setDataActive(el.fileSearchClear, query);
     }
 
     const renderFileRow = (file, sectionId, allowEditing, { depth = 0, displayName = null, showDirectory = false, guideLevels = null } = {}) => {
@@ -20305,7 +20305,7 @@ async function copyInspectSelectorToClipboard() {
 
 function setInspectUI(active) {
     inspectEnabled = active;
-    if (el.btnInspect) el.btnInspect.setAttribute("data-active", active ? "true" : "false");
+    if (el.btnInspect) setDataActive(el.btnInspect, active);
     if (el.inspectPanel) el.inspectPanel.setAttribute("data-inspecting", active ? "true" : "false");
     if (el.inspectStatus) el.inspectStatus.textContent = active ? "Inspecting" : "Off";
     if (active) {
@@ -20376,7 +20376,7 @@ function syncInspectAfterLoad() {
 function setDebugMode(next) {
     debugMode = Boolean(next);
     if (el.debugModeToggle) {
-        el.debugModeToggle.setAttribute("aria-pressed", debugMode ? "true" : "false");
+        setAriaPressed(el.debugModeToggle, debugMode);
         el.debugModeToggle.textContent = debugMode ? "Debug: On" : "Debug: Off";
     }
 }
@@ -20499,7 +20499,7 @@ function setRunnerFullscreen(active) {
     if (el.runnerShell) el.runnerShell.setAttribute("data-fullscreen", active ? "true" : "false");
     if (el.btnRunnerFull) {
         el.btnRunnerFull.textContent = active ? "Collapse" : "Expand";
-        el.btnRunnerFull.setAttribute("data-active", active ? "true" : "false");
+        setDataActive(el.btnRunnerFull, active);
     }
     if (document.body) {
         document.body.classList.toggle("runner-fullscreen", active);
