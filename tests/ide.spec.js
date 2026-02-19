@@ -30,6 +30,9 @@ test("boot exposes core fazide api surface", async ({ page }) => {
       ready: Boolean(api),
       createFolder: hasMethod("createFolder"),
       setPanelOpen: hasMethod("setPanelOpen"),
+      startTutorial: hasMethod("startTutorial"),
+      resetTutorial: hasMethod("resetTutorial"),
+      getTutorialState: hasMethod("getTutorialState"),
       applyPreset: hasMethod("applyPreset"),
       getState: hasMethod("getState"),
       stateHasLayout: Boolean(api?.getState?.()?.layout),
@@ -39,6 +42,9 @@ test("boot exposes core fazide api surface", async ({ page }) => {
   expect(result.ready).toBeTruthy();
   expect(result.createFolder).toBeTruthy();
   expect(result.setPanelOpen).toBeTruthy();
+  expect(result.startTutorial).toBeTruthy();
+  expect(result.resetTutorial).toBeTruthy();
+  expect(result.getTutorialState).toBeTruthy();
   expect(result.applyPreset).toBeTruthy();
   expect(result.getState).toBeTruthy();
   expect(result.stateHasLayout).toBeTruthy();
@@ -3190,6 +3196,8 @@ test("dev terminal help stays aligned with safe runtime command scope", async ({
       "commands: help, clear, status, run, format, save, save-all",
       "commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
       "commands: open <log|editor|files|sandbox|tools>",
+      "commands: tutorial <start|reset|status>",
+      "commands: tutorial list",
       "commands: fresh-start confirm",
       "safety: privileged/eval commands are disabled",
     ];
@@ -3222,6 +3230,120 @@ test("dev terminal help stays aligned with safe runtime command scope", async ({
   expect(result.presentForbidden).toEqual([]);
 });
 
+test("beginner tutorial reset restarts from the first step", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const before = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.startTutorial || !api?.resetTutorial || !api?.runDevTerminal || !api?.openDevTerminal || !api?.getTutorialState) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.openDevTerminal();
+    await api.runDevTerminal("tutorial list");
+    await api.runDevTerminal("tutorial start beginner");
+    const root = document.querySelector("#tutorialIntro");
+    const progress = String(document.querySelector("#tutorialIntroProgress")?.textContent || "").trim();
+    const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+    const outputText = String(document.querySelector("#devTerminalOutput")?.textContent || "");
+    const state = api.getTutorialState();
+
+    return {
+      ready: true,
+      visible: Boolean(root && !root.hidden),
+      progress,
+      title,
+      tutorialId: String(state?.tutorialId || ""),
+      availableTutorials: Array.isArray(state?.availableTutorials) ? state.availableTutorials : [],
+      listedBeginner: outputText.toLowerCase().includes("available tutorials:") && outputText.toLowerCase().includes("beginner"),
+      stepIndex: Number(state?.stepIndex || 0),
+      seen: Boolean(state?.seen),
+    };
+  });
+
+  expect(before.ready).toBeTruthy();
+  expect(before.visible).toBeTruthy();
+  expect(before.progress.toLowerCase()).toContain("step 1 of");
+  expect(before.title).toBe("Files Panel");
+  expect(before.tutorialId).toBe("beginner");
+  expect(before.availableTutorials).toContain("beginner");
+  expect(before.listedBeginner).toBeTruthy();
+  expect(before.stepIndex).toBe(0);
+  expect(before.seen).toBeFalsy();
+
+  const after = await page.evaluate(async () => {
+    const api = window.fazide;
+    await api.runDevTerminal("tutorial status");
+    await api.runDevTerminal("tutorial reset beginner");
+    await api.runDevTerminal("tutorial start beginner");
+
+    const progress = String(document.querySelector("#tutorialIntroProgress")?.textContent || "").trim();
+    const state = api.getTutorialState();
+    return {
+      progress,
+      stepIndex: Number(state?.stepIndex || 0),
+      seen: Boolean(state?.seen),
+    };
+  });
+
+  expect(after.progress.toLowerCase()).toContain("step 1 of");
+  expect(after.stepIndex).toBe(0);
+  expect(after.seen).toBeFalsy();
+});
+
+test("beginner tutorial panel stays centered and highlight ring is visible", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial || !api?.runDevTerminal) {
+      return { ready: false };
+    }
+
+    api.resetTutorial();
+    api.startTutorial();
+
+    const panel = document.querySelector("#tutorialIntro .tutorial-intro-panel");
+    const ring = document.querySelector("#tutorialIntroHighlight");
+    if (!(panel instanceof HTMLElement) || !(ring instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const panelRect = panel.getBoundingClientRect();
+    const panelCenterX = panelRect.left + (panelRect.width / 2);
+    const panelCenterY = panelRect.top + (panelRect.height / 2);
+    const xOffset = Math.abs(panelCenterX - (viewportWidth / 2));
+    const yOffset = Math.abs(panelCenterY - (viewportHeight / 2));
+
+    const ringRect = ring.getBoundingClientRect();
+    const ringStyle = getComputedStyle(ring);
+
+    await api.runDevTerminal("tutorial reset");
+    await api.runDevTerminal("tutorial start");
+
+    return {
+      ready: true,
+      xOffset,
+      yOffset,
+      ringVisible: !ring.hidden,
+      ringOpacity: Number.parseFloat(String(ringStyle.opacity || "0")),
+      ringWidth: ringRect.width,
+      ringHeight: ringRect.height,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.xOffset).toBeLessThanOrEqual(24);
+  expect(result.yOffset).toBeLessThanOrEqual(24);
+  expect(result.ringVisible).toBeTruthy();
+  expect(result.ringOpacity).toBeGreaterThan(0.1);
+  expect(result.ringWidth).toBeGreaterThan(12);
+  expect(result.ringHeight).toBeGreaterThan(12);
+});
+
 test("fresh-start confirm resets workspace and browser-persisted app state", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -3236,8 +3358,10 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
     const hasMarkerFile = api.listFiles().some((entry) => String(entry?.name || "") === markerFile);
 
     const lessonProfileKey = "fazide.lesson-profile.v1";
+    const tutorialKey = "fazide.tutorial.beginner.seen.v1";
     localStorage.setItem("fazide.test-reset-local", "present");
     sessionStorage.setItem("fazide.test-reset-session", "present");
+    localStorage.setItem(tutorialKey, "1");
     localStorage.setItem(lessonProfileKey, JSON.stringify({
       xp: 987,
       level: 9,
@@ -3287,6 +3411,7 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
       idbSeeded,
       localSeeded: localStorage.getItem("fazide.test-reset-local") === "present",
       sessionSeeded: sessionStorage.getItem("fazide.test-reset-session") === "present",
+      tutorialSeeded: localStorage.getItem(tutorialKey) === "1",
     };
   });
 
@@ -3294,6 +3419,7 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
   expect(seeded.hasMarkerFile).toBeTruthy();
   expect(seeded.localSeeded).toBeTruthy();
   expect(seeded.sessionSeeded).toBeTruthy();
+  expect(seeded.tutorialSeeded).toBeTruthy();
 
   const terminalInput = page.locator("#devTerminalInput");
   await expect(terminalInput).toBeVisible();
@@ -3306,7 +3432,7 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
 
   const after = await page.evaluate(async ({ markerFile, dbName }) => {
     const api = window.fazide;
-    if (!api?.listFiles || !api?.getLessonProfile) {
+    if (!api?.listFiles || !api?.getLessonProfile || !api?.getTutorialState) {
       return { ready: false };
     }
 
@@ -3336,6 +3462,8 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
       markerFilePresent: names.includes(markerFile),
       localMarkerPresent: localStorage.getItem("fazide.test-reset-local") === "present",
       sessionMarkerPresent: sessionStorage.getItem("fazide.test-reset-session") === "present",
+      tutorialSeenMarkerPresent: localStorage.getItem("fazide.tutorial.beginner.seen.v1") === "1",
+      tutorialSeenState: Boolean(api.getTutorialState()?.seen),
       lessonLevel: Number(profile?.level || 0),
       lessonXp: Number(profile?.xp || 0),
       idbChecked,
@@ -3350,6 +3478,8 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
   expect(after.markerFilePresent).toBeFalsy();
   expect(after.localMarkerPresent).toBeFalsy();
   expect(after.sessionMarkerPresent).toBeFalsy();
+  expect(after.tutorialSeenMarkerPresent).toBeFalsy();
+  expect(after.tutorialSeenState).toBeFalsy();
   expect(after.lessonLevel).toBe(1);
   expect(after.lessonXp).toBe(0);
   if (seeded.idbSeeded && after.idbChecked) {

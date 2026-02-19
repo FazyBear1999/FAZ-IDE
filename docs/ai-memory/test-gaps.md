@@ -32,6 +32,7 @@
 
 ## Completed Recently
 
+- Closed beginner onboarding reset gap with focused contracts in `tests/ide.spec.js` that assert tutorial reset/start returns to Step 1 and that `fresh-start confirm` clears tutorial seen state (`fazide.tutorial.beginner.seen.v1`).
 - Closed C2 sandbox runtime status determinism gap with focused JS/HTML/CSS runtime contract in `tests/ide.spec.js` (status + marker pairing locked for each template path).
 - Closed C1 Dev Terminal help scope gap with focused command help contract in `tests/ide.spec.js` (expected safe command snippets required; unsupported language/unsafe command snippets forbidden).
 - Added release contracts that enforce AI-memory markdown isolation from runtime wiring (`index.html`, `assets/js/app.js`, `assets/js/sw.js`) and lock worker/js setup correctness (service worker path, worker module URLs, cached worker assets, and file existence).

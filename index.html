@@ -58,6 +58,21 @@
         </head>
 
         <body>
+            <section id="tutorialIntro" class="tutorial-intro" hidden aria-hidden="true" aria-live="polite">
+                <div id="tutorialIntroHighlight" class="tutorial-intro-highlight" aria-hidden="true" hidden></div>
+                <div class="tutorial-intro-backdrop" aria-hidden="true"></div>
+                <aside class="tutorial-intro-panel" role="dialog" aria-modal="true" aria-labelledby="tutorialIntroTitle">
+                    <p class="tutorial-intro-eyebrow">Beginner Tutorial</p>
+                    <h2 id="tutorialIntroTitle" class="tutorial-intro-title">Welcome to FAZ IDE</h2>
+                    <p id="tutorialIntroBody" class="tutorial-intro-body">We will highlight core IDE sections so you can start quickly.</p>
+                    <p id="tutorialIntroProgress" class="tutorial-intro-progress">Step 1 of 1</p>
+                    <div class="tutorial-intro-actions">
+                        <button id="tutorialIntroBack" type="button">Back</button>
+                        <button id="tutorialIntroNext" type="button">Next</button>
+                        <button id="tutorialIntroSkip" type="button">Skip</button>
+                    </div>
+                </aside>
+            </section>
             <div id="appShell" class="app-shell" data-log="open" data-editor="open" data-files="open" data-sandbox="open" data-tools="closed" data-header="open" data-footer="open">
                 <div class="wrap">
                     <header class="top strip" aria-label="Top bar">

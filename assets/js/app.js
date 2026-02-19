@@ -127,6 +127,315 @@ const commandRegistry = createCommandRegistry({
 const formatter = createFormatter({ fallbackFormat: formatBasic });
 const astClient = createAstClient();
 
+const DEFAULT_TUTORIAL_ID = "beginner";
+const TUTORIAL_DEFINITIONS = Object.freeze({
+    beginner: Object.freeze({
+        id: "beginner",
+        label: "Beginner Tutorial",
+        seenKey: "fazide.tutorial.beginner.seen.v1",
+        completeMessage: "Beginner tutorial complete. Use 'tutorial start beginner' in Dev Terminal to view it again.",
+        steps: Object.freeze([
+            {
+                id: "files",
+                title: "Files Panel",
+                body: "This is your project tree. Create, rename, organize, and manage files from here.",
+                target: "#filesPanel",
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
+                id: "editor",
+                title: "Editor",
+                body: "Write and edit code here. Use shortcuts like Ctrl/Cmd+S to save and Ctrl/Cmd+Enter to run.",
+                target: "#editorPanel",
+                onEnter: () => setPanelOpen("editor", true),
+            },
+            {
+                id: "run",
+                title: "Run",
+                body: "Press Run to execute your active file in the sandbox safely.",
+                target: "#run",
+                onEnter: () => setPanelOpen("sandbox", true),
+            },
+            {
+                id: "console",
+                title: "Console",
+                body: "Console shows logs, warnings, and errors from your runs.",
+                target: "#logPanel",
+                onEnter: () => setPanelOpen("log", true),
+            },
+            {
+                id: "tools",
+                title: "Tools",
+                body: "Tools include diagnostics, debugger, inspector, and task controls for deeper workflows.",
+                target: "#toolsPanel",
+                onEnter: () => setPanelOpen("tools", true),
+            },
+            {
+                id: "search",
+                title: "Command Search",
+                body: "Search commands quickly here (or press Ctrl/Cmd+Shift+P).",
+                target: "#topCommandPaletteInput",
+            },
+            {
+                id: "status",
+                title: "Status",
+                body: "Status shows what the IDE is doing. Use it as a quick health signal while working.",
+                target: "#statusText",
+            },
+        ]),
+    }),
+});
+
+const tutorialState = {
+    tutorialId: DEFAULT_TUTORIAL_ID,
+    active: false,
+    index: 0,
+    highlightNode: null,
+    wired: false,
+    listenersWired: false,
+};
+
+function getTutorialIds() {
+    return Object.keys(TUTORIAL_DEFINITIONS);
+}
+
+function normalizeTutorialId(value = "", fallback = DEFAULT_TUTORIAL_ID) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (raw && TUTORIAL_DEFINITIONS[raw]) return raw;
+    return fallback;
+}
+
+function getTutorialDefinition(tutorialId = DEFAULT_TUTORIAL_ID) {
+    const resolvedId = normalizeTutorialId(tutorialId, DEFAULT_TUTORIAL_ID);
+    return TUTORIAL_DEFINITIONS[resolvedId] || TUTORIAL_DEFINITIONS[DEFAULT_TUTORIAL_ID];
+}
+
+function safeLocalStorageGet(key) {
+    try {
+        if (typeof localStorage === "undefined") return "";
+        return String(localStorage.getItem(String(key || "")) || "");
+    } catch {
+        return "";
+    }
+}
+
+function safeLocalStorageSet(key, value) {
+    try {
+        if (typeof localStorage === "undefined") return false;
+        localStorage.setItem(String(key || ""), String(value || ""));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function safeLocalStorageRemove(key) {
+    try {
+        if (typeof localStorage === "undefined") return false;
+        localStorage.removeItem(String(key || ""));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function isAutomationEnvironment() {
+    return typeof navigator !== "undefined" && Boolean(navigator.webdriver);
+}
+
+function getTutorialElements() {
+    if (typeof document === "undefined") return null;
+    const root = document.getElementById("tutorialIntro");
+    if (!root) return null;
+    return {
+        root,
+        highlight: document.getElementById("tutorialIntroHighlight"),
+        title: document.getElementById("tutorialIntroTitle"),
+        body: document.getElementById("tutorialIntroBody"),
+        progress: document.getElementById("tutorialIntroProgress"),
+        back: document.getElementById("tutorialIntroBack"),
+        next: document.getElementById("tutorialIntroNext"),
+        skip: document.getElementById("tutorialIntroSkip"),
+    };
+}
+
+function refreshTutorialHighlightPosition() {
+    const ui = getTutorialElements();
+    if (!ui?.highlight || !tutorialState.active || !(tutorialState.highlightNode instanceof HTMLElement)) {
+        if (ui?.highlight) {
+            ui.highlight.hidden = true;
+            ui.highlight.style.opacity = "0";
+        }
+        return false;
+    }
+
+    const rect = tutorialState.highlightNode.getBoundingClientRect();
+    const width = Math.max(0, Math.round(rect.width));
+    const height = Math.max(0, Math.round(rect.height));
+    if (width <= 0 || height <= 0) {
+        ui.highlight.hidden = true;
+        ui.highlight.style.opacity = "0";
+        return false;
+    }
+
+    const padding = 4;
+    const left = Math.max(0, Math.round(rect.left - padding));
+    const top = Math.max(0, Math.round(rect.top - padding));
+    const ringWidth = Math.round(width + (padding * 2));
+    const ringHeight = Math.round(height + (padding * 2));
+    ui.highlight.hidden = false;
+    ui.highlight.style.left = `${left}px`;
+    ui.highlight.style.top = `${top}px`;
+    ui.highlight.style.width = `${ringWidth}px`;
+    ui.highlight.style.height = `${ringHeight}px`;
+    ui.highlight.style.opacity = "1";
+    return true;
+}
+
+function clearTutorialHighlight() {
+    const ui = getTutorialElements();
+    if (ui?.highlight) {
+        ui.highlight.hidden = true;
+        ui.highlight.style.opacity = "0";
+    }
+    tutorialState.highlightNode = null;
+}
+
+function getTutorialSeen(tutorialId = tutorialState.tutorialId) {
+    const definition = getTutorialDefinition(tutorialId);
+    return safeLocalStorageGet(definition.seenKey) === "1";
+}
+
+function setTutorialSeen(value, tutorialId = tutorialState.tutorialId) {
+    const definition = getTutorialDefinition(tutorialId);
+    if (value) {
+        safeLocalStorageSet(definition.seenKey, "1");
+    } else {
+        safeLocalStorageRemove(definition.seenKey);
+    }
+}
+
+function renderTutorialStep() {
+    const ui = getTutorialElements();
+    if (!ui || !tutorialState.active) return false;
+    const definition = getTutorialDefinition(tutorialState.tutorialId);
+    const steps = Array.isArray(definition.steps) ? definition.steps : [];
+    const maxIndex = Math.max(0, steps.length - 1);
+    tutorialState.index = clamp(tutorialState.index, 0, maxIndex);
+    const step = steps[tutorialState.index];
+    if (!step) return false;
+
+    if (typeof step.onEnter === "function") {
+        try {
+            step.onEnter();
+        } catch {
+            // no-op
+        }
+    }
+
+    clearTutorialHighlight();
+    const target = typeof document !== "undefined" ? document.querySelector(step.target) : null;
+    if (target instanceof HTMLElement) {
+        tutorialState.highlightNode = target;
+        refreshTutorialHighlightPosition();
+        scheduleFrame(() => {
+            try {
+                target.scrollIntoView({ block: "nearest", inline: "nearest" });
+            } catch {
+                // no-op
+            }
+            refreshTutorialHighlightPosition();
+        });
+    } else {
+        refreshTutorialHighlightPosition();
+    }
+
+    if (ui.title) ui.title.textContent = step.title;
+    if (ui.body) ui.body.textContent = step.body;
+    if (ui.progress) ui.progress.textContent = `Step ${tutorialState.index + 1} of ${steps.length}`;
+    if (ui.back) ui.back.disabled = tutorialState.index <= 0;
+    if (ui.next) ui.next.textContent = tutorialState.index >= steps.length - 1 ? "Finish" : "Next";
+    return true;
+}
+
+function closeBeginnerTutorial({ markSeen = true, tutorialId = tutorialState.tutorialId } = {}) {
+    const ui = getTutorialElements();
+    tutorialState.active = false;
+    clearTutorialHighlight();
+    if (ui?.root) {
+        ui.root.hidden = true;
+        ui.root.setAttribute("aria-hidden", "true");
+    }
+    if (typeof document !== "undefined" && document.body) {
+        document.body.removeAttribute("data-tutorial-active");
+    }
+    if (markSeen) setTutorialSeen(true, tutorialId);
+}
+
+function moveBeginnerTutorial(delta = 1) {
+    if (!tutorialState.active) return false;
+    const definition = getTutorialDefinition(tutorialState.tutorialId);
+    const steps = Array.isArray(definition.steps) ? definition.steps : [];
+    const next = tutorialState.index + Number(delta || 0);
+    if (next < 0) return false;
+    if (next >= steps.length) {
+        closeBeginnerTutorial({ markSeen: true, tutorialId: tutorialState.tutorialId });
+        status.set("Tutorial complete");
+        logger.append("system", [String(definition.completeMessage || "Tutorial complete")]);
+        return true;
+    }
+    tutorialState.index = next;
+    return renderTutorialStep();
+}
+
+function openBeginnerTutorial({ force = false, tutorialId = DEFAULT_TUTORIAL_ID } = {}) {
+    const ui = getTutorialElements();
+    const resolvedId = normalizeTutorialId(tutorialId, DEFAULT_TUTORIAL_ID);
+    if (!ui) return false;
+    if (!force && isAutomationEnvironment()) return false;
+    if (!force && getTutorialSeen(resolvedId)) return false;
+    tutorialState.tutorialId = resolvedId;
+    tutorialState.active = true;
+    tutorialState.index = 0;
+    ui.root.hidden = false;
+    ui.root.setAttribute("aria-hidden", "false");
+    if (typeof document !== "undefined" && document.body) {
+        document.body.setAttribute("data-tutorial-active", "true");
+    }
+    renderTutorialStep();
+    status.set("Tutorial started");
+    return true;
+}
+
+function wireTutorialIntro() {
+    const ui = getTutorialElements();
+    if (!ui || tutorialState.wired) return;
+    ui.back?.addEventListener("click", () => {
+        moveBeginnerTutorial(-1);
+    });
+    ui.next?.addEventListener("click", () => {
+        moveBeginnerTutorial(1);
+    });
+    ui.skip?.addEventListener("click", () => {
+        closeBeginnerTutorial({ markSeen: true });
+        status.set("Tutorial skipped");
+    });
+
+    if (!tutorialState.listenersWired) {
+        window.addEventListener("resize", () => {
+            if (!tutorialState.active) return;
+            refreshTutorialHighlightPosition();
+        });
+        document.addEventListener("scroll", () => {
+            if (!tutorialState.active) return;
+            refreshTutorialHighlightPosition();
+        }, true);
+        tutorialState.listenersWired = true;
+    }
+
+    tutorialState.wired = true;
+}
+
 const health = {
     editor: el.healthEditor,
     sandbox: el.healthSandbox,
@@ -4986,6 +5295,8 @@ async function executeDevTerminalCommand(input = "") {
             "Commands: help, clear, status, run, format, save, save-all",
             "Commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
             `Commands: open <log|editor|files|sandbox|tools>, theme <${getSupportedThemeUsage()}>, files`,
+            "Commands: tutorial <start|reset|status>",
+            "Commands: tutorial list",
             "Commands: fresh-start confirm",
             "Safety: privileged/eval commands are disabled",
         ];
@@ -5058,6 +5369,39 @@ async function executeDevTerminalCommand(input = "") {
     if (command === "files") {
         appendDevTerminalEntry("info", `Workspace files: ${files.length} • folders: ${collectFolderPaths(files, folders).size} • trash: ${trashFiles.length}`);
         return true;
+    }
+
+    if (command === "tutorial") {
+        const sub = String(values[0] || "status").trim().toLowerCase();
+        const tutorialArg = String(values[1] || values[0] || "").trim().toLowerCase();
+        const targetTutorialId = normalizeTutorialId(tutorialArg || tutorialState.tutorialId || DEFAULT_TUTORIAL_ID, DEFAULT_TUTORIAL_ID);
+        if (sub === "list") {
+            appendDevTerminalEntry("info", `Available tutorials: ${getTutorialIds().join(", ")}`);
+            return true;
+        }
+        if (sub === "start") {
+            const requestedId = String(values[1] || DEFAULT_TUTORIAL_ID).trim().toLowerCase();
+            const resolvedId = normalizeTutorialId(requestedId, DEFAULT_TUTORIAL_ID);
+            const opened = openBeginnerTutorial({ force: true, tutorialId: resolvedId });
+            appendDevTerminalEntry(opened ? "info" : "warn", opened ? `Tutorial started: ${resolvedId}.` : "Tutorial UI unavailable.");
+            return opened;
+        }
+        if (sub === "reset") {
+            setTutorialSeen(false, targetTutorialId);
+            if (tutorialState.active && tutorialState.tutorialId === targetTutorialId) {
+                closeBeginnerTutorial({ markSeen: false, tutorialId: targetTutorialId });
+            }
+            appendDevTerminalEntry("info", `Tutorial reset: ${targetTutorialId}. Use 'tutorial start ${targetTutorialId}' to run from step 1.`);
+            return true;
+        }
+        if (sub === "status") {
+            const definition = getTutorialDefinition(tutorialState.tutorialId);
+            const steps = Array.isArray(definition.steps) ? definition.steps : [];
+            appendDevTerminalEntry("info", `Tutorial id: ${tutorialState.tutorialId} • active: ${tutorialState.active ? "yes" : "no"} • seen: ${getTutorialSeen(tutorialState.tutorialId) ? "yes" : "no"} • step: ${tutorialState.index + 1}/${steps.length}`);
+            return true;
+        }
+        appendDevTerminalEntry("warn", "Usage: tutorial <list|start [id]|reset [id]|status>");
+        return false;
     }
 
     if (["fresh-start", "factory-reset", "reset-all"].includes(command)) {
@@ -20759,6 +21103,30 @@ function exposeDebug() {
         openDevTerminal() {
             return focusDevTerminalInput({ openLog: true });
         },
+        startTutorial(tutorialId = DEFAULT_TUTORIAL_ID) {
+            const resolvedId = normalizeTutorialId(tutorialId, DEFAULT_TUTORIAL_ID);
+            return openBeginnerTutorial({ force: true, tutorialId: resolvedId });
+        },
+        resetTutorial(tutorialId = DEFAULT_TUTORIAL_ID) {
+            const resolvedId = normalizeTutorialId(tutorialId, DEFAULT_TUTORIAL_ID);
+            setTutorialSeen(false, resolvedId);
+            if (tutorialState.active && tutorialState.tutorialId === resolvedId) {
+                closeBeginnerTutorial({ markSeen: false, tutorialId: resolvedId });
+            }
+            return true;
+        },
+        getTutorialState() {
+            const definition = getTutorialDefinition(tutorialState.tutorialId);
+            const steps = Array.isArray(definition.steps) ? definition.steps : [];
+            return {
+                tutorialId: tutorialState.tutorialId,
+                availableTutorials: getTutorialIds(),
+                active: tutorialState.active,
+                seen: getTutorialSeen(tutorialState.tutorialId),
+                stepIndex: tutorialState.index,
+                totalSteps: steps.length,
+            };
+        },
         focusConsoleInput() {
             return focusConsoleInput({ openLog: true });
         },
@@ -20875,6 +21243,7 @@ function exposeDebug() {
                 "fazide.setEditorProfile('balanced'|'focus'|'presentation')",
                 "fazide.runTask('run-all'|'run-app'|'lint-workspace'|'format-active'|'save-all') / fazide.listTaskOutput()",
                 "fazide.openDevTerminal() / fazide.runDevTerminal('help')",
+                "fazide.startTutorial('beginner') / fazide.resetTutorial('beginner') / fazide.getTutorialState()",
                 "fazide.registerCommand({ id, label, run, keywords, shortcut }) / fazide.unregisterCommand(id)",
                 "fazide.registerSnippet({ trigger, template, scope }) / fazide.unregisterSnippet(trigger, scope?)",
                 "fazide.setDebugMode(true) / fazide.addBreakpoint(12) / fazide.addWatch('someVar')",
@@ -21049,6 +21418,7 @@ function exitRunnerFullscreen() {
 
 async function boot() {
     const recoveredStorageJournal = recoverStorageJournal();
+    wireTutorialIntro();
     loadLessonProfile();
     loadEditorSettings();
     renderEditorSyntaxThemeSelectOptions();
@@ -21195,6 +21565,10 @@ async function boot() {
         logger.append("system", ["Recovered workspace from snapshot backup."]);
         status.set("Recovered snapshot");
     }
+
+    scheduleFrame(() => {
+        openBeginnerTutorial({ force: false });
+    });
 
     // Autosave on edit
     // Notes:
@@ -22183,6 +22557,14 @@ async function boot() {
             if (e.key === "Escape") {
                 e.preventDefault();
                 cancelPromptDialog();
+            }
+            return;
+        }
+        if (tutorialState.active) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeBeginnerTutorial({ markSeen: true, tutorialId: tutorialState.tutorialId });
+                status.set("Tutorial skipped");
             }
             return;
         }

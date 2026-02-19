@@ -19,6 +19,37 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T17:45:00Z - Tutorial registry hardening + interference isolation pass
+
+- Date (UTC):
+- 2026-02-19T17:45:00Z
+- Area:
+- Onboarding architecture extensibility and cross-overlay input safety
+- Decision:
+- Refactored tutorial orchestration in `assets/js/app.js` from single-track constants to a registry model (`TUTORIAL_DEFINITIONS`) with normalized tutorial IDs, per-track seen keys, and optional-id command/API controls.
+- Added `tutorial list` and optional tutorial IDs for `tutorial start/reset` to make onboarding flows easier to extend without changing command contracts.
+- Moved tutorial keyboard control into the main global keydown handler so active tutorial mode cleanly short-circuits non-tutorial shortcuts and avoids overlay/input interference.
+- Added fallback architecture runbook `docs/TUTORIAL_SYSTEM.md` for recovery and future expansion.
+- Why:
+- User requested an interference-safe pass and a maintainable tutorial system that can scale to additional options with deterministic behavior.
+- Follow-up:
+- Keep tutorial expansions registry-first and require focused tutorial contracts plus `npm run test:quick` evidence before merging new tracks.
+
+## 2026-02-19T17:05:00Z - Beginner tutorial onboarding + fresh-start reset alignment
+
+- Date (UTC):
+- 2026-02-19T17:05:00Z
+- Area:
+- Onboarding UX determinism and reset-state safety
+- Decision:
+- Added a first-run beginner tutorial overlay flow in `assets/js/app.js` with explicit step state, target highlighting, and terminal-safe controls (`tutorial start|reset|status`).
+- Bound tutorial completion to key `fazide.tutorial.beginner.seen.v1` and aligned reset behavior so `fresh-start confirm` naturally clears this key with other `fazide.*` persisted data.
+- Exposed deterministic debug API methods (`startTutorial`, `resetTutorial`, `getTutorialState`) for contract-driven validation.
+- Why:
+- Beginner onboarding must start from step 1 on clean state and after explicit reset; deterministic command/API controls reduce flake and keep behavior auditable in tests.
+- Follow-up:
+- Keep tutorial command/help and reset-state behavior under focused `tests/ide.spec.js` contracts plus `test:integrity` and `test:memory` gates.
+
 ## 2026-02-19T16:25:00Z - C2 sandbox runtime status determinism contract closure
 
 - Date (UTC):

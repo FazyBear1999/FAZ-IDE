@@ -16,6 +16,20 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Completed tutorial system interference-hardening pass with extensible registry architecture and fallback operating doc.
+- Notable safety/infra updates: Reworked tutorial engine in `assets/js/app.js` to registry-based definitions with per-track seen state, optional tutorial IDs in Dev Terminal/API (`tutorial list`, `tutorial start/reset [id]`), and centralized keydown gating while tutorial is active to prevent shortcut/modal collisions; added fallback runbook `docs/TUTORIAL_SYSTEM.md`.
+- Validation status: Focused tutorial contracts passed (`npm run test -- --grep "dev terminal help stays aligned with safe runtime command scope|beginner tutorial reset restarts from the first step|beginner tutorial panel stays centered and highlight ring is visible|fresh-start confirm resets workspace and browser-persisted app state|boot exposes core fazide api surface"`), and full gate `npm run test:quick` passed (including Playwright 279/279).
+- Follow-up actions: Add advanced/deep-dive tutorial tracks by extending `TUTORIAL_DEFINITIONS` and preserve registry + interference contracts as mandatory guardrails.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
+- Summary: Added beginner tutorial onboarding flow with deterministic reset/start contracts and fresh-start key-clearing coverage.
+- Notable safety/infra updates: Added tutorial overlay runtime wiring in `assets/js/app.js`, terminal command surface `tutorial <start|reset|status>`, and debug API methods (`startTutorial`, `resetTutorial`, `getTutorialState`); updated `tests/ide.spec.js` to verify tutorial command help presence, reset-to-step-1 behavior, and fresh-start removal of `fazide.tutorial.beginner.seen.v1`.
+- Validation status: `npm run test -- --grep "boot exposes core fazide api surface|dev terminal help stays aligned with safe runtime command scope|beginner tutorial reset restarts from the first step|fresh-start confirm resets workspace and browser-persisted app state"` passed (4/4), `npm run test:integrity` passed, and `npm run test:memory` passed.
+- Follow-up actions: Add advanced tutorial/deep-dive flow in a separate slice and keep beginner onboarding deterministic under focused contracts.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Closed C2 sandbox runtime status determinism gap with explicit JS/HTML/CSS status-marker pairing contract.
 - Notable safety/infra updates: Added focused runtime test in `tests/ide.spec.js` that executes runtime JS/HTML/CSS applications, asserts run-status health, and verifies deterministic per-template markers across console/sandbox outputs.
 - Validation status: `npx playwright test --config config/playwright.config.js --grep 'sandbox runtime status and markers remain deterministic for JS HTML and CSS templates' tests/ide.spec.js` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and full project check `npm run test:all` passed.
