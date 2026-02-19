@@ -36,8 +36,7 @@ body[data-tutorial-active="true"] {
     position: fixed;
     inset: 0;
     z-index: 1650;
-    display: grid;
-    place-items: center;
+    display: block;
     pointer-events: auto;
 }
 
@@ -48,15 +47,15 @@ body[data-tutorial-active="true"] {
 .tutorial-intro-backdrop {
     position: absolute;
     inset: 0;
-    background: var(--overlay-backdrop);
+    background: transparent;
     pointer-events: auto;
 }
 
 .tutorial-intro-highlight {
     position: fixed;
-    border: 1px solid var(--accent-info);
-    border-radius: 2px;
-    box-shadow: 0 0 0 2px var(--ring-focus), 0 0 14px var(--ring-focus);
+    border: 2px solid var(--accent-info);
+    border-radius: 3px;
+    box-shadow: 0 0 0 9999px var(--overlay-backdrop), 0 0 0 4px var(--ring-focus), 0 0 26px var(--accent-info);
     pointer-events: none;
     z-index: 1;
     opacity: 0;
@@ -65,14 +64,18 @@ body[data-tutorial-active="true"] {
 
 .tutorial-intro-panel {
     pointer-events: auto;
-    position: relative;
+    position: fixed;
     z-index: 2;
-    width: min(420px, calc(100vw - 32px));
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(440px, calc(100vw - 32px));
     border: 1px solid var(--border-strong);
     background: var(--surface-panel);
     border-radius: 0;
     padding: 14px;
     box-shadow: var(--menu-shadow);
+    transition: left var(--motion-fast) var(--motion-ease), top var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .tutorial-intro-eyebrow {
@@ -81,22 +84,35 @@ body[data-tutorial-active="true"] {
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-muted-quiet);
+    font-family: var(--font);
 }
 
 .tutorial-intro-title {
     margin: 6px 0;
     font-size: 18px;
+    font-family: var(--font);
+    letter-spacing: 0.02em;
 }
 
 .tutorial-intro-body {
     margin: 0 0 10px;
     color: var(--text-muted-soft);
+    min-height: 2.5em;
+    font-family: var(--font);
+}
+
+.tutorial-intro-body[data-typing="true"]::after {
+    content: "▋";
+    margin-left: 2px;
+    color: var(--accent-info);
+    animation: tutorial-caret-blink 0.7s steps(2, end) infinite;
 }
 
 .tutorial-intro-progress {
     margin: 0 0 10px;
     color: var(--muted);
     font-size: 12px;
+    font-family: var(--font);
 }
 
 .tutorial-intro-actions {
@@ -106,6 +122,17 @@ body[data-tutorial-active="true"] {
 
 .tutorial-intro-actions button {
     border-radius: 0;
+    font-family: var(--font);
+}
+
+@keyframes tutorial-caret-blink {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
 }
 
 /* Splitters */

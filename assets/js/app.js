@@ -143,10 +143,33 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
                 onEnter: () => setPanelOpen("files", true),
             },
             {
+                id: "file-filter",
+                title: "File Filter",
+                body: "Use this filter to instantly narrow your workspace by file name while you type.",
+                target: "#fileSearch",
+                reveal: { filesFilters: true },
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
+                id: "file-actions",
+                title: "Files Actions",
+                body: "Open this menu for create, folder, import/export, undo/redo, trash, and selection operations.",
+                target: "#filesMenu",
+                reveal: { filesMenu: true },
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
                 id: "editor",
                 title: "Editor",
                 body: "Write and edit code here. Use shortcuts like Ctrl/Cmd+S to save and Ctrl/Cmd+Enter to run.",
                 target: "#editorPanel",
+                onEnter: () => setPanelOpen("editor", true),
+            },
+            {
+                id: "editor-tabs",
+                title: "Open File Tabs",
+                body: "Tabs show your currently open files, so you can move between files quickly.",
+                target: "#editorTabs",
                 onEnter: () => setPanelOpen("editor", true),
             },
             {
@@ -157,10 +180,45 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
                 onEnter: () => setPanelOpen("sandbox", true),
             },
             {
+                id: "format",
+                title: "Format",
+                body: "Format keeps your active file clean and consistent before running or saving.",
+                target: "#format",
+                onEnter: () => setPanelOpen("editor", true),
+            },
+            {
+                id: "editor-tools",
+                title: "Editor Tools",
+                body: "These buttons open Find, Symbols, Project Search, Split view, History, and Settings workflows.",
+                target: ".editor-pro-buttons",
+                onEnter: () => setPanelOpen("editor", true),
+            },
+            {
+                id: "sandbox",
+                title: "Sandbox Preview",
+                body: "This is your live run result. Use it to validate UI and behavior immediately after each run.",
+                target: "#runnerShell",
+                onEnter: () => setPanelOpen("sandbox", true),
+            },
+            {
+                id: "sandbox-actions",
+                title: "Sandbox Actions",
+                body: "Pop out for a separate window or expand for a larger local preview.",
+                target: "#popoutSandbox",
+                onEnter: () => setPanelOpen("sandbox", true),
+            },
+            {
                 id: "console",
                 title: "Console",
                 body: "Console shows logs, warnings, and errors from your runs.",
                 target: "#logPanel",
+                onEnter: () => setPanelOpen("log", true),
+            },
+            {
+                id: "console-actions",
+                title: "Console Actions",
+                body: "Use Copy and Clear to manage output while debugging run-by-run.",
+                target: "#copyLog",
                 onEnter: () => setPanelOpen("log", true),
             },
             {
@@ -171,16 +229,62 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
                 onEnter: () => setPanelOpen("tools", true),
             },
             {
+                id: "tools-tabs",
+                title: "Tools Tabs",
+                body: "Switch between Task Runner, Diagnostics, Inspector, and Debugger from this tab row.",
+                target: "#toolsTabs",
+                onEnter: () => setPanelOpen("tools", true),
+            },
+            {
+                id: "task-actions",
+                title: "Task Runner",
+                body: "Use task shortcuts here to run app-level checks and formatting workflows quickly.",
+                target: "#taskRunnerPanel",
+                reveal: { toolsTab: "task-runner" },
+                onEnter: () => setPanelOpen("tools", true),
+            },
+            {
                 id: "search",
                 title: "Command Search",
                 body: "Search commands quickly here (or press Ctrl/Cmd+Shift+P).",
                 target: "#topCommandPaletteInput",
             },
             {
+                id: "search-results",
+                title: "Command Results",
+                body: "As you type, matching commands appear in this dropdown so you can run actions quickly.",
+                target: "#topCommandPaletteMenu",
+                reveal: { topCommandMenu: true },
+            },
+            {
+                id: "theme",
+                title: "Theme Selector",
+                body: "Change visual theme instantly to match your workflow and readability preference.",
+                target: "#themeSelect",
+            },
+            {
+                id: "layout",
+                title: "Layout Controls",
+                body: "Open Layout to tune panel sizes, docking behavior, and workspace shape.",
+                target: "#layoutToggle",
+            },
+            {
                 id: "status",
                 title: "Status",
                 body: "Status shows what the IDE is doing. Use it as a quick health signal while working.",
                 target: "#statusText",
+            },
+            {
+                id: "footer-runtime",
+                title: "Footer Runtime Signals",
+                body: "Footer runtime indicators summarize editor, sandbox, problems, storage, and zoom at a glance.",
+                target: "#footerRuntimeStatus",
+            },
+            {
+                id: "footer-editor",
+                title: "Footer Editor Signals",
+                body: "Editor footer stats track file name, cursor position, selection, and save state while coding.",
+                target: "#footerEditorStatus",
             },
         ]),
     }),
@@ -190,9 +294,12 @@ const tutorialState = {
     tutorialId: DEFAULT_TUTORIAL_ID,
     active: false,
     index: 0,
+    stepId: "",
     highlightNode: null,
     wired: false,
     listenersWired: false,
+    typewriterTimer: null,
+    typewriterToken: 0,
 };
 
 function getTutorialIds() {
@@ -250,6 +357,7 @@ function getTutorialElements() {
     return {
         root,
         highlight: document.getElementById("tutorialIntroHighlight"),
+        panel: root.querySelector(".tutorial-intro-panel"),
         title: document.getElementById("tutorialIntroTitle"),
         body: document.getElementById("tutorialIntroBody"),
         progress: document.getElementById("tutorialIntroProgress"),
@@ -257,6 +365,162 @@ function getTutorialElements() {
         next: document.getElementById("tutorialIntroNext"),
         skip: document.getElementById("tutorialIntroSkip"),
     };
+}
+
+function clearTutorialTypewriter() {
+    tutorialState.typewriterToken += 1;
+    if (tutorialState.typewriterTimer != null) {
+        clearInterval(tutorialState.typewriterTimer);
+        tutorialState.typewriterTimer = null;
+    }
+}
+
+function setTutorialBodyTypewriter(text = "") {
+    const ui = getTutorialElements();
+    if (!ui?.body) return;
+    const content = String(text || "");
+    clearTutorialTypewriter();
+    if (!content) {
+        ui.body.textContent = "";
+        ui.body.removeAttribute("data-typing");
+        return;
+    }
+    const localToken = tutorialState.typewriterToken;
+    ui.body.textContent = "";
+    ui.body.setAttribute("data-typing", "true");
+    let index = 0;
+    tutorialState.typewriterTimer = setInterval(() => {
+        if (localToken !== tutorialState.typewriterToken) {
+            clearInterval(tutorialState.typewriterTimer);
+            tutorialState.typewriterTimer = null;
+            return;
+        }
+        index += 1;
+        ui.body.textContent = content.slice(0, index);
+        if (index >= content.length) {
+            clearInterval(tutorialState.typewriterTimer);
+            tutorialState.typewriterTimer = null;
+            ui.body.removeAttribute("data-typing");
+        }
+    }, 14);
+}
+
+function rectsOverlap(a, b, gap = 0) {
+    if (!a || !b) return false;
+    return !(
+        a.right + gap <= b.left
+        || a.left >= b.right + gap
+        || a.bottom + gap <= b.top
+        || a.top >= b.bottom + gap
+    );
+}
+
+function updateTutorialPanelPosition() {
+    const ui = getTutorialElements();
+    const panel = ui?.panel;
+    if (!panel) return false;
+
+    const viewportWidth = Math.max(0, window.innerWidth || document.documentElement.clientWidth || 0);
+    const viewportHeight = Math.max(0, window.innerHeight || document.documentElement.clientHeight || 0);
+    const margin = 12;
+    const gap = 12;
+
+    panel.style.left = `${Math.round(viewportWidth / 2)}px`;
+    panel.style.top = `${Math.round(viewportHeight / 2)}px`;
+    panel.setAttribute("data-placement", "center");
+
+    const panelRect = panel.getBoundingClientRect();
+    const panelWidth = Math.max(0, Math.round(panelRect.width));
+    const panelHeight = Math.max(0, Math.round(panelRect.height));
+    if (panelWidth <= 0 || panelHeight <= 0) return false;
+
+    const clampLeft = (value) => clamp(value, margin + (panelWidth / 2), viewportWidth - margin - (panelWidth / 2));
+    const clampTop = (value) => clamp(value, margin + (panelHeight / 2), viewportHeight - margin - (panelHeight / 2));
+
+    if (!(tutorialState.highlightNode instanceof HTMLElement)) {
+        panel.style.left = `${Math.round(clampLeft(viewportWidth / 2))}px`;
+        panel.style.top = `${Math.round(clampTop(viewportHeight / 2))}px`;
+        panel.setAttribute("data-placement", "center");
+        return true;
+    }
+
+    const targetRect = tutorialState.highlightNode.getBoundingClientRect();
+    const candidates = [
+        {
+            placement: "right",
+            left: clampLeft(targetRect.right + gap + (panelWidth / 2)),
+            top: clampTop(targetRect.top + (panelHeight / 2)),
+        },
+        {
+            placement: "left",
+            left: clampLeft(targetRect.left - gap - (panelWidth / 2)),
+            top: clampTop(targetRect.top + (panelHeight / 2)),
+        },
+        {
+            placement: "bottom",
+            left: clampLeft(targetRect.left + (panelWidth / 2)),
+            top: clampTop(targetRect.bottom + gap + (panelHeight / 2)),
+        },
+        {
+            placement: "top",
+            left: clampLeft(targetRect.left + (panelWidth / 2)),
+            top: clampTop(targetRect.top - gap - (panelHeight / 2)),
+        },
+        {
+            placement: "center",
+            left: clampLeft(viewportWidth / 2),
+            top: clampTop(viewportHeight / 2),
+        },
+    ];
+
+    const highlightedRect = {
+        left: targetRect.left,
+        top: targetRect.top,
+        right: targetRect.right,
+        bottom: targetRect.bottom,
+    };
+
+    const chosen = candidates.find((candidate) => {
+        const rect = {
+            left: candidate.left - (panelWidth / 2),
+            right: candidate.left + (panelWidth / 2),
+            top: candidate.top - (panelHeight / 2),
+            bottom: candidate.top + (panelHeight / 2),
+        };
+        return !rectsOverlap(rect, highlightedRect, 10);
+    }) || candidates[candidates.length - 1];
+
+    panel.style.left = `${Math.round(chosen.left)}px`;
+    panel.style.top = `${Math.round(chosen.top)}px`;
+    panel.setAttribute("data-placement", chosen.placement);
+    return true;
+}
+
+function resetTutorialStepReveals() {
+    closeFileMenus();
+    setTopCommandPaletteOpen(false);
+    setCommandPaletteOpen(false, { focusInput: false });
+    setQuickOpenOpen(false);
+    setLayoutPanelOpen(false);
+    setEditorSettingsOpen(false);
+    setShortcutHelpOpen(false);
+    setLessonStatsOpen(false);
+}
+
+function applyTutorialStepReveal(step) {
+    const reveal = step?.reveal;
+    if (!reveal || typeof reveal !== "object") return;
+    if (reveal.filesFilters === true) setFilesFiltersOpen(true);
+    if (reveal.filesMenu === true && el.filesMenuButton) openFilesMenu(el.filesMenuButton);
+    if (reveal.topCommandMenu === true) setTopCommandPaletteOpen(true);
+    if (reveal.layoutPanel === true) setLayoutPanelOpen(true);
+    if (reveal.editorSettings === true) setEditorSettingsOpen(true);
+    if (reveal.shortcutHelp === true) setShortcutHelpOpen(true);
+    if (reveal.lessonStats === true) setLessonStatsOpen(true);
+    if (reveal.quickOpen === true) setQuickOpenOpen(true);
+    if (reveal.commandPalette === true) setCommandPaletteOpen(true, { focusInput: false });
+    if (typeof reveal.toolsTab === "string") setToolsTab(reveal.toolsTab);
+    if (typeof reveal.consoleView === "string") setConsoleView(reveal.consoleView);
 }
 
 function refreshTutorialHighlightPosition() {
@@ -289,6 +553,7 @@ function refreshTutorialHighlightPosition() {
     ui.highlight.style.width = `${ringWidth}px`;
     ui.highlight.style.height = `${ringHeight}px`;
     ui.highlight.style.opacity = "1";
+    updateTutorialPanelPosition();
     return true;
 }
 
@@ -299,6 +564,7 @@ function clearTutorialHighlight() {
         ui.highlight.style.opacity = "0";
     }
     tutorialState.highlightNode = null;
+    updateTutorialPanelPosition();
 }
 
 function getTutorialSeen(tutorialId = tutorialState.tutorialId) {
@@ -324,6 +590,10 @@ function renderTutorialStep() {
     tutorialState.index = clamp(tutorialState.index, 0, maxIndex);
     const step = steps[tutorialState.index];
     if (!step) return false;
+
+    tutorialState.stepId = String(step.id || "");
+    resetTutorialStepReveals();
+    applyTutorialStepReveal(step);
 
     if (typeof step.onEnter === "function") {
         try {
@@ -351,20 +621,32 @@ function renderTutorialStep() {
     }
 
     if (ui.title) ui.title.textContent = step.title;
-    if (ui.body) ui.body.textContent = step.body;
+    setTutorialBodyTypewriter(step.body);
     if (ui.progress) ui.progress.textContent = `Step ${tutorialState.index + 1} of ${steps.length}`;
     if (ui.back) ui.back.disabled = tutorialState.index <= 0;
     if (ui.next) ui.next.textContent = tutorialState.index >= steps.length - 1 ? "Finish" : "Next";
+    updateTutorialPanelPosition();
     return true;
 }
 
 function closeBeginnerTutorial({ markSeen = true, tutorialId = tutorialState.tutorialId } = {}) {
     const ui = getTutorialElements();
     tutorialState.active = false;
+    tutorialState.stepId = "";
+    clearTutorialTypewriter();
     clearTutorialHighlight();
+    resetTutorialStepReveals();
     if (ui?.root) {
         ui.root.hidden = true;
         ui.root.setAttribute("aria-hidden", "true");
+    }
+    if (ui?.panel) {
+        ui.panel.style.left = "";
+        ui.panel.style.top = "";
+        ui.panel.setAttribute("data-placement", "center");
+    }
+    if (ui?.body) {
+        ui.body.removeAttribute("data-typing");
     }
     if (typeof document !== "undefined" && document.body) {
         document.body.removeAttribute("data-tutorial-active");
@@ -397,6 +679,7 @@ function openBeginnerTutorial({ force = false, tutorialId = DEFAULT_TUTORIAL_ID 
     tutorialState.tutorialId = resolvedId;
     tutorialState.active = true;
     tutorialState.index = 0;
+    tutorialState.stepId = "";
     ui.root.hidden = false;
     ui.root.setAttribute("aria-hidden", "false");
     if (typeof document !== "undefined" && document.body) {
@@ -425,10 +708,12 @@ function wireTutorialIntro() {
         window.addEventListener("resize", () => {
             if (!tutorialState.active) return;
             refreshTutorialHighlightPosition();
+            updateTutorialPanelPosition();
         });
         document.addEventListener("scroll", () => {
             if (!tutorialState.active) return;
             refreshTutorialHighlightPosition();
+            updateTutorialPanelPosition();
         }, true);
         tutorialState.listenersWired = true;
     }

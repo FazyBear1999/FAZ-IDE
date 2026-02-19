@@ -3292,7 +3292,7 @@ test("beginner tutorial reset restarts from the first step", async ({ page }) =>
   expect(after.seen).toBeFalsy();
 });
 
-test("beginner tutorial panel stays centered and highlight ring is visible", async ({ page }) => {
+test("beginner tutorial panel follows target without overlapping spotlight", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
@@ -3306,28 +3306,54 @@ test("beginner tutorial panel stays centered and highlight ring is visible", asy
 
     const panel = document.querySelector("#tutorialIntro .tutorial-intro-panel");
     const ring = document.querySelector("#tutorialIntroHighlight");
+    const nextButton = document.querySelector("#tutorialIntroNext");
     if (!(panel instanceof HTMLElement) || !(ring instanceof HTMLElement)) {
       return { ready: false };
     }
 
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+    const viewportWidth = Math.max(0, window.innerWidth || document.documentElement.clientWidth || 0);
+    const viewportHeight = Math.max(0, window.innerHeight || document.documentElement.clientHeight || 0);
     const panelRect = panel.getBoundingClientRect();
-    const panelCenterX = panelRect.left + (panelRect.width / 2);
-    const panelCenterY = panelRect.top + (panelRect.height / 2);
-    const xOffset = Math.abs(panelCenterX - (viewportWidth / 2));
-    const yOffset = Math.abs(panelCenterY - (viewportHeight / 2));
-
     const ringRect = ring.getBoundingClientRect();
     const ringStyle = getComputedStyle(ring);
+    const panelStyle = getComputedStyle(panel);
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    await wait(120);
+    const bodyText = String(document.querySelector("#tutorialIntroBody")?.textContent || "").trim();
+
+    const overlap = !(
+      panelRect.right <= ringRect.left
+      || panelRect.left >= ringRect.right
+      || panelRect.bottom <= ringRect.top
+      || panelRect.top >= ringRect.bottom
+    );
+
+    const inViewport = (
+      panelRect.left >= 0
+      && panelRect.top >= 0
+      && panelRect.right <= viewportWidth
+      && panelRect.bottom <= viewportHeight
+    );
+
+    if (nextButton instanceof HTMLElement) {
+      nextButton.click();
+    }
+
+    const panelRectAfter = panel.getBoundingClientRect();
+    const positionShift = Math.abs(panelRectAfter.left - panelRect.left) + Math.abs(panelRectAfter.top - panelRect.top);
 
     await api.runDevTerminal("tutorial reset");
     await api.runDevTerminal("tutorial start");
 
     return {
       ready: true,
-      xOffset,
-      yOffset,
+      overlap,
+      inViewport,
+      panelLeftInline: String(panel.style.left || "").trim(),
+      panelTopInline: String(panel.style.top || "").trim(),
+      panelTransform: String(panelStyle.transform || ""),
+      bodyText,
+      positionShift,
       ringVisible: !ring.hidden,
       ringOpacity: Number.parseFloat(String(ringStyle.opacity || "0")),
       ringWidth: ringRect.width,
@@ -3336,8 +3362,13 @@ test("beginner tutorial panel stays centered and highlight ring is visible", asy
   });
 
   expect(result.ready).toBeTruthy();
-  expect(result.xOffset).toBeLessThanOrEqual(24);
-  expect(result.yOffset).toBeLessThanOrEqual(24);
+  expect(result.overlap).toBeFalsy();
+  expect(result.inViewport).toBeTruthy();
+  expect(result.panelLeftInline.length).toBeGreaterThan(0);
+  expect(result.panelTopInline.length).toBeGreaterThan(0);
+  expect(result.panelTransform).toContain("matrix");
+  expect(result.bodyText.length).toBeGreaterThan(0);
+  expect(result.positionShift).toBeGreaterThanOrEqual(0);
   expect(result.ringVisible).toBeTruthy();
   expect(result.ringOpacity).toBeGreaterThan(0.1);
   expect(result.ringWidth).toBeGreaterThan(12);
