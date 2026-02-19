@@ -87,6 +87,7 @@ test("a11y contract: important aria-controls targets exist", async ({ page }) =>
     ["#filesMenuButton", "filesMenu"],
     ["#gamesSelectorToggle", "gamesList"],
     ["#appsSelectorToggle", "applicationsList"],
+    ["#lessonsSelectorToggle", "lessonsList"],
   ];
 
   for (const [selector, targetId] of idPairs) {

@@ -54,8 +54,15 @@ test("file contract: library toggles map to listbox controls", async ({ page }) 
   await expect(page.locator("#applicationsList")).toHaveAttribute("role", "listbox");
   await expect(page.locator("#applicationsList")).toHaveAttribute("aria-hidden", "true");
 
+  await expect(page.locator("#lessonsSelectorToggle")).toHaveAttribute("aria-controls", "lessonsList");
+  await expect(page.locator("#lessonsSelectorToggle")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#lessonsSelectorToggle")).toHaveAttribute("data-files-section-id", "lessons");
+  await expect(page.locator("#lessonsList")).toHaveAttribute("role", "listbox");
+  await expect(page.locator("#lessonsList")).toHaveAttribute("aria-hidden", "true");
+
   await expect(page.locator("#gameLoad")).toBeHidden();
   await expect(page.locator("#appLoad")).toBeHidden();
+  await expect(page.locator("#lessonLoad")).toBeHidden();
 });
 
 test("file contract: files menu starts closed and opens from button", async ({ page }) => {
@@ -137,6 +144,7 @@ test("file contract: files view toggles expose expected default pressed state", 
     filters: "false",
     games: "false",
     applications: "false",
+    lessons: "false",
     "open-editors": "true",
     files: "true",
     trash: "false",

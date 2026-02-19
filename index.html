@@ -177,6 +177,25 @@
                                         <button id="appLoad" type="button" title="Load selected application into editor" hidden>LOAD</button>
                                     </div>
                                 </div>
+                                <div id="filesLessons" class="files-games files-lessons" aria-label="Lessons library">
+                                    <div class="files-games-row files-lessons-row">
+                                        <button
+                                            id="lessonsSelectorToggle"
+                                            type="button"
+                                            class="file-section-toggle files-games-toggle files-lessons-toggle"
+                                            data-caret-side="left"
+                                            data-files-section-id="lessons"
+                                            draggable="true"
+                                            aria-expanded="false"
+                                            aria-controls="lessonsList"
+                                        >
+                                            <span class="file-section-caret" aria-hidden="true"></span>
+                                            <span class="file-section-label">Lessons</span>
+                                        </button>
+                                        <ul id="lessonsList" class="files-games-list files-lessons-list" role="listbox" aria-label="Available lessons" aria-hidden="true"></ul>
+                                        <button id="lessonLoad" type="button" title="Load selected lesson into editor" hidden>LOAD</button>
+                                    </div>
+                                </div>
                                 <ul id="fileList" class="file-list" role="listbox" aria-label="Saved files"></ul>
                                 <div id="filesMenu" class="files-menu" role="menu" aria-hidden="true">
                                     <section class="files-menu-group" aria-label="File actions">
@@ -233,6 +252,7 @@
                                             <button type="button" class="files-menu-item" data-files-toggle="filters" aria-pressed="false">Filters</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="games" aria-pressed="false">Games</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="applications" aria-pressed="false">Apps</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="lessons" aria-pressed="false">Lessons</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="open-editors" aria-pressed="true">Editors</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="files" aria-pressed="true">Files</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="trash" aria-pressed="false">Trash</button>
@@ -291,6 +311,13 @@
                                     <div id="editorScopeTrail" class="editor-scope-trail" role="navigation" aria-label="Current editor scope"></div>
                                 </div>
                                 <div class="editor-pane">
+                                    <div id="lessonHud" class="lesson-hud" data-active="false" aria-live="polite" aria-label="Lesson progress" hidden>
+                                        <span id="lessonHudStep" class="lesson-hud-chip">Lesson</span>
+                                        <span id="lessonHudProgress" class="lesson-hud-chip">0/0</span>
+                                        <span id="lessonHudLevel" class="lesson-hud-chip">Lv 1</span>
+                                        <span id="lessonHudXp" class="lesson-hud-chip">XP 0</span>
+                                        <span id="lessonHudStreak" class="lesson-hud-chip">Streak 0</span>
+                                    </div>
                                     <textarea id="editor" spellcheck="false" aria-label="Code editor"></textarea>
                                     <pre id="editorMirror" class="editor-mirror" aria-label="Saved version preview"></pre>
                                     <div id="editorSignatureHint" class="editor-signature-hint" data-visible="false" aria-hidden="true" aria-live="polite"></div>

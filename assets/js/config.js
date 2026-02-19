@@ -33,6 +33,8 @@ export const STORAGE = {
     EDITOR_SETTINGS: "fazide.editor-settings.v1",
     EDITOR_HISTORY: "fazide.editor-history.v1",
     SNIPPETS: "fazide.snippets.v1",
+    LESSON_PROFILE: "fazide.lesson-profile.v1",
+    LESSON_SESSION: "fazide.lesson-session.v1",
     DEV_TERMINAL_SECRET_HASH: "fazide.dev-terminal-secret-hash.v1",
 };
 
@@ -208,6 +210,20 @@ export const APPLICATIONS = [
             { path: "app.js", src: "./assets/apps/geometry-lab/app.js" },
         ],
         entryFile: "app.js",
+    },
+];
+
+export const LESSONS = [
+    {
+        id: "paddle-lesson-1",
+        name: "Lesson: Paddle Intro (Typing)",
+        icon: buildThemedIcon("1f3d3"),
+        files: [
+            { path: "index.html", src: "./assets/lessons/paddle-lesson-1/index.html" },
+            { path: "styles.css", src: "./assets/lessons/paddle-lesson-1/styles.css" },
+            { path: "game.js", src: "./assets/lessons/paddle-lesson-1/game.js" },
+        ],
+        entryFile: "game.js",
     },
 ];
 

@@ -22,10 +22,11 @@ export const DEFAULT_LAYOUT_STATE = {
     filesFiltersOpen: false,
     filesGamesOpen: true,
     filesAppsOpen: true,
+    filesLessonsOpen: true,
     filesOpenEditorsOpen: true,
     filesListOpen: true,
     filesTrashOpen: false,
-    filesSectionOrder: ["open-editors", "files", "games", "applications"],
+    filesSectionOrder: ["open-editors", "files", "games", "applications", "lessons"],
 };
 
 export const LAYOUT_PRESETS = {
@@ -224,7 +225,7 @@ export const LAYOUT_PRESETS = {
 };
 
 const ALL_PANELS = ["files", "editor", "sandbox", "log", "tools"];
-const ALL_FILES_SECTIONS = ["games", "applications", "open-editors", "files"];
+const ALL_FILES_SECTIONS = ["games", "applications", "lessons", "open-editors", "files"];
 
 export function normalizePanelRows(rows) {
     const top = Array.isArray(rows?.top) ? rows.top : [];

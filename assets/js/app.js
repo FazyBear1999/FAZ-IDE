@@ -16,7 +16,7 @@
 // - Any execution behavior must stay in sandbox/* (isolated + testable).
 // - Keeping IDs centralized + fail-fast checks makes HTML refactors safe.
 
-import { APP, STORAGE, DEFAULT_CODE, DEFAULT_WELCOME_FILES, GAMES, APPLICATIONS } from "./config.js";
+import { APP, STORAGE, DEFAULT_CODE, DEFAULT_WELCOME_FILES, GAMES, APPLICATIONS, LESSONS } from "./config.js";
 import { getRequiredElements } from "./ui/elements.js";
 import { load, save, saveBatchAtomic, recoverStorageJournal, getStorageJournalState, getStorageBackendInfo, STORAGE_JOURNAL_KEY } from "./ui/store.js";
 import { makeLogger } from "./ui/logger.js";
@@ -38,6 +38,7 @@ import { createCommandRegistry } from "./core/commandRegistry.js";
 import { createStateBoundaries } from "./core/stateBoundaries.js";
 import { solvePanelRows } from "./core/layoutEngine.js";
 import { rowsToPanelLayout, panelLayoutToRows, normalizePanelLayout } from "./core/panelLayoutModel.js";
+import { parseLessonSteps, normalizeLessonInputChar } from "./core/lessonEngine.js";
 import {
     splitLeafExtension,
     collapseDuplicateTerminalExtension,
@@ -269,7 +270,7 @@ let fileFilter = "";
 let fileSort = "manual";
 const FILE_ROW_SELECTOR = ".file-row[data-file-id]";
 const FILE_FOLDER_ROW_SELECTOR = ".file-folder-row[data-folder-toggle]";
-const FILES_REORDERABLE_SECTIONS = new Set(["games", "applications", "open-editors", "files"]);
+const FILES_REORDERABLE_SECTIONS = new Set(["games", "applications", "lessons", "open-editors", "files"]);
 const HORIZONTAL_HEADER_SCROLL_SELECTOR = ".top, .card-hd, .files-header, .layout-header, .editor-header";
 let fileMenuTargetId = null;
 let openTabIds = [];
@@ -1737,10 +1738,30 @@ let fileHistoryIndex = -1;
 let historyDepth = 0;
 const games = normalizeGames(GAMES);
 const applications = normalizeApplications(APPLICATIONS);
+const lessons = normalizeLessons(LESSONS);
+const LESSON_XP_PER_CHAR = 1;
+const LESSON_XP_STEP_COMPLETE = 12;
+const LESSON_XP_LESSON_COMPLETE = 80;
+const LESSON_XP_PERFECT_BONUS = 30;
 let selectedGameId = games[0]?.id ?? "";
 let gamesSelectorOpen = false;
 let selectedApplicationId = applications[0]?.id ?? "";
 let applicationsSelectorOpen = false;
+let selectedLessonId = lessons[0]?.id ?? "";
+let lessonsSelectorOpen = false;
+let lessonSession = null;
+let lessonProfileDirtyWrites = 0;
+let lessonSessionDirtyWrites = 0;
+let lessonProfile = {
+    xp: 0,
+    level: 1,
+    totalTypedChars: 0,
+    lessonsCompleted: 0,
+    bestStreak: 0,
+    currentStreak: 0,
+    dailyStreak: 0,
+    lastActiveDay: "",
+};
 let openFileMenu = null;
 let folderMenuTargetPath = null;
 let dragFileId = null;
@@ -2425,6 +2446,7 @@ function applyFilesLayout() {
         el.filesPanel.setAttribute("data-filters", layoutState.filesFiltersOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-games", layoutState.filesGamesOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-apps", layoutState.filesAppsOpen ? "open" : "closed");
+        el.filesPanel.setAttribute("data-lessons", layoutState.filesLessonsOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-open-editors", layoutState.filesOpenEditorsOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-files-list", layoutState.filesListOpen ? "open" : "closed");
         el.filesPanel.setAttribute("data-trash", layoutState.filesTrashOpen ? "open" : "closed");
@@ -2434,6 +2456,7 @@ function applyFilesLayout() {
     }
     syncGamesUI();
     syncApplicationsUI();
+    syncLessonsUI();
     queueFilesColumnGutterSync();
 }
 
@@ -2484,6 +2507,13 @@ function setFilesGamesOpen(open) {
 
 function setFilesAppsOpen(open) {
     layoutState.filesAppsOpen = Boolean(open);
+    applyFilesLayout();
+    persistLayout();
+    renderFileList();
+}
+
+function setFilesLessonsOpen(open) {
+    layoutState.filesLessonsOpen = Boolean(open);
     applyFilesLayout();
     persistLayout();
     renderFileList();
@@ -2898,6 +2928,7 @@ function sanitizeLayoutState(state = {}) {
     next.filesFiltersOpen = state.filesFiltersOpen !== undefined ? Boolean(state.filesFiltersOpen) : layoutState.filesFiltersOpen;
     next.filesGamesOpen = state.filesGamesOpen !== undefined ? Boolean(state.filesGamesOpen) : layoutState.filesGamesOpen;
     next.filesAppsOpen = state.filesAppsOpen !== undefined ? Boolean(state.filesAppsOpen) : layoutState.filesAppsOpen;
+    next.filesLessonsOpen = state.filesLessonsOpen !== undefined ? Boolean(state.filesLessonsOpen) : layoutState.filesLessonsOpen;
     next.filesOpenEditorsOpen = state.filesOpenEditorsOpen !== undefined
         ? Boolean(state.filesOpenEditorsOpen)
         : layoutState.filesOpenEditorsOpen;
@@ -3213,6 +3244,7 @@ function setEditorValue(value, { silent = false, lint = true } = {}) {
         refreshEditorBreakpointMarkers();
         if (lint) queueEditorLint("set-editor");
         syncEditorStatusBar();
+        syncLessonStateForActiveFile();
         queueEditorScopeTrailSync();
         queueEditorSignatureHintSync();
         return;
@@ -3228,6 +3260,7 @@ function setEditorValue(value, { silent = false, lint = true } = {}) {
     refreshEditorBreakpointMarkers();
     if (lint) queueEditorLint("set-editor");
     syncEditorStatusBar();
+    syncLessonStateForActiveFile();
     queueEditorScopeTrailSync();
     queueEditorSignatureHintSync();
 }
@@ -7366,12 +7399,17 @@ function makeFile(name = FILE_DEFAULT_NAME, code = DEFAULT_CODE, { preserveExten
         touchedAt: Date.now(),
         pinned: false,
         locked: false,
+        family: "workspace",
+        lessonId: "",
     };
 }
 
 function normalizeFile(file) {
     if (!file) return null;
     const code = typeof file.code === "string" ? file.code : DEFAULT_CODE;
+    const rawFamily = String(file.family || "workspace").trim().toLowerCase();
+    const family = rawFamily === "lesson" ? "lesson" : "workspace";
+    const lessonId = family === "lesson" ? String(file.lessonId || "").trim() : "";
     return {
         id: String(file.id ?? makeFileId()),
         name: normalizeFileName(file.name, FILE_DEFAULT_NAME),
@@ -7380,6 +7418,8 @@ function normalizeFile(file) {
         touchedAt: Number.isFinite(file.touchedAt) ? file.touchedAt : Date.now(),
         pinned: Boolean(file.pinned),
         locked: Boolean(file.locked),
+        family,
+        lessonId,
     };
 }
 
@@ -8132,12 +8172,20 @@ function normalizeApplications(list) {
     return normalizeTemplateList(list, { fallbackLabel: "Application" });
 }
 
+function normalizeLessons(list) {
+    return normalizeTemplateList(list, { fallbackLabel: "Lesson" });
+}
+
 function getGameById(id) {
     return games.find((game) => game.id === id);
 }
 
 function getApplicationById(id) {
     return applications.find((app) => app.id === id);
+}
+
+function getLessonById(id) {
+    return lessons.find((lesson) => lesson.id === id);
 }
 
 function createTemplateOptionIcon(sources = []) {
@@ -8303,6 +8351,69 @@ function syncApplicationsUI() {
     }
 }
 
+function syncLessonsUI() {
+    if (!el.filesLessons || !el.lessonsSelectorToggle || !el.lessonsList) return;
+    el.lessonsSelectorToggle.setAttribute("draggable", "true");
+    el.lessonsSelectorToggle.dataset.filesSectionId = "lessons";
+    if (!layoutState.filesLessonsOpen || !lessons.length) {
+        el.filesLessons.setAttribute("aria-hidden", "true");
+        el.filesLessons.setAttribute("data-list-open", "false");
+        el.lessonsSelectorToggle.disabled = true;
+        el.lessonsSelectorToggle.setAttribute("aria-expanded", "false");
+        el.lessonsList.setAttribute("aria-hidden", "true");
+        el.lessonsList.innerHTML = "";
+        el.lessonsList.removeAttribute("aria-activedescendant");
+        if (el.lessonLoad) {
+            el.lessonLoad.disabled = true;
+            el.lessonLoad.hidden = true;
+        }
+        return;
+    }
+
+    if (!lessons.some((lesson) => lesson.id === selectedLessonId)) {
+        selectedLessonId = lessons[0]?.id ?? "";
+    }
+
+    el.filesLessons.setAttribute("aria-hidden", "false");
+    el.filesLessons.setAttribute("data-list-open", lessonsSelectorOpen ? "true" : "false");
+    el.lessonsSelectorToggle.disabled = false;
+    el.lessonsSelectorToggle.setAttribute("aria-expanded", lessonsSelectorOpen ? "true" : "false");
+    el.lessonsList.setAttribute("aria-hidden", lessonsSelectorOpen ? "false" : "true");
+
+    let activeDescendant = "";
+    el.lessonsList.innerHTML = "";
+    lessons.forEach((lesson, index) => {
+        const option = document.createElement("button");
+        const optionId = `lesson-option-${index}`;
+        const selected = lesson.id === selectedLessonId;
+        option.type = "button";
+        option.className = "files-games-option";
+        option.id = optionId;
+        option.dataset.lessonId = lesson.id;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", selected ? "true" : "false");
+        option.setAttribute("data-selected", selected ? "true" : "false");
+        renderTemplateOptionLabel(option, lesson.name, lesson.iconSources);
+
+        const item = document.createElement("li");
+        item.className = "files-games-item";
+        item.appendChild(option);
+        el.lessonsList.appendChild(item);
+
+        if (selected) activeDescendant = optionId;
+    });
+    if (activeDescendant) {
+        el.lessonsList.setAttribute("aria-activedescendant", activeDescendant);
+    } else {
+        el.lessonsList.removeAttribute("aria-activedescendant");
+    }
+
+    if (el.lessonLoad) {
+        el.lessonLoad.hidden = !lessonsSelectorOpen;
+        el.lessonLoad.disabled = !selectedLessonId || !lessonsSelectorOpen;
+    }
+}
+
 async function loadTemplateFilesFromSources(templateFiles = [], contextLabel = "Template") {
     const sourceFiles = Array.isArray(templateFiles) ? templateFiles : [];
     const loaded = await Promise.all(
@@ -8455,6 +8566,693 @@ async function loadApplicationById(id, { runAfter = false } = {}) {
         return false;
     } finally {
         syncApplicationsUI();
+    }
+}
+
+function getLessonCurrentStep() {
+    if (!lessonSession) return null;
+    const index = clamp(Number(lessonSession.stepIndex) || 0, 0, Math.max(0, lessonSession.steps.length - 1));
+    return lessonSession.steps[index] || null;
+}
+
+function computeLessonLevel(xp = 0) {
+    const safeXp = Math.max(0, Number(xp) || 0);
+    return Math.floor(safeXp / 250) + 1;
+}
+
+function sanitizeLessonProfile(raw = null) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const xp = Math.max(0, Math.floor(Number(source.xp) || 0));
+    const totalTypedChars = Math.max(0, Math.floor(Number(source.totalTypedChars) || 0));
+    const lessonsCompleted = Math.max(0, Math.floor(Number(source.lessonsCompleted) || 0));
+    const bestStreak = Math.max(0, Math.floor(Number(source.bestStreak) || 0));
+    const currentStreak = Math.max(0, Math.floor(Number(source.currentStreak) || 0));
+    const dailyStreak = Math.max(0, Math.floor(Number(source.dailyStreak) || 0));
+    const lastActiveDay = String(source.lastActiveDay || "").trim();
+    return {
+        xp,
+        level: Math.max(1, Math.floor(Number(source.level) || computeLessonLevel(xp))),
+        totalTypedChars,
+        lessonsCompleted,
+        bestStreak,
+        currentStreak,
+        dailyStreak,
+        lastActiveDay,
+    };
+}
+
+function parseStoredJson(raw) {
+    if (raw && typeof raw === "object") return raw;
+    const text = String(raw || "").trim();
+    if (!text) return null;
+    try {
+        const parsed = JSON.parse(text);
+        return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function sanitizeStoredLessonSession(raw = null) {
+    const source = raw && typeof raw === "object" ? raw : null;
+    if (!source) return null;
+    const fileId = String(source.fileId || "").trim();
+    if (!fileId) return null;
+    const fileName = String(source.fileName || "").trim();
+    const lessonId = String(source.lessonId || "").trim();
+    return {
+        fileId,
+        fileName,
+        lessonId,
+        stepIndex: Math.max(0, Math.floor(Number(source.stepIndex) || 0)),
+        progress: Math.max(0, Math.floor(Number(source.progress) || 0)),
+        startedAt: Math.max(0, Math.floor(Number(source.startedAt) || 0)) || Date.now(),
+        streak: Math.max(0, Math.floor(Number(source.streak) || 0)),
+        bestStreak: Math.max(0, Math.floor(Number(source.bestStreak) || 0)),
+        mistakes: Math.max(0, Math.floor(Number(source.mistakes) || 0)),
+        sessionXp: Math.max(0, Math.floor(Number(source.sessionXp) || 0)),
+    };
+}
+
+function clearPersistedLessonSession() {
+    lessonSessionDirtyWrites = 0;
+    save(STORAGE.LESSON_SESSION, "");
+}
+
+function persistLessonSession({ force = false } = {}) {
+    if (!lessonSession || lessonSession.completed) {
+        clearPersistedLessonSession();
+        return;
+    }
+    lessonSessionDirtyWrites += 1;
+    if (!force && lessonSessionDirtyWrites < 5) return;
+    lessonSessionDirtyWrites = 0;
+    const payload = {
+        fileId: lessonSession.fileId,
+        fileName: lessonSession.fileName,
+        lessonId: String(selectedLessonId || ""),
+        stepIndex: Math.max(0, Math.floor(Number(lessonSession.stepIndex) || 0)),
+        progress: Math.max(0, Math.floor(Number(lessonSession.progress) || 0)),
+        startedAt: Math.max(0, Math.floor(Number(lessonSession.startedAt) || 0)) || Date.now(),
+        streak: Math.max(0, Math.floor(Number(lessonSession.streak) || 0)),
+        bestStreak: Math.max(0, Math.floor(Number(lessonSession.bestStreak) || 0)),
+        mistakes: Math.max(0, Math.floor(Number(lessonSession.mistakes) || 0)),
+        sessionXp: Math.max(0, Math.floor(Number(lessonSession.sessionXp) || 0)),
+    };
+    save(STORAGE.LESSON_SESSION, JSON.stringify(payload));
+}
+
+function restoreLessonSessionFromStorage() {
+    const parsed = sanitizeStoredLessonSession(parseStoredJson(load(STORAGE.LESSON_SESSION)));
+    if (!parsed) {
+        clearPersistedLessonSession();
+        return false;
+    }
+
+    const file = files.find((entry) => entry.id === parsed.fileId);
+    if (!file) {
+        clearPersistedLessonSession();
+        return false;
+    }
+
+    const source = String(file.code || "");
+    const steps = parseLessonSteps(source);
+    if (!steps.length) {
+        clearPersistedLessonSession();
+        return false;
+    }
+
+    if (!isLessonFamilyFile(file)) {
+        const lessonExists = lessons.some((entry) => entry.id === parsed.lessonId);
+        if (!lessonExists) {
+            clearPersistedLessonSession();
+            return false;
+        }
+        file.family = "lesson";
+        file.lessonId = parsed.lessonId;
+    }
+
+    const stepIndex = clamp(parsed.stepIndex, 0, Math.max(0, steps.length - 1));
+    const step = steps[stepIndex] || steps[0];
+    const progress = clamp(parsed.progress, 0, Math.max(0, Number(step?.expected?.length) || 0));
+
+    lessonSession = {
+        fileId: file.id,
+        fileName: file.name,
+        steps,
+        stepIndex,
+        progress,
+        completed: false,
+        startedAt: parsed.startedAt || Date.now(),
+        streak: parsed.streak,
+        bestStreak: Math.max(parsed.bestStreak, parsed.streak),
+        mistakes: parsed.mistakes,
+        sessionXp: parsed.sessionXp,
+    };
+
+    const lessonExists = lessons.some((entry) => entry.id === parsed.lessonId);
+    if (lessonExists) {
+        selectedLessonId = parsed.lessonId;
+        syncLessonsUI();
+    }
+
+    if (activeFileId === lessonSession.fileId) {
+        syncLessonGhostMarks();
+        setLessonCursorToProgress();
+        updateLessonProgressStatus({ prefix: "Lesson resumed" });
+    } else {
+        editor.clearMarks?.("lesson-ghost");
+        editor.clearMarks?.("lesson-active");
+        editor.clearMarks?.("lesson-next");
+        updateLessonHud();
+    }
+
+    persistLessonSession({ force: true });
+    return true;
+}
+
+function getLessonDayStamp(now = Date.now()) {
+    const date = new Date(now);
+    if (Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function persistLessonProfile({ force = false } = {}) {
+    lessonProfileDirtyWrites += 1;
+    if (!force && lessonProfileDirtyWrites < 8) return;
+    lessonProfileDirtyWrites = 0;
+    save(STORAGE.LESSON_PROFILE, JSON.stringify(lessonProfile));
+}
+
+function loadLessonProfile() {
+    lessonProfile = sanitizeLessonProfile(parseStoredJson(load(STORAGE.LESSON_PROFILE)));
+    persistLessonProfile({ force: true });
+}
+
+function updateLessonHud() {
+    if (!el.lessonHud) return;
+    const active = isLessonSessionActiveForCurrentFile();
+    el.lessonHud.setAttribute("data-active", active ? "true" : "false");
+    el.lessonHud.hidden = !active;
+    if (!active) return;
+
+    const step = getLessonCurrentStep();
+    const stepId = step?.id || "lesson";
+    const stepIndex = Math.max(1, (Number(lessonSession?.stepIndex) || 0) + 1);
+    const stepCount = Math.max(1, Number(lessonSession?.steps?.length) || 1);
+    const progress = Math.max(0, Number(lessonSession?.progress) || 0);
+    const total = Math.max(1, Number(step?.expected?.length) || 1);
+    if (el.lessonHudStep) {
+        el.lessonHudStep.textContent = `${stepId} ${stepIndex}/${stepCount}`;
+    }
+    if (el.lessonHudProgress) {
+        el.lessonHudProgress.textContent = `${progress}/${total}`;
+    }
+    if (el.lessonHudLevel) {
+        el.lessonHudLevel.textContent = `Lv ${lessonProfile.level}`;
+    }
+    if (el.lessonHudXp) {
+        el.lessonHudXp.textContent = `XP ${lessonProfile.xp}`;
+    }
+    if (el.lessonHudStreak) {
+        const activeStreak = Math.max(0, Number(lessonSession?.streak) || lessonProfile.currentStreak || 0);
+        el.lessonHudStreak.textContent = `Streak ${activeStreak}`;
+    }
+}
+
+function awardLessonXp(amount = 0, { typedChar = false } = {}) {
+    const delta = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!delta) return;
+    const previousLevel = lessonProfile.level;
+    lessonProfile.xp += delta;
+    lessonProfile.level = computeLessonLevel(lessonProfile.xp);
+    if (typedChar) {
+        lessonProfile.totalTypedChars += 1;
+    }
+    if (lessonProfile.level > previousLevel) {
+        status.set(`Level up! Lv ${lessonProfile.level}`);
+        logger.append("system", [`Lesson level up: ${previousLevel} → ${lessonProfile.level}`]);
+    }
+    persistLessonProfile();
+}
+
+function isLessonFamilyFile(file = null) {
+    if (!file || typeof file !== "object") return false;
+    return String(file.family || "workspace") === "lesson";
+}
+
+function isLessonSessionActiveForCurrentFile() {
+    const active = getActiveFile();
+    if (!isLessonFamilyFile(active)) return false;
+    return Boolean(lessonSession && lessonSession.fileId === activeFileId && !lessonSession.completed);
+}
+
+function syncLessonStateForActiveFile() {
+    if (isLessonSessionActiveForCurrentFile()) {
+        syncLessonGhostMarks();
+        updateLessonHud();
+        return;
+    }
+    editor.clearMarks?.("lesson-ghost");
+    editor.clearMarks?.("lesson-active");
+    editor.clearMarks?.("lesson-next");
+    updateLessonHud();
+}
+
+function setLessonCursorToProgress() {
+    const step = getLessonCurrentStep();
+    if (!step) return;
+    const index = step.startIndex + Math.max(0, Number(lessonSession.progress) || 0);
+    const pos = editor.posFromIndex?.(index);
+    if (!pos) return;
+    editor.setCursor(pos);
+    editor.scrollIntoView?.(pos, 80);
+}
+
+function syncLessonGhostMarks() {
+    editor.clearMarks?.("lesson-ghost");
+    editor.clearMarks?.("lesson-active");
+    editor.clearMarks?.("lesson-next");
+    const step = getLessonCurrentStep();
+    if (!step || lessonSession?.completed) return;
+    const progress = clamp(Number(lessonSession.progress) || 0, 0, step.expected.length);
+    const stepStart = editor.posFromIndex?.(step.startIndex);
+    const nextCharStartIndex = step.startIndex + progress;
+    const nextCharEndIndex = Math.min(step.endIndex, nextCharStartIndex + 1);
+    const typedTo = editor.posFromIndex?.(nextCharStartIndex);
+    const nextCharEnd = editor.posFromIndex?.(nextCharEndIndex);
+    const stepEnd = editor.posFromIndex?.(step.endIndex);
+    if (stepStart && stepEnd) {
+        editor.markRange?.(stepStart, stepEnd, {
+            className: "cm-lesson-active",
+            kind: "lesson-active",
+            title: `Lesson step: ${step.id}`,
+        });
+    }
+    if (typedTo && nextCharEnd && nextCharStartIndex < step.endIndex) {
+        editor.markRange?.(typedTo, nextCharEnd, {
+            className: "cm-lesson-next",
+            kind: "lesson-next",
+            title: "Next character",
+        });
+    }
+    if (nextCharEnd && stepEnd && nextCharEndIndex < step.endIndex) {
+        editor.markRange?.(nextCharEnd, stepEnd, {
+            className: "cm-lesson-ghost",
+            kind: "lesson-ghost",
+            title: "Type this remaining section",
+        });
+    } else if (typedTo && stepEnd && nextCharStartIndex < step.endIndex) {
+        editor.markRange?.(typedTo, stepEnd, {
+            className: "cm-lesson-ghost",
+            kind: "lesson-ghost",
+            title: "Type this remaining section",
+        });
+    }
+}
+
+function stopTypingLesson({ announce = true } = {}) {
+    if (!lessonSession) return false;
+    lessonProfile.currentStreak = 0;
+    persistLessonProfile({ force: true });
+    lessonSession = null;
+    clearPersistedLessonSession();
+    editor.clearMarks?.("lesson-ghost");
+    editor.clearMarks?.("lesson-active");
+    editor.clearMarks?.("lesson-next");
+    updateLessonHud();
+    if (announce) {
+        status.set("Lesson mode stopped");
+    }
+    return true;
+}
+
+function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {}) {
+    const file = files.find((entry) => entry.id === fileId);
+    if (!file) {
+        status.set("Lesson file not found");
+        return false;
+    }
+
+    if (activeFileId !== file.id) {
+        activeFileId = file.id;
+        ensureTabOpen(file.id);
+        setEditorValue(file.code, { silent: true });
+        renderFileList();
+    }
+
+    const source = activeFileId === file.id
+        ? String(editor.get?.() || file.code || "")
+        : String(file.code || "");
+    const steps = parseLessonSteps(source);
+    if (!steps.length) {
+        status.set("No lesson STEP markers found");
+        logger.append("warn", ["Lesson mode expects markers like [STEP:id:START] / [STEP:id:END]."]);
+        return false;
+    }
+
+    if (!isLessonFamilyFile(file)) {
+        file.family = "lesson";
+        file.lessonId = String(selectedLessonId || file.lessonId || "");
+    }
+
+    lessonSession = {
+        fileId: file.id,
+        fileName: file.name,
+        steps,
+        stepIndex: 0,
+        progress: 0,
+        completed: false,
+        startedAt: Date.now(),
+        streak: 0,
+        bestStreak: 0,
+        mistakes: 0,
+        sessionXp: 0,
+    };
+    persistLessonSession({ force: true });
+    syncLessonGhostMarks();
+    setLessonCursorToProgress();
+    updateLessonProgressStatus({ prefix: "Lesson started" });
+    updateLessonHud();
+    if (announce) {
+        logger.append("system", [
+            `Lesson mode started in ${file.name} (${steps.length} step${steps.length === 1 ? "" : "s"}). Strict typing is enabled: every character counts.`,
+        ]);
+    }
+    return true;
+}
+
+function advanceLessonStep({ announce = true } = {}) {
+    if (!lessonSession || lessonSession.completed) return false;
+    const nextIndex = lessonSession.stepIndex + 1;
+    if (nextIndex >= lessonSession.steps.length) {
+        const completionBonus = LESSON_XP_LESSON_COMPLETE + (lessonSession.mistakes === 0 ? LESSON_XP_PERFECT_BONUS : 0);
+        lessonSession.sessionXp += completionBonus;
+        awardLessonXp(completionBonus, { typedChar: false });
+        lessonProfile.lessonsCompleted += 1;
+        lessonProfile.currentStreak = lessonSession.streak;
+        lessonProfile.bestStreak = Math.max(lessonProfile.bestStreak, lessonSession.bestStreak);
+
+        const todayStamp = getLessonDayStamp();
+        const lastStamp = String(lessonProfile.lastActiveDay || "");
+        if (!lastStamp) {
+            lessonProfile.dailyStreak = 1;
+        } else if (todayStamp !== lastStamp) {
+            const then = new Date(`${lastStamp}T00:00:00`);
+            const now = new Date(`${todayStamp}T00:00:00`);
+            const diffDays = Math.round((now.getTime() - then.getTime()) / 86400000);
+            if (diffDays === 1) {
+                lessonProfile.dailyStreak += 1;
+            } else if (diffDays > 1) {
+                lessonProfile.dailyStreak = 1;
+            }
+        }
+        lessonProfile.lastActiveDay = todayStamp;
+
+        persistLessonProfile({ force: true });
+        lessonSession.completed = true;
+        clearPersistedLessonSession();
+        editor.clearMarks?.("lesson-ghost");
+        editor.clearMarks?.("lesson-active");
+        editor.clearMarks?.("lesson-next");
+        updateLessonHud();
+        status.set("Lesson complete. Running...");
+        logger.append("system", [
+            `Lesson complete: ${lessonSession.fileName} • +${completionBonus} XP • session XP ${lessonSession.sessionXp} • daily streak ${lessonProfile.dailyStreak}`,
+        ]);
+        run();
+        return true;
+    }
+    lessonSession.stepIndex = nextIndex;
+    lessonSession.progress = 0;
+    lessonSession.sessionXp += LESSON_XP_STEP_COMPLETE;
+    awardLessonXp(LESSON_XP_STEP_COMPLETE, { typedChar: false });
+    persistLessonSession();
+    syncLessonGhostMarks();
+    setLessonCursorToProgress();
+    updateLessonProgressStatus({ prefix: announce ? "Lesson step" : "Lesson" });
+    updateLessonHud();
+    return true;
+}
+
+function describeLessonExpectedChar(char = "") {
+    const value = String(char || "");
+    if (!value) return "end of step";
+    if (value === " ") return "space";
+    if (value === "\t") return "tab";
+    if (value === "\n") return "enter";
+    if (value === "\r") return "carriage return";
+    return `"${value}"`;
+}
+
+function updateLessonProgressStatus({ prefix = "Lesson" } = {}) {
+    if (!lessonSession || lessonSession.completed) return;
+    const step = getLessonCurrentStep();
+    if (!step) return;
+    const stepNumber = Math.max(1, Number(lessonSession.stepIndex) + 1);
+    const stepTotal = Math.max(1, Number(lessonSession.steps?.length) || 1);
+    const progress = Math.max(0, Number(lessonSession.progress) || 0);
+    const total = Math.max(1, Number(step.expected?.length) || 1);
+    const nextExpected = String(step.expected?.[progress] || "");
+    const needsHint = nextExpected === " " || nextExpected === "\t" || nextExpected === "\n";
+    const hint = needsHint ? ` • next ${describeLessonExpectedChar(nextExpected)}` : "";
+    status.set(`${prefix}: ${step.id} (${stepNumber}/${stepTotal}) ${progress}/${total}${hint}`);
+    updateLessonHud();
+}
+
+function applyLessonInputChar(inputChar = "") {
+    if (!isLessonSessionActiveForCurrentFile()) return { ok: false, reason: "inactive" };
+    const step = getLessonCurrentStep();
+    if (!step) return { ok: false, reason: "missing-step" };
+    const value = String(inputChar || "");
+    if (!value) return { ok: false, reason: "empty" };
+
+    if (value === "\r") {
+        return { ok: true, reason: "skip-cr", progress: lessonSession.progress };
+    }
+
+    if (value === "\b") {
+        if (lessonSession.progress > 0) {
+            lessonSession.progress -= 1;
+            lessonSession.streak = 0;
+            lessonProfile.currentStreak = 0;
+            persistLessonProfile({ force: true });
+            persistLessonSession();
+            syncLessonGhostMarks();
+            setLessonCursorToProgress();
+            updateLessonProgressStatus();
+        }
+        return { ok: true, reason: "backspace", progress: lessonSession.progress };
+    }
+
+    while (step.expected[lessonSession.progress] === "\r") {
+        lessonSession.progress += 1;
+    }
+
+    const expected = step.expected[lessonSession.progress] || "";
+    if (!expected) {
+        advanceLessonStep({ announce: true });
+        return { ok: true, reason: "step-complete", progress: lessonSession.progress };
+    }
+
+    if (value !== expected) {
+        lessonSession.mistakes += 1;
+        lessonSession.streak = 0;
+        lessonProfile.currentStreak = 0;
+        persistLessonProfile({ force: true });
+        persistLessonSession();
+        status.set(`Lesson: expected ${describeLessonExpectedChar(expected)}`);
+        updateLessonHud();
+        return { ok: false, reason: "mismatch", expected, received: value, progress: lessonSession.progress };
+    }
+
+    lessonSession.progress += 1;
+    lessonSession.streak += 1;
+    lessonSession.bestStreak = Math.max(lessonSession.bestStreak, lessonSession.streak);
+    lessonSession.sessionXp += LESSON_XP_PER_CHAR;
+    lessonProfile.currentStreak = lessonSession.streak;
+    lessonProfile.bestStreak = Math.max(lessonProfile.bestStreak, lessonSession.bestStreak);
+    awardLessonXp(LESSON_XP_PER_CHAR, { typedChar: true });
+    persistLessonSession();
+    const finishedStep = lessonSession.progress >= step.expected.length;
+    if (finishedStep) {
+        advanceLessonStep({ announce: true });
+        return { ok: true, reason: "step-complete", progress: lessonSession.progress };
+    }
+    syncLessonGhostMarks();
+    setLessonCursorToProgress();
+    updateLessonProgressStatus();
+    return { ok: true, reason: "typed", progress: lessonSession.progress };
+}
+
+function handleLessonTypingKeyDown(event) {
+    if (!isLessonSessionActiveForCurrentFile()) return false;
+    const key = String(event?.key || "");
+
+    if (key === "Escape") {
+        event.preventDefault();
+        stopTypingLesson({ announce: true });
+        return true;
+    }
+    if (key === "Backspace") {
+        event.preventDefault();
+        applyLessonInputChar("\b");
+        return true;
+    }
+
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(key)) {
+        event.preventDefault();
+        setLessonCursorToProgress();
+        return true;
+    }
+
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+        const normalizedKey = key.toLowerCase();
+        const allowReadOnlyShortcut = !event.altKey && !event.shiftKey && normalizedKey === "c";
+        if (allowReadOnlyShortcut) {
+            return false;
+        }
+        event.preventDefault();
+        return true;
+    }
+
+    const char = normalizeLessonInputChar(key);
+    if (!char) {
+        event.preventDefault();
+        return true;
+    }
+
+    event.preventDefault();
+    applyLessonInputChar(char);
+    return true;
+}
+
+function typeLessonInputText(value = "") {
+    const source = String(value || "");
+    let applied = 0;
+    for (const char of source) {
+        const result = applyLessonInputChar(char);
+        if (!result.ok && result.reason === "mismatch") break;
+        applied += 1;
+    }
+    return applied;
+}
+
+function getLessonStateSnapshot() {
+    if (!lessonSession) return null;
+    const step = getLessonCurrentStep();
+    const progress = Number(lessonSession.progress) || 0;
+    const expectedNext = String(step?.expected?.[progress] || "");
+    return {
+        active: isLessonSessionActiveForCurrentFile(),
+        completed: Boolean(lessonSession.completed),
+        fileId: lessonSession.fileId,
+        fileName: lessonSession.fileName,
+        stepIndex: lessonSession.stepIndex,
+        stepCount: lessonSession.steps.length,
+        stepId: step?.id || null,
+        progress,
+        expectedLength: step?.expected?.length || 0,
+        expectedNext,
+        remaining: Math.max(0, (step?.expected?.length || 0) - progress),
+        streak: Number(lessonSession.streak) || 0,
+        bestStreak: Number(lessonSession.bestStreak) || 0,
+        mistakes: Number(lessonSession.mistakes) || 0,
+        sessionXp: Number(lessonSession.sessionXp) || 0,
+        totalXp: Number(lessonProfile.xp) || 0,
+        level: Number(lessonProfile.level) || 1,
+    };
+}
+
+function getLessonProfileSnapshot() {
+    return {
+        xp: Number(lessonProfile.xp) || 0,
+        level: Number(lessonProfile.level) || 1,
+        totalTypedChars: Number(lessonProfile.totalTypedChars) || 0,
+        lessonsCompleted: Number(lessonProfile.lessonsCompleted) || 0,
+        bestStreak: Number(lessonProfile.bestStreak) || 0,
+        currentStreak: Number(lessonProfile.currentStreak) || 0,
+        dailyStreak: Number(lessonProfile.dailyStreak) || 0,
+        lastActiveDay: String(lessonProfile.lastActiveDay || ""),
+    };
+}
+
+async function loadLessonById(id, { startTyping = true, runAfter = false } = {}) {
+    const lesson = getLessonById(id);
+    if (!lesson) {
+        status.set("Lesson not found");
+        logger.append("error", [`Lesson "${id}" not found.`]);
+        return false;
+    }
+
+    selectedLessonId = lesson.id;
+    syncLessonsUI();
+    status.set(`Loading ${lesson.name}...`);
+
+    try {
+        const before = snapshotWorkspaceState();
+        const loadedFiles = await loadTemplateFilesFromSources(lesson.files, "Lesson template");
+        if (!loadedFiles.length) {
+            throw new Error("Lesson template is empty.");
+        }
+        const normalizedFolder = normalizeFolderPath(lesson.folder, { allowEmpty: true });
+        const folderPath = normalizedFolder ? ensureUniqueFolderPath(normalizedFolder, { ignoreCase: true }) : "";
+        const entryPath = normalizeFileName(lesson.entryFile || loadedFiles[0].path, loadedFiles[0].path);
+        const created = [];
+        const reservedPaths = new Set(files.map((file) => file.name));
+
+        stashActiveFile();
+        loadedFiles.forEach((file) => {
+            const desiredPath = folderPath ? `${folderPath}/${file.path}` : file.path;
+            const workspacePath = ensureUniquePathInSet(desiredPath, reservedPaths);
+            const target = makeFile(workspacePath, file.code);
+            target.savedCode = file.code;
+            files.push(target);
+            created.push(target);
+        });
+        if (folderPath) {
+            folders = normalizeFolderList([...folders, folderPath]);
+            expandFolderPathAncestors(folderPath);
+        }
+
+        const preferredPath = folderPath ? `${folderPath}/${entryPath}` : entryPath;
+        const activeTarget = created.find(
+            (file) => file.name.toLowerCase() === normalizeFileName(preferredPath, entryPath).toLowerCase()
+        ) || created[0];
+
+        activeFileId = activeTarget.id;
+        ensureTabOpen(activeTarget.id);
+        clearInlineRenameState();
+        setEditorValue(activeTarget.code, { silent: true });
+        persistFiles();
+        renderFileList();
+        recordFileHistory(`Load lesson ${lesson.name}`, before);
+
+        if (startTyping) {
+            startTypingLessonForFile(activeTarget.id, { announce: false });
+        }
+
+        status.set(`Loaded ${lesson.name}`);
+        logger.append("system", [`Loaded lesson: ${lesson.name} into ${folderPath || "workspace root"} (${created.length} files)`]);
+        if (startTyping) {
+            const step = getLessonCurrentStep();
+            if (step) {
+                status.set(`Lesson step: ${step.id}`);
+            }
+        }
+        if (runAfter) {
+            run();
+        }
+        return true;
+    } catch (err) {
+        status.set("Lesson load failed");
+        logger.append("error", [`Failed to load ${lesson.name}: ${String(err.message || err)}`]);
+        return false;
+    } finally {
+        syncLessonsUI();
     }
 }
 
@@ -14983,6 +15781,41 @@ function getCommandPaletteEntries() {
             },
         },
         {
+            id: "cmd-lessons-load-selected",
+            label: "Lessons: Load Selected",
+            keywords: "lesson learn typing starter load selected",
+            shortcut: "",
+            enabled: Boolean(selectedLessonId),
+            run: async () => {
+                if (!selectedLessonId) return;
+                await loadLessonById(selectedLessonId, { startTyping: true, runAfter: false });
+            },
+        },
+        {
+            id: "cmd-lessons-start-active",
+            label: "Lessons: Start Typing On Active File",
+            keywords: "lesson start typing active file step marker",
+            shortcut: "",
+            enabled: Boolean(getActiveFile()),
+            run: () => startTypingLessonForFile(activeFileId, { announce: true }),
+        },
+        {
+            id: "cmd-lessons-next-step",
+            label: "Lessons: Skip To Next Step",
+            keywords: "lesson next step skip",
+            shortcut: "",
+            enabled: Boolean(lessonSession && !lessonSession.completed),
+            run: () => advanceLessonStep({ announce: true }),
+        },
+        {
+            id: "cmd-lessons-stop",
+            label: "Lessons: Stop Typing Mode",
+            keywords: "lesson stop typing exit",
+            shortcut: "Esc",
+            enabled: Boolean(lessonSession),
+            run: () => stopTypingLesson({ announce: true }),
+        },
+        {
             id: "cmd-help-list-commands",
             label: "Help: List All Commands",
             keywords: "help commands inventory audit",
@@ -15023,6 +15856,25 @@ function getCommandPaletteEntries() {
             enabled: true,
             run: () => setFilesAppsOpen(!layoutState.filesAppsOpen),
         },
+        {
+            id: "cmd-toggle-lessons",
+            label: "View: Toggle Lessons",
+            keywords: "view lessons typing learn templates",
+            shortcut: "",
+            enabled: true,
+            run: () => setFilesLessonsOpen(!layoutState.filesLessonsOpen),
+        },
+        ...lessons.map((lesson) => ({
+            id: `cmd-lesson-${lesson.id}`,
+            label: `Lessons: Load ${lesson.name}`,
+            keywords: `lesson typing learn game ${lesson.id}`,
+            shortcut: "",
+            enabled: true,
+            run: async () => {
+                selectedLessonId = lesson.id;
+                await loadLessonById(lesson.id, { startTyping: true, runAfter: false });
+            },
+        })),
         {
             id: "cmd-toggle-open-editors",
             label: "View: Toggle Open Editors",
@@ -15163,6 +16015,7 @@ function groupCommandPaletteResults(entries = []) {
         "Sandbox",
         "Games",
         "Apps",
+        "Lessons",
         "Theme",
         "Workspace",
         "History",
@@ -16575,6 +17428,7 @@ function syncFilesMenuToggles() {
     const filtersBtn = el.filesMenu.querySelector('[data-files-toggle="filters"]');
     const gamesBtn = el.filesMenu.querySelector('[data-files-toggle="games"]');
     const appsBtn = el.filesMenu.querySelector('[data-files-toggle="applications"]');
+    const lessonsBtn = el.filesMenu.querySelector('[data-files-toggle="lessons"]');
     const openEditorsBtn = el.filesMenu.querySelector('[data-files-toggle="open-editors"]');
     const filesBtn = el.filesMenu.querySelector('[data-files-toggle="files"]');
     const trashBtn = el.filesMenu.querySelector('[data-files-toggle="trash"]');
@@ -16594,6 +17448,12 @@ function syncFilesMenuToggles() {
         appsBtn.setAttribute("aria-pressed", open ? "true" : "false");
         appsBtn.textContent = "Apps";
         appsBtn.disabled = applications.length === 0;
+    }
+    if (lessonsBtn) {
+        const open = layoutState.filesLessonsOpen;
+        lessonsBtn.setAttribute("aria-pressed", open ? "true" : "false");
+        lessonsBtn.textContent = "Lessons";
+        lessonsBtn.disabled = lessons.length === 0;
     }
     if (openEditorsBtn) {
         const open = layoutState.filesOpenEditorsOpen;
@@ -17165,6 +18025,7 @@ function renderFileList() {
     const sectionMarkupById = {
         games: renderStaticFilesSectionSlot("games"),
         applications: renderStaticFilesSectionSlot("applications"),
+        lessons: renderStaticFilesSectionSlot("lessons"),
         "open-editors": openEditorsSection,
         files: filesSection,
     };
@@ -17182,6 +18043,7 @@ function renderFileList() {
     }
     mountStaticFilesSection("games", el.filesGames);
     mountStaticFilesSection("applications", el.filesApps);
+    mountStaticFilesSection("lessons", el.filesLessons);
     if (dragFilesSectionId) {
         const dragHandle = el.fileList.querySelector(`[data-files-section-id="${dragFilesSectionId}"]`);
         if (dragHandle) {
@@ -18241,7 +19103,7 @@ function onFileListDblClick(event) {
 }
 
 function onFileListContextMenu(event) {
-    const templateSection = event.target instanceof Element ? event.target.closest("#filesGames, #filesApps") : null;
+    const templateSection = event.target instanceof Element ? event.target.closest("#filesGames, #filesApps, #filesLessons") : null;
     if (templateSection) return;
     const folderRow = event.target.closest(FILE_FOLDER_ROW_SELECTOR);
     const row = event.target.closest("[data-file-id]");
@@ -18920,6 +19782,38 @@ function exposeDebug() {
         loadApplication(id, { run = false } = {}) {
             return loadApplicationById(id, { runAfter: run });
         },
+        listLessons() {
+            return lessons.map((lesson) => ({
+                id: lesson.id,
+                name: lesson.name,
+                folder: lesson.folder,
+                entryFile: lesson.entryFile,
+                files: lesson.files.map((file) => ({ path: file.path, src: file.src })),
+                iconSources: [...(lesson.iconSources || [])],
+            }));
+        },
+        loadLesson(id, { startTyping = true, run = false } = {}) {
+            selectedLessonId = String(id || selectedLessonId || "");
+            return loadLessonById(selectedLessonId, { startTyping: Boolean(startTyping), runAfter: Boolean(run) });
+        },
+        startTypingLesson() {
+            return startTypingLessonForFile(activeFileId, { announce: true });
+        },
+        nextLessonStep() {
+            return advanceLessonStep({ announce: true });
+        },
+        stopTypingLesson() {
+            return stopTypingLesson({ announce: true });
+        },
+        typeLessonInput(text = "") {
+            return typeLessonInputText(text);
+        },
+        getLessonState() {
+            return getLessonStateSnapshot();
+        },
+        getLessonProfile() {
+            return getLessonProfileSnapshot();
+        },
         listFilesSectionOrder() {
             return getFilesSectionOrder();
         },
@@ -19366,6 +20260,8 @@ function exposeDebug() {
                 "fazide.setDebugMode(true) / fazide.addBreakpoint(12) / fazide.addWatch('someVar')",
                 "fazide.listGames() / fazide.loadGame('click-counter', { run: true })",
                 "fazide.listApplications() / fazide.loadApplication('calculator-app', { run: true })",
+                "fazide.listLessons() / fazide.loadLesson('paddle-lesson-1', { startTyping: true })",
+                "fazide.startTypingLesson() / fazide.nextLessonStep() / fazide.stopTypingLesson() / fazide.getLessonState() / fazide.getLessonProfile()",
                 "fazide.setLogWidth(px) / fazide.setSidebarWidth(px) / fazide.setSandboxWidth(px) / fazide.setToolsWidth(px)",
                 "fazide.setSizes({ logWidth, sidebarWidth, sandboxWidth, toolsWidth })",
                 "fazide.setPanelGap(px) / fazide.setCornerRadius(px) / fazide.setBottomHeight(px)",
@@ -19533,6 +20429,7 @@ function exitRunnerFullscreen() {
 
 async function boot() {
     const recoveredStorageJournal = recoverStorageJournal();
+    loadLessonProfile();
     loadEditorSettings();
     renderEditorSyntaxThemeSelectOptions();
     loadSnippetRegistry();
@@ -19553,6 +20450,16 @@ async function boot() {
     loadUiZoom();
     initDocking();
     initSplitters();
+    window.addEventListener("beforeunload", () => {
+        persistLessonProfile({ force: true });
+        persistLessonSession({ force: true });
+    });
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+            persistLessonProfile({ force: true });
+            persistLessonSession({ force: true });
+        }
+    });
     exposeDebug();
     wireQuickOpen();
     wireCommandPalette();
@@ -19609,6 +20516,7 @@ async function boot() {
     layoutState.filesTrashOpen = false;
     gamesSelectorOpen = false;
     applicationsSelectorOpen = false;
+    lessonsSelectorOpen = false;
     applyLayout();
     applyUiZoom(uiZoomPercent, { persist: false, announce: false, syncLayout: true });
     if (!rawLayout) {
@@ -19631,6 +20539,7 @@ async function boot() {
     setSingleSelection(activeFileId);
     const activeFile = getActiveFile();
     setEditorValue(activeFile?.code ?? DEFAULT_CODE, { silent: true });
+    restoreLessonSessionFromStorage();
     queueEditorSignatureHintSync();
     if (activeFile) {
         recordCodeSnapshot(activeFile.id, activeFile.code, "boot", { force: false });
@@ -19639,6 +20548,8 @@ async function boot() {
     renderEditorMirror();
     syncGamesUI();
     syncApplicationsUI();
+    syncLessonsUI();
+    updateLessonHud();
     applyEditorBottomComfortSpacing({ force: true });
     wireEditorBottomComfortObserver();
     persistFiles("boot");
@@ -19668,6 +20579,11 @@ async function boot() {
     // - Status becomes "Editing" to show unspecific activity.
     editor.onChange(() => {
         if (suppressChange) return;
+        if (isLessonSessionActiveForCurrentFile()) {
+            stopTypingLesson({ announce: false });
+            status.set("Lesson stopped: file changed");
+            logger.append("warn", ["Lesson mode stopped because file content changed."]);
+        }
         updateActiveFileCode(editor.get());
         if (suppressHtmlTagRenameChange) {
             suppressHtmlTagRenameChange = false;
@@ -19737,6 +20653,10 @@ async function boot() {
     // - We handle shortcuts only while the editor has focus.
     // - We prevent default browser behavior (Save page / focus address bar).
     editor.onKeyDown((e) => {
+        if (handleLessonTypingKeyDown(e)) {
+            return;
+        }
+
         if (handleEditorCompletionKeyDown(e)) {
             return;
         }
@@ -20029,6 +20949,9 @@ async function boot() {
                 if (target === "applications") {
                     setFilesAppsOpen(!layoutState.filesAppsOpen);
                 }
+                if (target === "lessons") {
+                    setFilesLessonsOpen(!layoutState.filesLessonsOpen);
+                }
                 if (target === "open-editors") {
                     setFilesSectionOpen("open-editors", !layoutState.filesOpenEditorsOpen);
                 }
@@ -20236,6 +21159,12 @@ async function boot() {
             syncApplicationsUI();
         });
     }
+    if (el.lessonsSelectorToggle) {
+        el.lessonsSelectorToggle.addEventListener("click", () => {
+            lessonsSelectorOpen = !lessonsSelectorOpen;
+            syncLessonsUI();
+        });
+    }
     if (el.applicationsList) {
         el.applicationsList.addEventListener("click", (event) => {
             const target = event.target instanceof Element ? event.target.closest("[data-application-id]") : null;
@@ -20267,6 +21196,37 @@ async function boot() {
             }
         });
     }
+    if (el.lessonsList) {
+        el.lessonsList.addEventListener("click", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-lesson-id]") : null;
+            if (!target) return;
+            const id = String(target.dataset.lessonId || "");
+            if (!id || id === selectedLessonId) return;
+            selectedLessonId = id;
+            syncLessonsUI();
+        });
+        el.lessonsList.addEventListener("keydown", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-lesson-id]") : null;
+            if (!target) return;
+            const options = Array.from(el.lessonsList.querySelectorAll("[data-lesson-id]"));
+            const index = options.indexOf(target);
+            if (index === -1) return;
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const delta = event.key === "ArrowDown" ? 1 : -1;
+                const next = options[(index + delta + options.length) % options.length];
+                next?.focus();
+                return;
+            }
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                const id = String(target.dataset.lessonId || "");
+                if (!id || id === selectedLessonId) return;
+                selectedLessonId = id;
+                syncLessonsUI();
+            }
+        });
+    }
     if (el.gameLoad) {
         el.gameLoad.addEventListener("click", async () => {
             const id = selectedGameId;
@@ -20279,6 +21239,13 @@ async function boot() {
             const id = selectedApplicationId;
             if (!id) return;
             await loadApplicationById(id, { runAfter: false });
+        });
+    }
+    if (el.lessonLoad) {
+        el.lessonLoad.addEventListener("click", async () => {
+            const id = selectedLessonId;
+            if (!id) return;
+            await loadLessonById(id, { startTyping: true, runAfter: false });
         });
     }
     el.btnRunnerFull.addEventListener("click", toggleRunnerFullscreen);

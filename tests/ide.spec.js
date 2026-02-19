@@ -7,6 +7,7 @@ test("loads the IDE shell with files and editor", async ({ page }) => {
   await expect(page.locator("#fileList")).toBeVisible();
   await expect(page.locator("#gamesSelectorToggle")).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("#appsSelectorToggle")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#lessonsSelectorToggle")).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator('#fileList [data-file-section="files"]')).toHaveAttribute("aria-expanded", "false");
 
   const hasEditorSurface = await page.evaluate(() => {
@@ -1858,6 +1859,39 @@ test("applications catalog populated keeps section available and collapsed by de
   expect(result.loadDisabled).toBeTruthy();
 });
 
+test("lessons catalog populated keeps section available and collapsed by default", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    const lessons = api?.listLessons?.() || [];
+    const section = document.querySelector("#filesLessons");
+    const toggle = document.querySelector("#lessonsSelectorToggle");
+    const list = document.querySelector("#lessonsList");
+    const load = document.querySelector("#lessonLoad");
+
+    return {
+      count: lessons.length,
+      sectionHidden: section?.getAttribute("aria-hidden") === "true",
+      toggleDisabled: Boolean(toggle?.disabled),
+      toggleExpanded: String(toggle?.getAttribute("aria-expanded") || ""),
+      listHidden: list?.getAttribute("aria-hidden") === "true",
+      listCount: Number(list?.children?.length || 0),
+      loadHidden: Boolean(load?.hidden),
+      loadDisabled: Boolean(load?.disabled),
+    };
+  });
+
+  expect(result.count).toBeGreaterThan(0);
+  expect(result.sectionHidden).toBeFalsy();
+  expect(result.toggleDisabled).toBeFalsy();
+  expect(result.toggleExpanded).toBe("false");
+  expect(result.listHidden).toBeTruthy();
+  expect(result.listCount).toBe(result.count);
+  expect(result.loadHidden).toBeTruthy();
+  expect(result.loadDisabled).toBeTruthy();
+});
+
 test("runtime validation applications are present in Applications catalog", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -1981,18 +2015,54 @@ test("runtime full matrix app emits detailed signals for html/css channels", asy
   expect(result.cssLangSeen).toBeTruthy();
 });
 
-test("games and applications load buttons reveal and enable when catalogs are expanded", async ({ page }) => {
+test("games load successfully", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.listGames || !api?.loadGame || !api?.listFiles) {
+      return { ready: false };
+    }
+
+    const games = api.listGames();
+    const firstGame = games[0];
+    if (!firstGame?.id) {
+      return { ready: false, reason: "no-games" };
+    }
+
+    const loaded = await api.loadGame(firstGame.id, { run: false });
+    const files = api.listFiles();
+    const activeName = String(files.find((entry) => entry.active)?.name || "");
+
+    return {
+      ready: true,
+      loaded,
+      fileCount: files.length,
+      activeName,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.fileCount).toBeGreaterThan(0);
+  expect(result.activeName.length).toBeGreaterThan(0);
+});
+
+test("games applications and lessons load buttons reveal and enable when catalogs are expanded", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
     const gamesToggle = document.querySelector("#gamesSelectorToggle");
     const appsToggle = document.querySelector("#appsSelectorToggle");
+    const lessonsToggle = document.querySelector("#lessonsSelectorToggle");
     gamesToggle?.click();
     appsToggle?.click();
+    lessonsToggle?.click();
 
     const gameLoad = document.querySelector("#gameLoad");
     const appLoad = document.querySelector("#appLoad");
-    if (!gamesToggle || !appsToggle || !gameLoad || !appLoad) {
+    const lessonLoad = document.querySelector("#lessonLoad");
+    if (!gamesToggle || !appsToggle || !lessonsToggle || !gameLoad || !appLoad || !lessonLoad) {
       return { ready: false };
     }
 
@@ -2000,20 +2070,26 @@ test("games and applications load buttons reveal and enable when catalogs are ex
       ready: true,
       gamesToggleDisabled: Boolean(gamesToggle.disabled),
       appsToggleDisabled: Boolean(appsToggle.disabled),
+      lessonsToggleDisabled: Boolean(lessonsToggle.disabled),
       gameLoadHidden: Boolean(gameLoad.hidden),
       appLoadHidden: Boolean(appLoad.hidden),
+      lessonLoadHidden: Boolean(lessonLoad.hidden),
       gameLoadDisabled: Boolean(gameLoad.disabled),
       appLoadDisabled: Boolean(appLoad.disabled),
+      lessonLoadDisabled: Boolean(lessonLoad.disabled),
     };
   });
 
   expect(result.ready).toBeTruthy();
   expect(result.gamesToggleDisabled).toBeFalsy();
   expect(result.appsToggleDisabled).toBeFalsy();
+  expect(result.lessonsToggleDisabled).toBeFalsy();
   expect(result.gameLoadHidden).toBeFalsy();
   expect(result.appLoadHidden).toBeFalsy();
+  expect(result.lessonLoadHidden).toBeFalsy();
   expect(result.gameLoadDisabled).toBeFalsy();
   expect(result.appLoadDisabled).toBeFalsy();
+  expect(result.lessonLoadDisabled).toBeFalsy();
 });
 
 test("files panel sections can be reordered and persist in layout state", async ({ page }) => {
@@ -2054,8 +2130,8 @@ test("files panel sections can be reordered and persist in layout state", async 
   });
 
   expect(result.ready).toBeTruthy();
-  expect(result.sectionOrder.slice(0, 4)).toEqual(["applications", "open-editors", "files", "games"]);
-  expect(result.persistedOrder).toEqual(["applications", "open-editors", "files", "games"]);
+  expect(result.sectionOrder.slice(0, 5)).toEqual(["applications", "open-editors", "files", "games", "lessons"]);
+  expect(result.persistedOrder).toEqual(["applications", "open-editors", "files", "games", "lessons"]);
 });
 
 test("files panel width is clamped to a minimum of 180px", async ({ page }) => {
@@ -3821,6 +3897,305 @@ test("fazide exposes separated project/workspace/runtime state boundaries", asyn
   expect(result.runCountType).toBe("number");
   expect(result.runtimeMatches).toBeTruthy();
   expect(result.unknownBoundaryIsNull).toBeTruthy();
+});
+
+test("lesson mode loads starter and advances through STEP typing markers", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.listLessons || !api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput || !api?.exportWorkspaceData) {
+      return { ready: false };
+    }
+
+    const lessons = api.listLessons();
+    const hasLesson = lessons.some((entry) => entry.id === "paddle-lesson-1");
+    if (!hasLesson) {
+      return { ready: false, hasLesson };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const initial = api.getLessonState();
+
+    const snapshot = api.exportWorkspaceData();
+    const files = Array.isArray(snapshot?.data?.files) ? snapshot.data.files : [];
+    const gameFile = files.find((entry) => String(entry?.name || "").toLowerCase().endsWith("/game.js"))
+      || files.find((entry) => String(entry?.name || "").toLowerCase().endsWith("game.js"));
+    const gameCode = String(gameFile?.code || "");
+    const match = gameCode.match(/\/\/ \[STEP:build-paddle-game:START\]\r?\n([\s\S]*?)\r?\n\/\/ \[STEP:build-paddle-game:END\]/);
+    const lessonText = match ? `${match[1]}\n` : "";
+
+    const typedAll = api.typeLessonInput(lessonText);
+    const afterAll = api.getLessonState();
+
+    return {
+      ready: true,
+      hasLesson,
+      loaded,
+      initial,
+      lessonTextLength: lessonText.length,
+      typedAll,
+      afterAll,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.hasLesson).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.initial?.stepCount).toBe(1);
+  expect(result.initial?.stepIndex).toBe(0);
+  expect(result.initial?.remaining).toBeGreaterThan(0);
+  expect(result.lessonTextLength).toBeGreaterThan(40);
+  expect(result.typedAll).toBe(result.lessonTextLength);
+  expect(result.afterAll?.completed).toBeTruthy();
+  expect(result.afterAll?.remaining).toBe(0);
+});
+
+test("lesson mode accepts strict real keyboard typing on first line", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const loaded = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState) return { ready: false };
+    const ok = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const state = api.getLessonState();
+    return { ready: true, ok, before: state };
+  });
+
+  expect(loaded.ready).toBeTruthy();
+  expect(loaded.ok).toBeTruthy();
+  expect(loaded.before?.progress).toBe(0);
+
+  await page.evaluate(() => {
+    const cm = document.querySelector(".CodeMirror")?.CodeMirror;
+    if (cm) {
+      cm.focus();
+      return;
+    }
+    const textarea = document.querySelector("#editor");
+    textarea?.focus();
+  });
+
+  await page.keyboard.type('const canvas = document.getElementById("game");');
+  await page.keyboard.press("Enter");
+
+  const after = await page.evaluate(() => {
+    const api = window.fazide;
+    const state = api?.getLessonState?.();
+    const statusText = String(document.querySelector("#statusText")?.textContent || "");
+    return {
+      active: Boolean(state?.active),
+      completed: Boolean(state?.completed),
+      progress: Number(state?.progress || 0),
+      remaining: Number(state?.remaining || 0),
+      statusText,
+    };
+  });
+
+  expect(after.active).toBeTruthy();
+  expect(after.completed).toBeFalsy();
+  expect(after.progress).toBeGreaterThan(20);
+  expect(after.remaining).toBeGreaterThan(0);
+  expect(after.statusText.toLowerCase()).not.toContain("expected");
+});
+
+test("lesson mode mismatch keeps progress and reports expected key", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const before = api.getLessonState();
+    const typed = api.typeLessonInput("x");
+    const after = api.getLessonState();
+    const statusText = String(document.querySelector("#statusText")?.textContent || "");
+
+    return {
+      ready: true,
+      loaded,
+      beforeProgress: Number(before?.progress || 0),
+      afterProgress: Number(after?.progress || 0),
+      typed,
+      statusText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.beforeProgress).toBe(0);
+  expect(result.afterProgress).toBe(0);
+  expect(result.typed).toBe(0);
+  expect(result.statusText.toLowerCase()).toContain("expected");
+});
+
+test("lesson mode restores typing progress after refresh", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const before = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState) {
+      return { ready: false };
+    }
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const typed = api.typeLessonInput('const canvas = document.getElementById("game");\n');
+    const state = api.getLessonState();
+    return {
+      ready: true,
+      loaded,
+      typed,
+      stepIndex: Number(state?.stepIndex || 0),
+      progress: Number(state?.progress || 0),
+      remaining: Number(state?.remaining || 0),
+      active: Boolean(state?.active),
+      completed: Boolean(state?.completed),
+      fileId: String(state?.fileId || ""),
+    };
+  });
+
+  expect(before.ready).toBeTruthy();
+  expect(before.loaded).toBeTruthy();
+  expect(before.typed).toBeGreaterThan(10);
+  expect(before.active).toBeTruthy();
+  expect(before.completed).toBeFalsy();
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const after = await page.evaluate(() => {
+    const api = window.fazide;
+    const state = api?.getLessonState?.();
+    return {
+      ready: Boolean(api?.getLessonState),
+      active: Boolean(state?.active),
+      completed: Boolean(state?.completed),
+      stepIndex: Number(state?.stepIndex || 0),
+      progress: Number(state?.progress || 0),
+      remaining: Number(state?.remaining || 0),
+      fileId: String(state?.fileId || ""),
+    };
+  });
+
+  expect(after.ready).toBeTruthy();
+  expect(after.active).toBeTruthy();
+  expect(after.completed).toBeFalsy();
+  expect(after.fileId).toBe(before.fileId);
+  expect(after.stepIndex).toBe(before.stepIndex);
+  expect(after.progress).toBe(before.progress);
+  expect(after.remaining).toBe(before.remaining);
+});
+
+test("lesson HUD hides and regular typing stays normal after switching to non-lesson file", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const prepared = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.createFile || !api?.getLessonState) {
+      return { ready: false };
+    }
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    api.typeLessonInput('const canvas = document.getElementById("game");\n');
+    const lessonBeforeSwitch = api.getLessonState();
+    const regular = api.createFile("notes-regular.js", "");
+    const lessonAfterSwitch = api.getLessonState();
+    const hud = document.querySelector("#lessonHud");
+    return {
+      ready: true,
+      loaded,
+      regularFileCreated: Boolean(regular?.id),
+      beforeActive: Boolean(lessonBeforeSwitch?.active),
+      afterActive: Boolean(lessonAfterSwitch?.active),
+      hudHidden: Boolean(hud?.hidden),
+      hudActiveAttr: String(hud?.getAttribute("data-active") || ""),
+    };
+  });
+
+  expect(prepared.ready).toBeTruthy();
+  expect(prepared.loaded).toBeTruthy();
+  expect(prepared.regularFileCreated).toBeTruthy();
+  expect(prepared.beforeActive).toBeTruthy();
+  expect(prepared.afterActive).toBeFalsy();
+  expect(prepared.hudHidden).toBeTruthy();
+  expect(prepared.hudActiveAttr).toBe("false");
+
+  await page.evaluate(() => {
+    const cm = document.querySelector(".CodeMirror")?.CodeMirror;
+    if (cm) {
+      cm.focus();
+      return;
+    }
+    document.querySelector("#editor")?.focus();
+  });
+
+  await page.keyboard.type("const regularTypingWorks = true;");
+
+  const typed = await page.evaluate(() => {
+    const api = window.fazide;
+    const code = String(api?.getCode?.() || "");
+    const state = api?.getLessonState?.();
+    return {
+      hasTypedText: code.includes("regularTypingWorks"),
+      lessonActive: Boolean(state?.active),
+    };
+  });
+
+  expect(typed.hasTypedText).toBeTruthy();
+  expect(typed.lessonActive).toBeFalsy();
+});
+
+test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonProfile || !api?.typeLessonInput || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    const before = api.getLessonProfile();
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const typed = api.typeLessonInput('const canvas = document.getElementById("game");\n');
+    const after = api.getLessonProfile();
+    const lessonState = api.getLessonState();
+
+    const hud = document.querySelector("#lessonHud");
+    const hudStep = String(document.querySelector("#lessonHudStep")?.textContent || "");
+    const hudProgress = String(document.querySelector("#lessonHudProgress")?.textContent || "");
+    const hudLevel = String(document.querySelector("#lessonHudLevel")?.textContent || "");
+    const hudXp = String(document.querySelector("#lessonHudXp")?.textContent || "");
+    const hudStreak = String(document.querySelector("#lessonHudStreak")?.textContent || "");
+
+    return {
+      ready: true,
+      loaded,
+      typed,
+      beforeXp: Number(before?.xp || 0),
+      afterXp: Number(after?.xp || 0),
+      dailyStreak: Number(after?.dailyStreak || 0),
+      active: Boolean(lessonState?.active),
+      hudActive: hud?.getAttribute("data-active") === "true" && !hud?.hidden,
+      hudStep,
+      hudProgress,
+      hudLevel,
+      hudXp,
+      hudStreak,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.typed).toBeGreaterThan(10);
+  expect(result.afterXp).toBeGreaterThan(result.beforeXp);
+  expect(result.dailyStreak).toBeGreaterThanOrEqual(0);
+  expect(result.active).toBeTruthy();
+  expect(result.hudActive).toBeTruthy();
+  expect(result.hudStep.length).toBeGreaterThan(0);
+  expect(result.hudProgress).toContain("/");
+  expect(result.hudLevel).toContain("Lv ");
+  expect(result.hudXp).toContain("XP ");
+  expect(result.hudStreak).toContain("Streak ");
 });
 
 test("fazide recovers pending storage journal entries", async ({ page }) => {
