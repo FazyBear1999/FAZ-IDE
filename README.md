@@ -40,7 +40,7 @@ Use the Files panel **Applications** selector to import templates into the works
 - `assets/` UI, JS modules, vendor assets, games, and applications
 - `config/` configuration (Playwright)
 - `docs/` documentation (changelog)
-- `scripts/` local dev server
+- `scripts/` automation scripts for dev server, testing, release packaging, Codex, and Franklin ops
 - `tests/` Playwright tests
 - `artifacts/` generated outputs (ignored by git)
 
@@ -142,6 +142,11 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run desktop:pack:clean` removes old `dist_pack_check/run-*` folders (skips locked folders safely).
 - `npm run desktop:artifacts:clean` removes old `run-*` folders from desktop artifact dirs (`dist_pack_check`, `dist_release_test`) and skips locked folders safely.
 
+Script-path governance:
+
+- Canonical script ownership map: `docs/ai-memory/script-family-inventory.md`.
+- Prefer canonical full gate command `npm run frank:full` (`frank:all` remains an alias).
+
 ## Codex Safe Workflow (Issue → Change → Rollback)
 
 Use this flow to keep Codex sessions simple and reversible:
@@ -185,7 +190,7 @@ Notes:
 
 - `npm run frank -- help` shows all Franklin commands.
 - `npm run frank:check` runs contract + sync verify + memory verify + Franklin safety + test integrity.
-- `npm run frank:all` runs the full release gate (`test:all`) with live stage telemetry, digest cards per stage, and a timing recap.
+- `npm run frank:all` is a compatibility alias for `npm run frank:full`.
 - `npm run frank:full` runs the full release gate (`test:all`) with the same organized digest view and writes per-stage logs under `artifacts/frankleen/reports/`.
 - `npm run frank:guardian` runs full gate with auto preflight snapshot + rollback on failure + fix-request capture.
 - `npm run frank:doctor` runs non-mutating Franklin readiness diagnostics.

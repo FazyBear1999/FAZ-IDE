@@ -69,6 +69,7 @@ Treat it as a lightweight runbook for daily development and emergency fixes.
 - `optimization-map.md` for prioritized, risk-aware optimization targets.
 - `file-organization-playbook.md` for phased, rollback-safe repository reorganization.
 - `file-organization-wave-map.md` for concrete major-change sequencing and full-gate checkpoints.
+- `script-family-inventory.md` for canonical script ownership, command naming, and path-reference governance.
 - `decision-framework.md` for repeatable option scoring, go/no-go, and rollback criteria.
 - `roadmap-decision-map.md` for binding roadmap checkpoints to decisions and validation gates.
 - `session-command-center.md` for a one-page, start-to-finish AI operating loop each session.

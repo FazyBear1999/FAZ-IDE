@@ -16,6 +16,34 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Applied safe sandbox workspace-preview cleanup for path normalization and resolver key reuse.
+- Notable safety/infra updates: Refactored `assets/js/sandbox/workspacePreview.js` to centralize normalized cache-key/path-key generation, reducing duplication without changing resolver behavior.
+- Validation status: `tests/workspace-preview-contract.spec.js` passed (4/4), `tests/stability-contract.spec.js` passed (14/14), and `npm run frank:full` passed (14/14).
+- Follow-up actions: Continue Wave 2 cleanup in small sandbox-local slices and keep full gate evidence before push.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
+- Summary: Completed optimization-lockdown repository organization Wave 1 docs/script-governance batch (major changes 2–3).
+- Notable safety/infra updates: Added `docs/ai-memory/script-family-inventory.md` as canonical script ownership map; normalized command/path guidance to prefer `frank:full`; synced `file-organization-wave-map.md` and `roadmap-decision-map.md` status notes for C4/C8 traceability.
+- Validation status: `npm run test:memory` passed, `npm run test:integrity` passed, stress contract rechecks passed in focused runs, and Checkpoint A full gate (`npm run frank:full`) passed 14/14.
+- Follow-up actions: Start Wave 2 organization in reversible slices and keep focused validation plus gate-evidence cadence.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
+- Summary: Published detailed optimization-lockdown roadmap with strict non-breaking and test-quality rules.
+- Notable safety/infra updates: `docs/MASTER_ROADMAP.md` now includes active optimization override, wave-by-wave system hardening plan, explicit rollback/gate expectations, and a meaningful-test standard that rejects low-signal assertions.
+- Validation status: Documentation sync completed; `npm run test:memory` and `npm run test:integrity` required after memory updates.
+- Follow-up actions: Execute optimization by wave under checkpoint `C8`, and require per-slice focused evidence plus wave-boundary `npm run test:all`.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
+- Summary: Established optimization-first execution mode with full-system validation baseline green.
+- Notable safety/infra updates: Formalized stabilization-before-new-features directive in AI memory, emphasizing cross-surface integration quality (UI controls, commands, panels, runtime, lessons, packaging) and deterministic gate evidence.
+- Validation status: `runTests` full suite passed (540/540), and `npm run test:all` passed end-to-end including integrity, memory, CSS, Playwright, desktop icon/pack/dist, SiteGround package prep/verify, and privacy checks.
+- Follow-up actions: Execute optimization/organization waves in small reversible units, require focused checks plus periodic `test:all`, and postpone net-new feature expansion until stabilization cadence remains consistently green.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Final release-readiness hardening pass completed for SEO metadata and SiteGround domain packaging.
 - Notable safety/infra updates: Added canonical/`og:url` defaults in source HTML, added optional `SITE_URL` rewrite support in SiteGround package prep for canonical/`og:url` and sitemap `<loc>`, and expanded `docs/RELEASE_CHECKLIST.md` to include domain input, SEO/icon verification, and crawl sanity checks.
 - Validation status: `npm run frank:full` passed (14/14), `npm run test -- tests/release.spec.js` passed (10/10), `npm run test:memory` passed, and package rewrite verified by `deploy:siteground` + file assertions.

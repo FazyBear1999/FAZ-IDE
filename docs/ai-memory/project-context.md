@@ -19,6 +19,10 @@
 - Reliable workspace import/export and persistence.
 - Strong release gating (`npm run test:all`).
 - Production-safe web deployment with domain-aware packaging (`SITE_URL` for canonical/OG/sitemap output).
+- Optimization-first execution: complete organization/performance/reliability hardening on current surfaces before introducing new feature scope.
+- Zero-regression quality bar: all core controls, panels, commands, and lesson/runtime flows must remain fully integrated and validated together.
+- Lockdown mode active: optimization + organization roadmap is the primary track until stabilization exit criteria are met.
+- Test quality requirement: new tests must prove real behavior contracts and fail on regression, not just assert surface existence.
 
 ## Architecture Notes
 - Web app entry: `assets/js/app.js`

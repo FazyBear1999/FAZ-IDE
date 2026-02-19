@@ -26,6 +26,153 @@ Every feature must strengthen at least one pillar:
 
 ## Delivery Phases
 
+## Active Execution Override — Optimization + Organization Lockdown (Now)
+
+Until this lockdown is complete, optimization/organization/reliability work takes priority over net-new features.
+
+### Lockdown Goals
+
+- Preserve behavior while reducing complexity, coupling, and drift.
+- Increase confidence through meaningful tests and deterministic validation evidence.
+- Keep all existing systems integrated and stable while improving maintainability.
+
+### Lockdown Exit Criteria
+
+- Full gate is consistently green over multiple optimization waves (`npm run test:all`).
+- Core surfaces remain stable: files, editor, runtime/sandbox, layout, command paths, lessons, release packaging.
+- `app.js` and other high-churn areas are decomposed into clearer boundaries without behavior drift.
+- Tests prove behavior contracts (not just coverage volume) and fail when contracts are broken.
+
+### Lockdown Rules (Non-Negotiable)
+
+- No broad new feature scope until current-surface optimization milestones are complete.
+- Every optimization slice must be reversible (Codex checkpoint before edits).
+- No ambiguous test additions: each new test must validate a real user/system contract.
+- If focused validation is unclear, escalate immediately to full gate before continuing.
+
+## Optimization Program — Detailed Roadmap
+
+### Wave O0 — Baseline + Guardrails
+
+1. Confirm clean baseline and run full validation.
+2. Define slice boundaries and rollback triggers for each target system.
+3. Require checkpoint + focused tests + integrity + memory checks per slice.
+
+### Wave O1 — Orchestrator Decomposition (Behavior-Preserving)
+
+Target: reduce coupling and size pressure in `assets/js/app.js`.
+
+1. Extract pure helper functions (formatting/label/select-option shaping).
+2. Extract modal state wrappers (`data-open`, `aria-hidden`, focus routing).
+3. Extract files-menu sync/toggle render helpers.
+4. Extract command-palette list/render helpers while preserving command IDs.
+5. Keep event wiring and side effects unchanged until helper boundaries are stable.
+
+Validation per slice:
+
+- Focused relevant specs + `npm run test:integrity` + `npm run test:memory`.
+- End of wave: `npm run test:all`.
+
+### Wave O2 — Filesystem + Persistence Reliability
+
+Target: make file operations safer and easier to reason about.
+
+1. Audit create/rename/move/delete/duplicate/trash flows for shared invariants.
+2. Normalize operation journaling boundaries and undo/redo semantics.
+3. Harden import/export edge handling and persistence error paths.
+4. Remove duplicated mutation paths that can drift.
+
+Validation:
+
+- File workflow focused contracts.
+- Persistence/import/export focused contracts.
+- End of wave: full gate.
+
+### Wave O3 — Runtime/Sandbox Stability + Observability
+
+Target: keep run lifecycle deterministic and diagnostics actionable.
+
+1. Consolidate run-token and message-trust pathways.
+2. Normalize console/runtime diagnostic formatting at shared boundaries.
+3. Harden fallback and timeout/isolation behavior contracts.
+4. Keep security-noise suppression scoped and test-backed.
+
+Validation:
+
+- Sandbox security/runtime focused tests.
+- Stability contracts and runtime integration checks.
+- End of wave: full gate.
+
+### Wave O4 — Layout + Panel Engine Consistency
+
+Target: deterministic layout behavior under all panel operations.
+
+1. Continue panel blueprint slices with strict no-regression route checks.
+2. Unify splitter/edge/control/API bounds semantics.
+3. Keep docking HUD and resize affordances stable and token-driven.
+4. Reduce layout code duplication without changing UX behavior.
+
+Validation:
+
+- Layout micro tests + docking contracts.
+- End of wave: full gate.
+
+### Wave O5 — Lesson Engine + Editor Integrity
+
+Target: preserve strict lesson correctness while improving maintainability.
+
+1. Consolidate lesson progress/state mutation pathways.
+2. Harden marker parsing/validation/reporting boundaries.
+3. Keep typing-zone, cursor, and mutation guard contracts deterministic.
+4. Preserve teachability UX while removing duplicated logic branches.
+
+Validation:
+
+- Lesson/editor focused contracts.
+- End of wave: full gate.
+
+### Wave O6 — Repository Organization + Documentation Sync
+
+Target: reduce structural drift and improve contributor predictability.
+
+1. Organize modules by responsibility with minimal path churn per batch.
+2. Keep memory docs and roadmap checkpoint status synchronized per change batch.
+3. Preserve script/release path reliability during file movement.
+
+Validation:
+
+- Focused checks per major organization batch.
+- Full gate after each 3 major changes (or earlier for high-risk surfaces).
+
+## Test Quality Standard (Must Be Meaningful)
+
+Every new test must satisfy all of the following:
+
+1. Contract-first: validates a user-visible or system-critical invariant.
+2. Falsifiable: would fail if the protected behavior regresses.
+3. Specific assertions: avoids trivial/pass-through checks.
+4. Scope alignment: tied to the exact surface being changed.
+5. Deterministic: avoids flaky timing-dependent logic where possible.
+6. Evidence-linked: references the optimization slice/checkpoint it protects.
+
+Disallowed test patterns:
+
+- “Existence-only” assertions with no behavior verification.
+- Redundant tests that do not increase contract coverage.
+- Assertions that always pass regardless of implementation state.
+
+## System-by-System Optimization Checklist
+
+- Command registry routing completeness and consistency.
+- State boundaries (`project`/`workspace`/`runtime`) enforcement clarity.
+- File operation reversibility and persistence guarantees.
+- Run lifecycle token isolation and sandbox message trust.
+- Diagnostics/console/actionability consistency.
+- Panel/layout/docking deterministic behavior.
+- Lesson marker/progress/input integrity.
+- Release/package/deploy script reliability.
+- AI memory + roadmap + checkpoint synchronization.
+
 ## Phase 0 — Architecture Spine (Start First)
 
 - Single command registry for all UI actions (menu/buttons/shortcuts/palette use the same action IDs).

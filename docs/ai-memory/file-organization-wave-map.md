@@ -5,7 +5,9 @@ This map turns large repository organization into reversible waves.
 ## Current status
 
 - Major change 1 complete: governance + batching policy + playbook.
-- Full gate checkpoint target: after major change 3.
+- Major change 2 complete: script-family inventory + canonical command naming guidance added.
+- Major change 3 complete: docs path/command normalization synced to inventory.
+- Checkpoint A complete: focused checks passed (`test:memory`, `test:integrity`) and full gate passed (`frank:full`, 14/14).
 
 ## Wave 1 (Low runtime risk)
 

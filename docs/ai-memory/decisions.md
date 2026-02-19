@@ -19,6 +19,93 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T13:30:00Z - Safe workspace-preview path-normalization cleanup (optimization slice)
+
+- Date (UTC):
+- 2026-02-19T13:30:00Z
+- Area:
+- Sandbox workspace preview resolver maintainability and low-risk micro-optimization
+- Decision:
+- Consolidated repeated path-key normalization in `assets/js/sandbox/workspacePreview.js` into shared local helpers (`toPathKey`, `toPathTrimmedKey`) and reused them across resolver/caching flows.
+- Preserved behavior and contracts while reducing repeated string-normalization patterns that can drift over time.
+- Why:
+- During optimization lockdown, this provides reversible cleanup with small blast radius on a sandbox helper surface and improves code clarity before broader organization waves.
+- Follow-up:
+- Keep this helper-locality pattern for future sandbox cleanup slices and continue validating with focused sandbox contracts plus full-gate evidence before push.
+
+## 2026-02-19T13:15:00Z - Layout stress-contract stabilization to unblock C4/C8 checkpoint gate
+
+- Date (UTC):
+- 2026-02-19T13:15:00Z
+- Area:
+- Test reliability for layout overlap stress contract and organization-wave checkpoint safety
+- Decision:
+- Kept zero-overlap contract strict in `tests/ide.spec.js` while increasing poll settle timeout for the resize stress check to reduce timing flakes under full-suite concurrency.
+- Added explicit violation detail in assertion output for faster root-cause triage if the contract fails again.
+- Why:
+- Full gate was blocked by a timing-sensitive failure in the stress contract even when focused reproduction passed; this created false negatives that stalled safe organization flow.
+- Follow-up:
+- Checkpoint A is now validated with green full gate (`npm run frank:full`, 14/14). Proceed to Wave 2 only in small reversible slices with focused validations.
+
+## 2026-02-19T13:25:00Z - Repo organization Wave 1 docs/script-governance completion (major changes 2–3)
+
+- Date (UTC):
+- 2026-02-19T13:25:00Z
+- Area:
+- Repository organization governance, command/path consistency, and optimization-lockdown traceability
+- Decision:
+- Added canonical script ownership and command naming inventory in `docs/ai-memory/script-family-inventory.md`.
+- Normalized operator docs to treat `frank:full` as canonical full gate while preserving compatibility aliases.
+- Updated roadmap-memory checkpoints (`file-organization-wave-map.md`, `roadmap-decision-map.md`) to explicitly mark major changes 2–3 complete and Checkpoint A pending full-gate evidence.
+- Why:
+- Wave O6 / C4 required low-risk, reversible organization progress with clear blast-radius accounting before medium-risk file movement waves.
+- Follow-up:
+- Focused proof completed (`npm run test:memory`, `npm run test:integrity` both passed); Checkpoint A full gate was attempted and blocked by existing Playwright layout stress failure, so Wave 2 work remains paused until `frank:full` is green.
+
+## 2026-02-19T06:10:00Z - Stabilization-first optimization mandate (before new features)
+
+- Date (UTC):
+- 2026-02-19T06:10:00Z
+- Area:
+- Product quality strategy, release safety, and execution sequencing
+- Decision:
+- Prioritize optimization, organization, and integration reliability on existing product surfaces before adding new feature scope.
+- Treat cross-surface consistency (buttons, commands, panels, runtime, lessons, and packaging) as a non-negotiable release condition.
+- Require full-gate validation evidence for stabilization checkpoints (`npm run test:all`) in addition to focused checks.
+- Why:
+- Current roadmap stage and user goals favor hardening and cohesion over breadth; reducing regression risk now improves delivery speed later.
+- Follow-up:
+- Keep memory/docs/checkpoint updates synchronized for each stabilization wave and block feature expansion until quality gates remain consistently green.
+
+## 2026-02-19T06:20:00Z - Wave 1 safe-slice decomposition protocol (app.js)
+
+- Date (UTC):
+- 2026-02-19T06:20:00Z
+- Area:
+- Orchestration maintainability and zero-regression optimization flow
+- Decision:
+- Execute `app.js` optimization in small, behavior-preserving slices (pure helpers and state wrappers first), with explicit per-slice rollback savepoints and focused validation before moving to the next slice.
+- Lock full-gate checkpoint at the end of Wave 1 (`npm run test:all`) before any broader wave.
+- Why:
+- `app.js` size and coupling create high blast radius; safe decomposition keeps delivery velocity while protecting runtime behavior.
+- Follow-up:
+- For each slice: savepoint -> focused tests -> integrity/memory checks -> memory sync; if any ambiguity appears, escalate to full gate immediately.
+
+## 2026-02-19T06:35:00Z - Detailed optimization roadmap + meaningful-test enforcement
+
+- Date (UTC):
+- 2026-02-19T06:35:00Z
+- Area:
+- Roadmap governance, optimization sequencing, and test quality discipline
+- Decision:
+- Added a detailed optimization lockdown roadmap in `docs/MASTER_ROADMAP.md` with explicit waves, system-by-system checklist, and non-breaking execution rules.
+- Enforced test-quality requirement that new tests must validate concrete behavior contracts and fail on regression (no existence-only low-signal tests).
+- Bound this work to new checkpoint `C8` in roadmap decision governance.
+- Why:
+- Optimization-only mode needs strict execution sequencing and evidence quality to prevent regressions while improving organization and maintainability.
+- Follow-up:
+- Keep each optimization slice reversible, require focused evidence per slice, and run `npm run test:all` at wave boundaries before expanding scope.
+
 ## 2026-02-19T05:40:00Z - Canonical/social URL deployment contract (SITE_URL-aware packaging)
 
 - Date (UTC):

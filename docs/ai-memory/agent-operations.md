@@ -9,6 +9,8 @@
 - Do not merge behavior changes without focused validation.
 - Do not leave memory docs out of sync with runtime behavior.
 - Do not trade safety gates for speed.
+- During optimization lockdown, prioritize organization/reliability work over net-new feature scope.
+- Do not add low-signal tests; every test must protect a concrete behavior contract.
 
 ## Architecture Anchors
 - Main orchestrator: `assets/js/app.js`
@@ -36,6 +38,11 @@
 - For large file-organization work, run full gate after every 3 major changes.
 - Run `frank:full` immediately for any high-risk release/orchestration touch or unresolved focused-test failure.
 - Capture exact failing stage/log path before attempting fixes.
+
+## Test Quality Contract
+- New tests must be falsifiable and regression-sensitive.
+- Favor behavior/invariant assertions over existence-only assertions.
+- Each new optimization slice should include tests that would fail if the slice regresses.
 
 ## Session Exit Requirements
 - Working tree clearly reflects intended scope.

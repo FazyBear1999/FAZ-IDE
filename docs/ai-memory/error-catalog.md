@@ -37,6 +37,13 @@
   - Meaning: `sync:dist-site` map expects `assets/apps` but source directory was missing.
   - Fix: Restore or recreate `assets/apps` (and expected app files), then rerun `npm run sync:dist-site`.
 
+- Error: `tests\ide.spec.js: panel layout keeps every visible panel in-bounds with zero overlap after resize stress` timed out expecting `audit.violations.length === 0` (received `2`)
+  - Meaning: Full gate (`frank:full`) is blocked by the layout overlap stress contract in Playwright stage `test`.
+  - Fix: Reproduce with `npm run test -- tests/ide.spec.js -g "panel layout keeps every visible panel in-bounds with zero overlap after resize stress"`, inspect `artifacts/test-results/*overlap-after-resize-stress/error-context.md`, then rerun `npm run frank:full`.
+  - Checkpoint ID: `C4`, `C8`
+  - Validation command after fix: `npm run frank:full`
+  - Status: Resolved on 2026-02-19 after stress-contract stabilization (longer poll settle window with unchanged zero-overlap requirement); `npm run frank:full` passed 14/14.
+
 - Error: `/assets/js/app.js should be reachable` after `npm run test:frank:safety`
   - Meaning: Workspace assets were mutated before Playwright stage, causing static asset 404s and cascading UI test failures.
   - Fix: Restore `assets/*` from a known-good snapshot/package and run patched Franklin safety flow that preserves assets.

@@ -15,6 +15,15 @@
 
 ## Current Priority Gaps
 
+- Checkpoint ID: C8
+  - Area: Test quality signal strength
+  - Gap: Add a focused quality audit that flags low-signal tests (existence-only assertions without behavior invariants) in high-risk suites.
+  - Why it matters: Prevents false confidence from tests that pass without protecting real contracts.
+  - Proposed test: Lint-style assertion-quality scanner + curated allowlist for intentional existence checks.
+  - Priority (P0/P1/P2): P0
+  - Validation command: `npm run test:integrity` + focused suite audit command
+  - Owner/next action: Add with first C8 optimization implementation slice.
+
 - Checkpoint ID: C2
   - Area: Runtime validation templates
   - Gap: Add focused regression that verifies runtime full-matrix copy and checklist remain JS/HTML/CSS-only.
