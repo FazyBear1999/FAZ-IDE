@@ -26,6 +26,20 @@ import { THEMES, normalizeTheme, applyThemeState, DEFAULT_THEME } from "./ui/the
 import { buildExportWorkspaceData, buildWorkspaceExportFilename, triggerWorkspaceExportDownload, normalizeImportedWorkspacePayload, parseWorkspaceImportText, buildImportWorkspaceConfirmMessage } from "./ui/workspaceTransfer.js";
 import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, normalizeFilesSectionOrder, cloneLayoutState } from "./ui/layoutState.js";
 import { getFileIconPath, getFolderIconPath, bindFileListIconFallbacks } from "./ui/fileIcons.js";
+import {
+    toBooleanAttribute,
+    setBooleanAttribute,
+    setDataOpen,
+    setAriaHidden,
+    setAriaSelected,
+    setAriaExpanded,
+    setAriaPressed,
+    setDataActive,
+    setDataPanelOpen,
+    setVisibilityState,
+    setTabActiveState,
+    setOpenStateAttributes,
+} from "./ui/domBooleanState.js";
 import { runInSandbox } from "./sandbox/runner.js";
 import { normalizeProblemLevel, normalizeSandboxConsolePayload } from "./sandbox/consolePayload.js";
 import { isTrustedSandboxMessageEvent, isSandboxMessageForCurrentRun } from "./sandbox/messageTrust.js";
@@ -124,67 +138,6 @@ function setHealth(node, state, text) {
         node.textContent = text;
     }
     syncFooterRuntimeStatus();
-}
-
-function toBooleanAttribute(value) {
-    return value ? "true" : "false";
-}
-
-function setBooleanAttribute(node, attrName, value) {
-    if (!node || !attrName) return;
-    node.setAttribute(attrName, toBooleanAttribute(Boolean(value)));
-}
-
-function setDataOpen(node, open) {
-    setBooleanAttribute(node, "data-open", open);
-}
-
-function setAriaHidden(node, hidden) {
-    setBooleanAttribute(node, "aria-hidden", hidden);
-}
-
-function setAriaSelected(node, selected) {
-    setBooleanAttribute(node, "aria-selected", selected);
-}
-
-function setAriaExpanded(node, expanded) {
-    setBooleanAttribute(node, "aria-expanded", expanded);
-}
-
-function setAriaPressed(node, pressed) {
-    setBooleanAttribute(node, "aria-pressed", pressed);
-}
-
-function setDataActive(node, active) {
-    setBooleanAttribute(node, "data-active", active);
-}
-
-function setDataPanelOpen(node, open) {
-    setBooleanAttribute(node, "data-panel-open", open);
-}
-
-function setVisibilityState(node, visible, { dataOpen = false } = {}) {
-    if (!node) return;
-    const isVisible = Boolean(visible);
-    node.hidden = !isVisible;
-    if (dataOpen) {
-        node.dataset.open = toBooleanAttribute(isVisible);
-    }
-    setAriaHidden(node, !isVisible);
-}
-
-function setTabActiveState(node, active) {
-    if (!node) return;
-    const isActive = Boolean(active);
-    setAriaSelected(node, isActive);
-    node.tabIndex = isActive ? 0 : -1;
-    setDataActive(node, isActive);
-}
-
-function setOpenStateAttributes(node, open) {
-    const isOpen = Boolean(open);
-    setDataOpen(node, isOpen);
-    setAriaHidden(node, !isOpen);
 }
 
 function getHealthLabelSuffix(value = "", fallback = "") {
