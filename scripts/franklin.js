@@ -322,6 +322,25 @@ function sanitizeSnapshotLabel(rawLabel, fallback = "snapshot") {
   return safe.slice(0, 48);
 }
 
+function isSnapshotIndexEntry(entry) {
+  return Boolean(entry)
+    && typeof entry === "object"
+    && typeof entry.id === "string"
+    && entry.id.trim().length > 0;
+}
+
+function snapshotEntryHasRequiredArtifacts(entryId) {
+  const safeId = String(entryId || "").trim();
+  if (!safeId) return false;
+  const snapshotDir = path.join(guardianPaths.snapshots, safeId);
+  const metadataPath = path.join(snapshotDir, "metadata.json");
+  const payloadRoot = path.join(snapshotDir, "payload");
+  if (!fs.existsSync(snapshotDir) || !fs.statSync(snapshotDir).isDirectory()) return false;
+  if (!fs.existsSync(metadataPath) || !fs.statSync(metadataPath).isFile()) return false;
+  if (!fs.existsSync(payloadRoot) || !fs.statSync(payloadRoot).isDirectory()) return false;
+  return true;
+}
+
 function loadSnapshotIndex() {
   ensureGuardianPaths();
   if (!fs.existsSync(guardianPaths.index)) {
@@ -333,10 +352,16 @@ function loadSnapshotIndex() {
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.snapshots)) {
       return { version: 1, snapshots: [] };
     }
-    return {
+    const normalized = {
       version: 1,
-      snapshots: parsed.snapshots.filter((entry) => entry && typeof entry.id === "string"),
+      snapshots: parsed.snapshots
+        .filter((entry) => isSnapshotIndexEntry(entry))
+        .filter((entry) => snapshotEntryHasRequiredArtifacts(entry.id)),
     };
+    if (normalized.snapshots.length !== parsed.snapshots.length) {
+      saveSnapshotIndex(normalized);
+    }
+    return normalized;
   } catch {
     return { version: 1, snapshots: [] };
   }

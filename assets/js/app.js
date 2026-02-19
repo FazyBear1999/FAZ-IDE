@@ -126,6 +126,59 @@ function setHealth(node, state, text) {
     syncFooterRuntimeStatus();
 }
 
+function toBooleanAttribute(value) {
+    return value ? "true" : "false";
+}
+
+function setDataOpen(node, open) {
+    if (!node) return;
+    node.setAttribute("data-open", toBooleanAttribute(Boolean(open)));
+}
+
+function setAriaHidden(node, hidden) {
+    if (!node) return;
+    node.setAttribute("aria-hidden", toBooleanAttribute(Boolean(hidden)));
+}
+
+function setAriaSelected(node, selected) {
+    if (!node) return;
+    node.setAttribute("aria-selected", toBooleanAttribute(Boolean(selected)));
+}
+
+function setAriaExpanded(node, expanded) {
+    if (!node) return;
+    node.setAttribute("aria-expanded", toBooleanAttribute(Boolean(expanded)));
+}
+
+function setDataActive(node, active) {
+    if (!node) return;
+    node.setAttribute("data-active", toBooleanAttribute(Boolean(active)));
+}
+
+function setVisibilityState(node, visible, { dataOpen = false } = {}) {
+    if (!node) return;
+    const isVisible = Boolean(visible);
+    node.hidden = !isVisible;
+    if (dataOpen) {
+        node.dataset.open = toBooleanAttribute(isVisible);
+    }
+    setAriaHidden(node, !isVisible);
+}
+
+function setTabActiveState(node, active) {
+    if (!node) return;
+    const isActive = Boolean(active);
+    setAriaSelected(node, isActive);
+    node.tabIndex = isActive ? 0 : -1;
+    setDataActive(node, isActive);
+}
+
+function setOpenStateAttributes(node, open) {
+    const isOpen = Boolean(open);
+    setDataOpen(node, isOpen);
+    setAriaHidden(node, !isOpen);
+}
+
 function getHealthLabelSuffix(value = "", fallback = "") {
     const text = String(value || "").trim();
     if (!text) return String(fallback || "").trim();
@@ -2330,11 +2383,11 @@ function applyLayout({ animatePanels = false } = {}) {
     if (el.appShell) {
         el.appShell.setAttribute("data-sandbox-window", isSandboxWindowOpen() ? "open" : "closed");
     }
-    if (el.logPanel) el.logPanel.setAttribute("aria-hidden", layoutState.logOpen ? "false" : "true");
-    if (el.editorPanel) el.editorPanel.setAttribute("aria-hidden", layoutState.editorOpen ? "false" : "true");
-    if (el.side) el.side.setAttribute("aria-hidden", layoutState.filesOpen ? "false" : "true");
-    if (el.sandboxPanel) el.sandboxPanel.setAttribute("aria-hidden", layoutState.sandboxOpen ? "false" : "true");
-    if (el.toolsPanel) el.toolsPanel.setAttribute("aria-hidden", layoutState.toolsOpen ? "false" : "true");
+    setAriaHidden(el.logPanel, !layoutState.logOpen);
+    setAriaHidden(el.editorPanel, !layoutState.editorOpen);
+    setAriaHidden(el.side, !layoutState.filesOpen);
+    setAriaHidden(el.sandboxPanel, !layoutState.sandboxOpen);
+    setAriaHidden(el.toolsPanel, !layoutState.toolsOpen);
     if (el.workspaceBottom) {
         const bottomOpen = rowHasOpenPanels("bottom");
         el.workspaceBottom.style.display = bottomOpen ? "" : "none";
@@ -2344,9 +2397,9 @@ function applyLayout({ animatePanels = false } = {}) {
         el.splitRow.style.display = bottomOpen ? "" : "none";
     }
     const header = document.querySelector(".top");
-    if (header) header.setAttribute("aria-hidden", layoutState.headerOpen ? "false" : "true");
+    if (header) setAriaHidden(header, !layoutState.headerOpen);
     const footer = document.querySelector(".foot");
-    if (footer) footer.setAttribute("aria-hidden", layoutState.footerOpen ? "false" : "true");
+    if (footer) setAriaHidden(footer, !layoutState.footerOpen);
     if (document.documentElement) {
         document.documentElement.style.setProperty("--radius", `${layoutState.panelRadius}px`);
         document.documentElement.style.setProperty("--radius-sm", `${Math.max(0, Math.round(layoutState.panelRadius * 0.8))}px`);
@@ -3130,10 +3183,8 @@ function commitLayoutResize() {
 
 function setLayoutPanelOpen(open) {
     if (!el.layoutPanel || !el.layoutBackdrop) return;
-    el.layoutPanel.setAttribute("data-open", open ? "true" : "false");
-    el.layoutPanel.setAttribute("aria-hidden", open ? "false" : "true");
-    el.layoutBackdrop.setAttribute("data-open", open ? "true" : "false");
-    el.layoutBackdrop.setAttribute("aria-hidden", open ? "false" : "true");
+    setOpenStateAttributes(el.layoutPanel, open);
+    setOpenStateAttributes(el.layoutBackdrop, open);
     if (el.layoutToggle) {
         el.layoutToggle.setAttribute("aria-expanded", open ? "true" : "false");
     }
@@ -3516,17 +3567,11 @@ function setConsoleView(next = "console", { focus = false } = {}) {
         el.logPanel.dataset.consoleView = view;
     }
 
-    ui.btnConsole.setAttribute("aria-selected", consoleActive ? "true" : "false");
-    ui.btnTerminal.setAttribute("aria-selected", consoleActive ? "false" : "true");
-    ui.btnConsole.tabIndex = consoleActive ? 0 : -1;
-    ui.btnTerminal.tabIndex = consoleActive ? -1 : 0;
-    ui.btnConsole.setAttribute("data-active", consoleActive ? "true" : "false");
-    ui.btnTerminal.setAttribute("data-active", consoleActive ? "false" : "true");
+    setTabActiveState(ui.btnConsole, consoleActive);
+    setTabActiveState(ui.btnTerminal, !consoleActive);
 
-    ui.logView.hidden = !consoleActive;
-    ui.terminalView.hidden = consoleActive;
-    ui.logView.setAttribute("aria-hidden", consoleActive ? "false" : "true");
-    ui.terminalView.setAttribute("aria-hidden", consoleActive ? "true" : "false");
+    setVisibilityState(ui.logView, consoleActive);
+    setVisibilityState(ui.terminalView, !consoleActive);
 
     if (el.btnCopyLog) {
         el.btnCopyLog.hidden = !consoleActive;
@@ -3602,13 +3647,9 @@ function setToolsProblemsOpen(next, { focusToggle = false } = {}) {
     if (el.toolsProblemsDock) {
         el.toolsProblemsDock.dataset.open = open ? "true" : "false";
     }
-    if (el.problemsPanel) {
-        el.problemsPanel.hidden = !open;
-        el.problemsPanel.dataset.open = open ? "true" : "false";
-        el.problemsPanel.setAttribute("aria-hidden", open ? "false" : "true");
-    }
+    setVisibilityState(el.problemsPanel, open, { dataOpen: true });
     if (el.toolsProblemsToggle) {
-        el.toolsProblemsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+        setAriaExpanded(el.toolsProblemsToggle, open);
         el.toolsProblemsToggle.textContent = open ? "Hide Problems" : "Show Problems";
         if (focusToggle) {
             el.toolsProblemsToggle.focus();
@@ -3624,17 +3665,13 @@ function setToolsTab(next, { focus = false } = {}) {
 
     ui.tabButtons.forEach((tab) => {
         const active = normalizeToolsTab(tab.dataset.toolsTab) === target;
-        tab.setAttribute("aria-selected", active ? "true" : "false");
-        tab.tabIndex = active ? 0 : -1;
-        tab.dataset.active = active ? "true" : "false";
+        setTabActiveState(tab, active);
     });
 
     ui.panelsByName.forEach((panel, name) => {
         if (!panel) return;
         const active = name === target;
-        panel.hidden = !active;
-        panel.dataset.open = active ? "true" : "false";
-        panel.setAttribute("aria-hidden", active ? "false" : "true");
+        setVisibilityState(panel, active, { dataOpen: true });
     });
 
     if (focus) {
@@ -8311,193 +8348,191 @@ function renderTemplateOptionLabel(option, name = "", iconSources = []) {
     option.appendChild(label);
 }
 
+function syncTemplateSelectorShell({
+    section,
+    toggle,
+    list,
+    loadButton,
+    sectionId,
+    sectionOpen,
+    listOpen,
+    hasItems,
+    hasSelection,
+} = {}) {
+    if (!section || !toggle || !list) return false;
+    toggle.setAttribute("draggable", "true");
+    toggle.dataset.filesSectionId = String(sectionId || "");
+    if (!sectionOpen || !hasItems) {
+        setAriaHidden(section, true);
+        section.setAttribute("data-list-open", "false");
+        toggle.disabled = true;
+        toggle.setAttribute("aria-expanded", "false");
+        setAriaHidden(list, true);
+        list.innerHTML = "";
+        list.removeAttribute("aria-activedescendant");
+        if (loadButton) {
+            loadButton.disabled = true;
+            loadButton.hidden = true;
+        }
+        return false;
+    }
+
+    setAriaHidden(section, false);
+    section.setAttribute("data-list-open", toBooleanAttribute(Boolean(listOpen)));
+    toggle.disabled = false;
+    toggle.setAttribute("aria-expanded", toBooleanAttribute(Boolean(listOpen)));
+    setAriaHidden(list, !listOpen);
+    if (loadButton) {
+        loadButton.hidden = !listOpen;
+        loadButton.disabled = !hasSelection || !listOpen;
+    }
+    return true;
+}
+
+function renderTemplateSelectorOptions(listNode, items = [], selectedId = "", {
+    optionIdPrefix = "template-option",
+    optionDatasetKey = "templateId",
+    itemClassName = "files-games-item",
+} = {}) {
+    if (!listNode) return;
+    let activeDescendant = "";
+    listNode.innerHTML = "";
+    items.forEach((entry, index) => {
+        const option = document.createElement("button");
+        const optionId = `${optionIdPrefix}-${index}`;
+        const selected = entry.id === selectedId;
+        option.type = "button";
+        option.className = "files-games-option";
+        option.id = optionId;
+        option.dataset[optionDatasetKey] = entry.id;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", toBooleanAttribute(selected));
+        option.setAttribute("data-selected", toBooleanAttribute(selected));
+        renderTemplateOptionLabel(option, entry.name, entry.iconSources);
+
+        const item = document.createElement("li");
+        item.className = itemClassName;
+        item.appendChild(option);
+        listNode.appendChild(item);
+
+        if (selected) activeDescendant = optionId;
+    });
+    if (activeDescendant) {
+        listNode.setAttribute("aria-activedescendant", activeDescendant);
+    } else {
+        listNode.removeAttribute("aria-activedescendant");
+    }
+}
+
 function syncGamesUI() {
     if (!el.filesGames || !el.gamesSelectorToggle || !el.gamesList) return;
-    el.gamesSelectorToggle.setAttribute("draggable", "true");
-    el.gamesSelectorToggle.dataset.filesSectionId = "games";
-    if (!layoutState.filesGamesOpen || !games.length) {
-        el.filesGames.setAttribute("aria-hidden", "true");
-        el.filesGames.setAttribute("data-list-open", "false");
-        el.gamesSelectorToggle.disabled = true;
-        el.gamesSelectorToggle.setAttribute("aria-expanded", "false");
-        el.gamesList.setAttribute("aria-hidden", "true");
-        el.gamesList.innerHTML = "";
-        el.gamesList.removeAttribute("aria-activedescendant");
-        if (el.gameLoad) {
-            el.gameLoad.disabled = true;
-            el.gameLoad.hidden = true;
-        }
-        return;
-    }
+    const visible = syncTemplateSelectorShell({
+        section: el.filesGames,
+        toggle: el.gamesSelectorToggle,
+        list: el.gamesList,
+        loadButton: el.gameLoad,
+        sectionId: "games",
+        sectionOpen: layoutState.filesGamesOpen,
+        listOpen: gamesSelectorOpen,
+        hasItems: games.length > 0,
+        hasSelection: Boolean(selectedGameId),
+    });
+    if (!visible) return;
 
     if (!games.some((game) => game.id === selectedGameId)) {
         selectedGameId = games[0]?.id ?? "";
     }
 
-    el.filesGames.setAttribute("aria-hidden", "false");
-    el.filesGames.setAttribute("data-list-open", gamesSelectorOpen ? "true" : "false");
-    el.gamesSelectorToggle.disabled = false;
-    el.gamesSelectorToggle.setAttribute("aria-expanded", gamesSelectorOpen ? "true" : "false");
-    el.gamesList.setAttribute("aria-hidden", gamesSelectorOpen ? "false" : "true");
-
-    let activeDescendant = "";
-    el.gamesList.innerHTML = "";
-    games.forEach((game, index) => {
-        const option = document.createElement("button");
-        const optionId = `game-option-${index}`;
-        const selected = game.id === selectedGameId;
-        option.type = "button";
-        option.className = "files-games-option";
-        option.id = optionId;
-        option.dataset.gameId = game.id;
-        option.setAttribute("role", "option");
-        option.setAttribute("aria-selected", selected ? "true" : "false");
-        option.setAttribute("data-selected", selected ? "true" : "false");
-        renderTemplateOptionLabel(option, game.name, game.iconSources);
-
-        const item = document.createElement("li");
-        item.className = "files-games-item";
-        item.appendChild(option);
-        el.gamesList.appendChild(item);
-
-        if (selected) activeDescendant = optionId;
+    syncTemplateSelectorShell({
+        section: el.filesGames,
+        toggle: el.gamesSelectorToggle,
+        list: el.gamesList,
+        loadButton: el.gameLoad,
+        sectionId: "games",
+        sectionOpen: layoutState.filesGamesOpen,
+        listOpen: gamesSelectorOpen,
+        hasItems: games.length > 0,
+        hasSelection: Boolean(selectedGameId),
     });
-    if (activeDescendant) {
-        el.gamesList.setAttribute("aria-activedescendant", activeDescendant);
-    } else {
-        el.gamesList.removeAttribute("aria-activedescendant");
-    }
 
-    if (el.gameLoad) {
-        el.gameLoad.hidden = !gamesSelectorOpen;
-        el.gameLoad.disabled = !selectedGameId || !gamesSelectorOpen;
-    }
+    renderTemplateSelectorOptions(el.gamesList, games, selectedGameId, {
+        optionIdPrefix: "game-option",
+        optionDatasetKey: "gameId",
+    });
 }
 
 function syncApplicationsUI() {
     if (!el.filesApps || !el.appsSelectorToggle || !el.applicationsList) return;
-    el.appsSelectorToggle.setAttribute("draggable", "true");
-    el.appsSelectorToggle.dataset.filesSectionId = "applications";
-    if (!layoutState.filesAppsOpen || !applications.length) {
-        el.filesApps.setAttribute("aria-hidden", "true");
-        el.filesApps.setAttribute("data-list-open", "false");
-        el.appsSelectorToggle.disabled = true;
-        el.appsSelectorToggle.setAttribute("aria-expanded", "false");
-        el.applicationsList.setAttribute("aria-hidden", "true");
-        el.applicationsList.innerHTML = "";
-        el.applicationsList.removeAttribute("aria-activedescendant");
-        if (el.appLoad) {
-            el.appLoad.disabled = true;
-            el.appLoad.hidden = true;
-        }
-        return;
-    }
+    const visible = syncTemplateSelectorShell({
+        section: el.filesApps,
+        toggle: el.appsSelectorToggle,
+        list: el.applicationsList,
+        loadButton: el.appLoad,
+        sectionId: "applications",
+        sectionOpen: layoutState.filesAppsOpen,
+        listOpen: applicationsSelectorOpen,
+        hasItems: applications.length > 0,
+        hasSelection: Boolean(selectedApplicationId),
+    });
+    if (!visible) return;
 
     if (!applications.some((app) => app.id === selectedApplicationId)) {
         selectedApplicationId = applications[0]?.id ?? "";
     }
 
-    el.filesApps.setAttribute("aria-hidden", "false");
-    el.filesApps.setAttribute("data-list-open", applicationsSelectorOpen ? "true" : "false");
-    el.appsSelectorToggle.disabled = false;
-    el.appsSelectorToggle.setAttribute("aria-expanded", applicationsSelectorOpen ? "true" : "false");
-    el.applicationsList.setAttribute("aria-hidden", applicationsSelectorOpen ? "false" : "true");
-
-    let activeDescendant = "";
-    el.applicationsList.innerHTML = "";
-    applications.forEach((app, index) => {
-        const option = document.createElement("button");
-        const optionId = `application-option-${index}`;
-        const selected = app.id === selectedApplicationId;
-        option.type = "button";
-        option.className = "files-games-option";
-        option.id = optionId;
-        option.dataset.applicationId = app.id;
-        option.setAttribute("role", "option");
-        option.setAttribute("aria-selected", selected ? "true" : "false");
-        option.setAttribute("data-selected", selected ? "true" : "false");
-        renderTemplateOptionLabel(option, app.name, app.iconSources);
-
-        const item = document.createElement("li");
-        item.className = "files-games-item";
-        item.appendChild(option);
-        el.applicationsList.appendChild(item);
-
-        if (selected) activeDescendant = optionId;
+    syncTemplateSelectorShell({
+        section: el.filesApps,
+        toggle: el.appsSelectorToggle,
+        list: el.applicationsList,
+        loadButton: el.appLoad,
+        sectionId: "applications",
+        sectionOpen: layoutState.filesAppsOpen,
+        listOpen: applicationsSelectorOpen,
+        hasItems: applications.length > 0,
+        hasSelection: Boolean(selectedApplicationId),
     });
-    if (activeDescendant) {
-        el.applicationsList.setAttribute("aria-activedescendant", activeDescendant);
-    } else {
-        el.applicationsList.removeAttribute("aria-activedescendant");
-    }
 
-    if (el.appLoad) {
-        el.appLoad.hidden = !applicationsSelectorOpen;
-        el.appLoad.disabled = !selectedApplicationId || !applicationsSelectorOpen;
-    }
+    renderTemplateSelectorOptions(el.applicationsList, applications, selectedApplicationId, {
+        optionIdPrefix: "application-option",
+        optionDatasetKey: "applicationId",
+    });
 }
 
 function syncLessonsUI() {
     if (!el.filesLessons || !el.lessonsSelectorToggle || !el.lessonsList) return;
-    el.lessonsSelectorToggle.setAttribute("draggable", "true");
-    el.lessonsSelectorToggle.dataset.filesSectionId = "lessons";
-    if (!layoutState.filesLessonsOpen || !lessons.length) {
-        el.filesLessons.setAttribute("aria-hidden", "true");
-        el.filesLessons.setAttribute("data-list-open", "false");
-        el.lessonsSelectorToggle.disabled = true;
-        el.lessonsSelectorToggle.setAttribute("aria-expanded", "false");
-        el.lessonsList.setAttribute("aria-hidden", "true");
-        el.lessonsList.innerHTML = "";
-        el.lessonsList.removeAttribute("aria-activedescendant");
-        if (el.lessonLoad) {
-            el.lessonLoad.disabled = true;
-            el.lessonLoad.hidden = true;
-        }
-        return;
-    }
+    const visible = syncTemplateSelectorShell({
+        section: el.filesLessons,
+        toggle: el.lessonsSelectorToggle,
+        list: el.lessonsList,
+        loadButton: el.lessonLoad,
+        sectionId: "lessons",
+        sectionOpen: layoutState.filesLessonsOpen,
+        listOpen: lessonsSelectorOpen,
+        hasItems: lessons.length > 0,
+        hasSelection: Boolean(selectedLessonId),
+    });
+    if (!visible) return;
 
     if (!lessons.some((lesson) => lesson.id === selectedLessonId)) {
         selectedLessonId = lessons[0]?.id ?? "";
     }
 
-    el.filesLessons.setAttribute("aria-hidden", "false");
-    el.filesLessons.setAttribute("data-list-open", lessonsSelectorOpen ? "true" : "false");
-    el.lessonsSelectorToggle.disabled = false;
-    el.lessonsSelectorToggle.setAttribute("aria-expanded", lessonsSelectorOpen ? "true" : "false");
-    el.lessonsList.setAttribute("aria-hidden", lessonsSelectorOpen ? "false" : "true");
-
-    let activeDescendant = "";
-    el.lessonsList.innerHTML = "";
-    lessons.forEach((lesson, index) => {
-        const option = document.createElement("button");
-        const optionId = `lesson-option-${index}`;
-        const selected = lesson.id === selectedLessonId;
-        option.type = "button";
-        option.className = "files-games-option";
-        option.id = optionId;
-        option.dataset.lessonId = lesson.id;
-        option.setAttribute("role", "option");
-        option.setAttribute("aria-selected", selected ? "true" : "false");
-        option.setAttribute("data-selected", selected ? "true" : "false");
-        renderTemplateOptionLabel(option, lesson.name, lesson.iconSources);
-
-        const item = document.createElement("li");
-        item.className = "files-games-item";
-        item.appendChild(option);
-        el.lessonsList.appendChild(item);
-
-        if (selected) activeDescendant = optionId;
+    syncTemplateSelectorShell({
+        section: el.filesLessons,
+        toggle: el.lessonsSelectorToggle,
+        list: el.lessonsList,
+        loadButton: el.lessonLoad,
+        sectionId: "lessons",
+        sectionOpen: layoutState.filesLessonsOpen,
+        listOpen: lessonsSelectorOpen,
+        hasItems: lessons.length > 0,
+        hasSelection: Boolean(selectedLessonId),
     });
-    if (activeDescendant) {
-        el.lessonsList.setAttribute("aria-activedescendant", activeDescendant);
-    } else {
-        el.lessonsList.removeAttribute("aria-activedescendant");
-    }
 
-    if (el.lessonLoad) {
-        el.lessonLoad.hidden = !lessonsSelectorOpen;
-        el.lessonLoad.disabled = !selectedLessonId || !lessonsSelectorOpen;
-    }
+    renderTemplateSelectorOptions(el.lessonsList, lessons, selectedLessonId, {
+        optionIdPrefix: "lesson-option",
+        optionDatasetKey: "lessonId",
+    });
 }
 
 async function loadTemplateFilesFromSources(templateFiles = [], contextLabel = "Template") {
@@ -9937,10 +9972,8 @@ function formatRelativeTime(timestamp) {
 
 function setPromptDialogOpen(open) {
     promptDialogOpen = Boolean(open);
-    el.promptDialog.setAttribute("data-open", promptDialogOpen ? "true" : "false");
-    el.promptDialog.setAttribute("aria-hidden", promptDialogOpen ? "false" : "true");
-    el.promptDialogBackdrop.setAttribute("data-open", promptDialogOpen ? "true" : "false");
-    el.promptDialogBackdrop.setAttribute("aria-hidden", promptDialogOpen ? "false" : "true");
+    setOpenStateAttributes(el.promptDialog, promptDialogOpen);
+    setOpenStateAttributes(el.promptDialogBackdrop, promptDialogOpen);
 }
 
 function clearPromptDialogError() {
@@ -10913,10 +10946,8 @@ function updateQuickOpenResults(query = quickOpenQuery) {
 function setQuickOpenOpen(open) {
     quickOpenOpen = Boolean(open);
     if (!el.quickOpenPalette || !el.quickOpenBackdrop) return;
-    el.quickOpenPalette.setAttribute("data-open", quickOpenOpen ? "true" : "false");
-    el.quickOpenPalette.setAttribute("aria-hidden", quickOpenOpen ? "false" : "true");
-    el.quickOpenBackdrop.setAttribute("data-open", quickOpenOpen ? "true" : "false");
-    el.quickOpenBackdrop.setAttribute("aria-hidden", quickOpenOpen ? "false" : "true");
+    setOpenStateAttributes(el.quickOpenPalette, quickOpenOpen);
+    setOpenStateAttributes(el.quickOpenBackdrop, quickOpenOpen);
     if (!quickOpenOpen) {
         quickOpenQuery = "";
         quickOpenResults = [];
@@ -11014,10 +11045,8 @@ function wireQuickOpen() {
 function setShortcutHelpOpen(open) {
     shortcutHelpOpen = Boolean(open);
     if (!el.shortcutHelpPanel || !el.shortcutHelpBackdrop) return;
-    el.shortcutHelpPanel.setAttribute("data-open", shortcutHelpOpen ? "true" : "false");
-    el.shortcutHelpPanel.setAttribute("aria-hidden", shortcutHelpOpen ? "false" : "true");
-    el.shortcutHelpBackdrop.setAttribute("data-open", shortcutHelpOpen ? "true" : "false");
-    el.shortcutHelpBackdrop.setAttribute("aria-hidden", shortcutHelpOpen ? "false" : "true");
+    setOpenStateAttributes(el.shortcutHelpPanel, shortcutHelpOpen);
+    setOpenStateAttributes(el.shortcutHelpBackdrop, shortcutHelpOpen);
     if (shortcutHelpOpen) {
         requestAnimationFrame(() => {
             if (el.shortcutHelpClose) el.shortcutHelpClose.focus();
@@ -11028,10 +11057,8 @@ function setShortcutHelpOpen(open) {
 function setLessonStatsOpen(open) {
     lessonStatsOpen = Boolean(open);
     if (!el.lessonStatsPanel || !el.lessonStatsBackdrop) return;
-    el.lessonStatsPanel.setAttribute("data-open", lessonStatsOpen ? "true" : "false");
-    el.lessonStatsPanel.setAttribute("aria-hidden", lessonStatsOpen ? "false" : "true");
-    el.lessonStatsBackdrop.setAttribute("data-open", lessonStatsOpen ? "true" : "false");
-    el.lessonStatsBackdrop.setAttribute("aria-hidden", lessonStatsOpen ? "false" : "true");
+    setOpenStateAttributes(el.lessonStatsPanel, lessonStatsOpen);
+    setOpenStateAttributes(el.lessonStatsBackdrop, lessonStatsOpen);
     if (el.btnLessonStats) {
         el.btnLessonStats.setAttribute("aria-expanded", lessonStatsOpen ? "true" : "false");
     }
@@ -11524,10 +11551,8 @@ function setEditorSettingsOpen(open) {
     editorSettingsOpen = Boolean(open);
     syncEditorToolButtons();
     if (!el.editorSettingsPanel || !el.editorSettingsBackdrop) return;
-    el.editorSettingsPanel.setAttribute("data-open", editorSettingsOpen ? "true" : "false");
-    el.editorSettingsPanel.setAttribute("aria-hidden", editorSettingsOpen ? "false" : "true");
-    el.editorSettingsBackdrop.setAttribute("data-open", editorSettingsOpen ? "true" : "false");
-    el.editorSettingsBackdrop.setAttribute("aria-hidden", editorSettingsOpen ? "false" : "true");
+    setOpenStateAttributes(el.editorSettingsPanel, editorSettingsOpen);
+    setOpenStateAttributes(el.editorSettingsBackdrop, editorSettingsOpen);
     if (editorSettingsOpen) {
         syncEditorSettingsPanel();
         requestAnimationFrame(() => el.editorProfileSelect?.focus());
@@ -11857,10 +11882,8 @@ function setEditorHistoryOpen(open) {
     editorHistoryOpen = Boolean(open);
     syncEditorToolButtons();
     if (!el.editorHistoryPanel || !el.editorHistoryBackdrop) return;
-    el.editorHistoryPanel.setAttribute("data-open", editorHistoryOpen ? "true" : "false");
-    el.editorHistoryPanel.setAttribute("aria-hidden", editorHistoryOpen ? "false" : "true");
-    el.editorHistoryBackdrop.setAttribute("data-open", editorHistoryOpen ? "true" : "false");
-    el.editorHistoryBackdrop.setAttribute("aria-hidden", editorHistoryOpen ? "false" : "true");
+    setOpenStateAttributes(el.editorHistoryPanel, editorHistoryOpen);
+    setOpenStateAttributes(el.editorHistoryBackdrop, editorHistoryOpen);
     if (editorHistoryOpen) {
         renderEditorHistoryList();
         requestAnimationFrame(() => el.editorHistorySnapshot?.focus());
@@ -12363,10 +12386,8 @@ function setEditorSearchOpen(open, { replaceMode = false } = {}) {
     editorSearchOpen = Boolean(open);
     syncEditorToolButtons();
     if (!el.editorSearchPanel || !el.editorSearchBackdrop) return;
-    el.editorSearchPanel.setAttribute("data-open", editorSearchOpen ? "true" : "false");
-    el.editorSearchPanel.setAttribute("aria-hidden", editorSearchOpen ? "false" : "true");
-    el.editorSearchBackdrop.setAttribute("data-open", editorSearchOpen ? "true" : "false");
-    el.editorSearchBackdrop.setAttribute("aria-hidden", editorSearchOpen ? "false" : "true");
+    setOpenStateAttributes(el.editorSearchPanel, editorSearchOpen);
+    setOpenStateAttributes(el.editorSearchBackdrop, editorSearchOpen);
     if (editorSearchOpen) {
         if (el.editorReplaceInput) {
             el.editorReplaceInput.disabled = !replaceMode;
@@ -12633,10 +12654,8 @@ function setProjectSearchOpen(open) {
     projectSearchOpen = Boolean(open);
     syncEditorToolButtons();
     if (!el.projectSearchPanel || !el.projectSearchBackdrop) return;
-    el.projectSearchPanel.setAttribute("data-open", projectSearchOpen ? "true" : "false");
-    el.projectSearchPanel.setAttribute("aria-hidden", projectSearchOpen ? "false" : "true");
-    el.projectSearchBackdrop.setAttribute("data-open", projectSearchOpen ? "true" : "false");
-    el.projectSearchBackdrop.setAttribute("aria-hidden", projectSearchOpen ? "false" : "true");
+    setOpenStateAttributes(el.projectSearchPanel, projectSearchOpen);
+    setOpenStateAttributes(el.projectSearchBackdrop, projectSearchOpen);
     if (projectSearchOpen) {
         debouncedProjectSearchScan.cancel();
         runProjectSearchScan();
@@ -13296,10 +13315,8 @@ function setSymbolPaletteOpen(open) {
     symbolPaletteOpen = Boolean(open);
     syncEditorToolButtons();
     if (!el.symbolPalette || !el.symbolPaletteBackdrop) return;
-    el.symbolPalette.setAttribute("data-open", symbolPaletteOpen ? "true" : "false");
-    el.symbolPalette.setAttribute("aria-hidden", symbolPaletteOpen ? "false" : "true");
-    el.symbolPaletteBackdrop.setAttribute("data-open", symbolPaletteOpen ? "true" : "false");
-    el.symbolPaletteBackdrop.setAttribute("aria-hidden", symbolPaletteOpen ? "false" : "true");
+    setOpenStateAttributes(el.symbolPalette, symbolPaletteOpen);
+    setOpenStateAttributes(el.symbolPaletteBackdrop, symbolPaletteOpen);
     if (symbolPaletteOpen) {
         refreshSymbolResults("");
         symbolReferenceResults = [];
@@ -16763,6 +16780,67 @@ function groupCommandPaletteResults(entries = []) {
     return categoryOrder.flatMap((category) => byCategory.get(category) || []);
 }
 
+function getCommandPaletteHintText(count = 0) {
+    const safeCount = Math.max(0, Number(count) || 0);
+    return `${safeCount} command${safeCount === 1 ? "" : "s"} • Enter to run`;
+}
+
+function buildCommandPaletteEntryRow(entry, index, previousCategory = null) {
+    const active = index === commandPaletteIndex;
+    const disabled = !entry.enabled;
+    const shortcut = entry.shortcut ? escapeHTML(entry.shortcut) : "Action";
+    const category = getCommandPaletteCategory(entry);
+    const categoryRow = category !== previousCategory
+        ? `<li class="quick-open-group" role="presentation" aria-hidden="true">${escapeHTML(category)}</li>`
+        : "";
+    return `
+                ${categoryRow}
+                <li class="quick-open-item-wrap" role="presentation">
+                    <button type="button" class="quick-open-item command-palette-item" role="option" data-command-id="${entry.id}" data-active="${active}" data-disabled="${disabled}" aria-selected="${active}" ${disabled ? "disabled" : ""}>
+                        <span class="quick-open-name">${escapeHTML(entry.label)}</span>
+                        <span class="quick-open-meta">${shortcut}</span>
+                    </button>
+                </li>
+            `;
+}
+
+function syncCommandPaletteInputs(value = "") {
+    const nextValue = String(value || "");
+    if (el.commandPaletteInput && el.commandPaletteInput.value !== nextValue) {
+        el.commandPaletteInput.value = nextValue;
+    }
+    if (el.topCommandPaletteInput && el.topCommandPaletteInput.value !== nextValue) {
+        el.topCommandPaletteInput.value = nextValue;
+    }
+}
+
+function clearPrimaryCommandPaletteUi() {
+    if (el.commandPaletteInput) el.commandPaletteInput.value = "";
+    if (el.commandPaletteList) el.commandPaletteList.innerHTML = "";
+}
+
+function clearTopCommandPaletteUi() {
+    if (el.topCommandPaletteList) el.topCommandPaletteList.innerHTML = "";
+    if (el.topCommandPaletteHint) el.topCommandPaletteHint.textContent = "Enter to run • Esc to close";
+}
+
+function wireCommandPaletteListClick(listNode, { closeTopAfter = false } = {}) {
+    if (!listNode) return;
+    listNode.addEventListener("click", (event) => {
+        const row = event.target.closest("[data-command-id]");
+        if (!row) return;
+        const index = commandPaletteResults.findIndex((entry) => entry.id === row.dataset.commandId);
+        if (index === -1) return;
+        commandPaletteIndex = index;
+        const activated = activateCommandPalette(index);
+        if (!closeTopAfter) return;
+        setTopCommandPaletteOpen(false);
+        if (activated) {
+            el.topCommandPaletteInput?.blur();
+        }
+    });
+}
+
 function renderCommandPaletteResultsList(listNode, hintNode) {
     if (!listNode) return;
     if (!commandPaletteResults.length) {
@@ -16775,23 +16853,8 @@ function renderCommandPaletteResultsList(listNode, hintNode) {
     commandPaletteIndex = clamp(commandPaletteIndex, 0, commandPaletteResults.length - 1);
     const rows = commandPaletteResults
         .map((entry, index) => {
-            const active = index === commandPaletteIndex;
-            const disabled = !entry.enabled;
-            const shortcut = entry.shortcut ? escapeHTML(entry.shortcut) : "Action";
-            const category = getCommandPaletteCategory(entry);
             const previous = index > 0 ? getCommandPaletteCategory(commandPaletteResults[index - 1]) : null;
-            const categoryRow = category !== previous
-                ? `<li class="quick-open-group" role="presentation" aria-hidden="true">${escapeHTML(category)}</li>`
-                : "";
-            return `
-                ${categoryRow}
-                <li class="quick-open-item-wrap" role="presentation">
-                    <button type="button" class="quick-open-item command-palette-item" role="option" data-command-id="${entry.id}" data-active="${active}" data-disabled="${disabled}" aria-selected="${active}" ${disabled ? "disabled" : ""}>
-                        <span class="quick-open-name">${escapeHTML(entry.label)}</span>
-                        <span class="quick-open-meta">${shortcut}</span>
-                    </button>
-                </li>
-            `;
+            return buildCommandPaletteEntryRow(entry, index, previous);
         })
         .join("");
     listNode.innerHTML = rows;
@@ -16800,7 +16863,7 @@ function renderCommandPaletteResultsList(listNode, hintNode) {
         activeOption.scrollIntoView({ block: "nearest" });
     }
     if (hintNode) {
-        hintNode.textContent = `${commandPaletteResults.length} command${commandPaletteResults.length === 1 ? "" : "s"} • Enter to run`;
+        hintNode.textContent = getCommandPaletteHintText(commandPaletteResults.length);
     }
 }
 
@@ -16811,12 +16874,7 @@ function renderCommandPaletteResults() {
 
 function updateCommandPaletteResults(query = commandPaletteQuery) {
     commandPaletteQuery = String(query || "");
-    if (el.commandPaletteInput && el.commandPaletteInput.value !== commandPaletteQuery) {
-        el.commandPaletteInput.value = commandPaletteQuery;
-    }
-    if (el.topCommandPaletteInput && el.topCommandPaletteInput.value !== commandPaletteQuery) {
-        el.topCommandPaletteInput.value = commandPaletteQuery;
-    }
+    syncCommandPaletteInputs(commandPaletteQuery);
     commandPaletteResults = groupCommandPaletteResults(getCommandPaletteMatches(commandPaletteQuery));
     if (commandPaletteResults.length && commandPaletteIndex >= commandPaletteResults.length) {
         commandPaletteIndex = 0;
@@ -16827,16 +16885,13 @@ function updateCommandPaletteResults(query = commandPaletteQuery) {
 function setCommandPaletteOpen(open, { query = "", focusInput = true } = {}) {
     commandPaletteOpen = Boolean(open);
     if (!el.commandPalette || !el.commandPaletteBackdrop) return;
-    el.commandPalette.setAttribute("data-open", commandPaletteOpen ? "true" : "false");
-    el.commandPalette.setAttribute("aria-hidden", commandPaletteOpen ? "false" : "true");
-    el.commandPaletteBackdrop.setAttribute("data-open", commandPaletteOpen ? "true" : "false");
-    el.commandPaletteBackdrop.setAttribute("aria-hidden", commandPaletteOpen ? "false" : "true");
+    setOpenStateAttributes(el.commandPalette, commandPaletteOpen);
+    setOpenStateAttributes(el.commandPaletteBackdrop, commandPaletteOpen);
     if (!commandPaletteOpen) {
         commandPaletteQuery = "";
         commandPaletteResults = [];
         commandPaletteIndex = 0;
-        if (el.commandPaletteInput) el.commandPaletteInput.value = "";
-        if (el.commandPaletteList) el.commandPaletteList.innerHTML = "";
+        clearPrimaryCommandPaletteUi();
         return;
     }
     const nextQuery = String(query || "");
@@ -16853,14 +16908,12 @@ function setCommandPaletteOpen(open, { query = "", focusInput = true } = {}) {
 function setTopCommandPaletteOpen(open) {
     topCommandPaletteOpen = Boolean(open);
     if (!el.topCommandPaletteMenu) return;
-    el.topCommandPaletteMenu.setAttribute("data-open", topCommandPaletteOpen ? "true" : "false");
-    el.topCommandPaletteMenu.setAttribute("aria-hidden", topCommandPaletteOpen ? "false" : "true");
+    setOpenStateAttributes(el.topCommandPaletteMenu, topCommandPaletteOpen);
     if (topCommandPaletteOpen) {
         positionTopCommandPaletteMenu();
     }
     if (!topCommandPaletteOpen) {
-        if (el.topCommandPaletteList) el.topCommandPaletteList.innerHTML = "";
-        if (el.topCommandPaletteHint) el.topCommandPaletteHint.textContent = "Enter to run • Esc to close";
+        clearTopCommandPaletteUi();
     }
 }
 
@@ -16977,33 +17030,11 @@ function wireCommandPalette() {
         });
         el.topCommandPaletteInput.addEventListener("keydown", onCommandPaletteKeyDown);
     }
-    if (el.commandPaletteList) {
-        el.commandPaletteList.addEventListener("click", (event) => {
-            const row = event.target.closest("[data-command-id]");
-            if (!row) return;
-            const index = commandPaletteResults.findIndex((entry) => entry.id === row.dataset.commandId);
-            if (index === -1) return;
-            commandPaletteIndex = index;
-            activateCommandPalette(index);
-        });
-    }
+    wireCommandPaletteListClick(el.commandPaletteList, { closeTopAfter: false });
     if (el.commandPaletteBackdrop) {
         el.commandPaletteBackdrop.addEventListener("click", () => closeCommandPalette({ focusEditor: false }));
     }
-    if (el.topCommandPaletteList) {
-        el.topCommandPaletteList.addEventListener("click", (event) => {
-            const row = event.target.closest("[data-command-id]");
-            if (!row) return;
-            const index = commandPaletteResults.findIndex((entry) => entry.id === row.dataset.commandId);
-            if (index === -1) return;
-            commandPaletteIndex = index;
-            const activated = activateCommandPalette(index);
-            setTopCommandPaletteOpen(false);
-            if (activated) {
-                el.topCommandPaletteInput?.blur();
-            }
-        });
-    }
+    wireCommandPaletteListClick(el.topCommandPaletteList, { closeTopAfter: true });
     document.addEventListener("pointerdown", (event) => {
         if (!topCommandPaletteOpen) return;
         const target = event.target;
@@ -17889,25 +17920,64 @@ function renameFile(fileId) {
     startRename(file.id);
 }
 
-function closeFileMenus() {
-    if (el.filesMenu) {
-        el.filesMenu.setAttribute("data-open", "false");
-        el.filesMenu.setAttribute("aria-hidden", "true");
-        el.filesMenu.style.visibility = "";
-    }
-    if (el.fileRowMenu) {
-        el.fileRowMenu.setAttribute("data-open", "false");
-        el.fileRowMenu.setAttribute("aria-hidden", "true");
-        el.fileRowMenu.style.visibility = "";
-    }
-    if (el.fileFolderMenu) {
-        el.fileFolderMenu.setAttribute("data-open", "false");
-        el.fileFolderMenu.setAttribute("aria-hidden", "true");
-        el.fileFolderMenu.style.visibility = "";
-    }
+function setFilesMenuOpenState(open) {
+    setOpenStateAttributes(el.filesMenu, open);
     if (el.filesMenuButton) {
-        el.filesMenuButton.setAttribute("aria-expanded", "false");
+        el.filesMenuButton.setAttribute("aria-expanded", open ? "true" : "false");
     }
+}
+
+function closeFloatingMenu(menuEl) {
+    if (!menuEl) return;
+    setOpenStateAttributes(menuEl, false);
+    menuEl.style.visibility = "";
+}
+
+function syncFileRowMenuActions(file) {
+    if (!el.fileRowMenu || !file) return;
+    const pinBtn = el.fileRowMenu.querySelector('[data-file-menu-action="pin"]');
+    const lockBtn = el.fileRowMenu.querySelector('[data-file-menu-action="lock"]');
+    const renameBtn = el.fileRowMenu.querySelector('[data-file-menu-action="rename"]');
+    const duplicateBtn = el.fileRowMenu.querySelector('[data-file-menu-action="duplicate"]');
+    const deleteBtn = el.fileRowMenu.querySelector('[data-file-menu-action="delete"]');
+    const deleteSelection = shouldDeleteSelectionFromFileMenu(file.id);
+    if (pinBtn) pinBtn.textContent = file.pinned ? "Unpin" : "Pin";
+    if (lockBtn) lockBtn.textContent = file.locked ? "Unlock" : "Lock";
+    if (renameBtn) renameBtn.disabled = file.locked;
+    if (duplicateBtn) duplicateBtn.disabled = false;
+    if (deleteBtn) {
+        deleteBtn.textContent = deleteSelection ? "Delete Selected Items" : "Delete";
+        deleteBtn.disabled = deleteSelection ? false : file.locked || files.length === 1;
+    }
+}
+
+function syncFolderMenuActions(normalizedFolderPath) {
+    if (!el.fileFolderMenu) return;
+    const knownFolders = collectFolderPaths(files);
+    const folderFiles = files.filter((file) => file.name.startsWith(`${normalizedFolderPath}/`));
+    const hasLockedFiles = folderFiles.some((file) => file.locked);
+    const renameBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="rename"]');
+    const newFileBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-file"]');
+    const newFolderBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-folder"]');
+    const deleteBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="delete"]');
+    const collapseBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="collapse-all"]');
+    const expandBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="expand-all"]');
+    const deleteSelection = shouldDeleteSelectionFromFolderMenu(normalizedFolderPath);
+    if (renameBtn) renameBtn.disabled = !knownFolders.has(normalizedFolderPath);
+    if (newFileBtn) newFileBtn.disabled = false;
+    if (newFolderBtn) newFolderBtn.disabled = false;
+    if (deleteBtn) {
+        deleteBtn.textContent = deleteSelection ? "Delete Selected Items" : "Delete Folder";
+        deleteBtn.disabled = deleteSelection ? false : !knownFolders.has(normalizedFolderPath) || hasLockedFiles;
+    }
+    if (collapseBtn) collapseBtn.disabled = knownFolders.size === 0;
+    if (expandBtn) expandBtn.disabled = collapsedFolderPaths.size === 0;
+}
+
+function closeFileMenus() {
+    setFilesMenuOpenState(false);
+    closeFloatingMenu(el.fileRowMenu);
+    closeFloatingMenu(el.fileFolderMenu);
     openFileMenu = null;
     fileMenuTargetId = null;
     folderMenuTargetPath = null;
@@ -18063,11 +18133,7 @@ function openFilesMenu(anchorEl) {
     closeFileMenus();
     openFileMenu = "header";
     syncFilesMenuActions();
-    el.filesMenu.setAttribute("data-open", "true");
-    el.filesMenu.setAttribute("aria-hidden", "false");
-    if (el.filesMenuButton) {
-        el.filesMenuButton.setAttribute("aria-expanded", "true");
-    }
+    setFilesMenuOpenState(true);
     syncFilesMenuToggles();
     positionMenu(el.filesMenu, anchorEl);
 }
@@ -18077,11 +18143,7 @@ function openFilesMenuAt(clientX, clientY) {
     closeFileMenus();
     openFileMenu = "header";
     syncFilesMenuActions();
-    el.filesMenu.setAttribute("data-open", "true");
-    el.filesMenu.setAttribute("aria-hidden", "false");
-    if (el.filesMenuButton) {
-        el.filesMenuButton.setAttribute("aria-expanded", "true");
-    }
+    setFilesMenuOpenState(true);
     syncFilesMenuToggles();
     positionMenuAt(el.filesMenu, clientX, clientY);
 }
@@ -18093,22 +18155,8 @@ function openFileRowMenu(fileId, anchorEl) {
     closeFileMenus();
     openFileMenu = "row";
     fileMenuTargetId = fileId;
-    const pinBtn = el.fileRowMenu.querySelector('[data-file-menu-action="pin"]');
-    const lockBtn = el.fileRowMenu.querySelector('[data-file-menu-action="lock"]');
-    const renameBtn = el.fileRowMenu.querySelector('[data-file-menu-action="rename"]');
-    const duplicateBtn = el.fileRowMenu.querySelector('[data-file-menu-action="duplicate"]');
-    const deleteBtn = el.fileRowMenu.querySelector('[data-file-menu-action="delete"]');
-    const deleteSelection = shouldDeleteSelectionFromFileMenu(file.id);
-    if (pinBtn) pinBtn.textContent = file.pinned ? "Unpin" : "Pin";
-    if (lockBtn) lockBtn.textContent = file.locked ? "Unlock" : "Lock";
-    if (renameBtn) renameBtn.disabled = file.locked;
-    if (duplicateBtn) duplicateBtn.disabled = false;
-    if (deleteBtn) {
-        deleteBtn.textContent = deleteSelection ? "Delete Selected Items" : "Delete";
-        deleteBtn.disabled = deleteSelection ? false : file.locked || files.length === 1;
-    }
-    el.fileRowMenu.setAttribute("data-open", "true");
-    el.fileRowMenu.setAttribute("aria-hidden", "false");
+    syncFileRowMenuActions(file);
+    setOpenStateAttributes(el.fileRowMenu, true);
     positionMenu(el.fileRowMenu, anchorEl);
 }
 
@@ -18119,22 +18167,8 @@ function openFileRowMenuAt(fileId, clientX, clientY) {
     closeFileMenus();
     openFileMenu = "row";
     fileMenuTargetId = fileId;
-    const pinBtn = el.fileRowMenu.querySelector('[data-file-menu-action="pin"]');
-    const lockBtn = el.fileRowMenu.querySelector('[data-file-menu-action="lock"]');
-    const renameBtn = el.fileRowMenu.querySelector('[data-file-menu-action="rename"]');
-    const duplicateBtn = el.fileRowMenu.querySelector('[data-file-menu-action="duplicate"]');
-    const deleteBtn = el.fileRowMenu.querySelector('[data-file-menu-action="delete"]');
-    const deleteSelection = shouldDeleteSelectionFromFileMenu(file.id);
-    if (pinBtn) pinBtn.textContent = file.pinned ? "Unpin" : "Pin";
-    if (lockBtn) lockBtn.textContent = file.locked ? "Unlock" : "Lock";
-    if (renameBtn) renameBtn.disabled = file.locked;
-    if (duplicateBtn) duplicateBtn.disabled = false;
-    if (deleteBtn) {
-        deleteBtn.textContent = deleteSelection ? "Delete Selected Items" : "Delete";
-        deleteBtn.disabled = deleteSelection ? false : file.locked || files.length === 1;
-    }
-    el.fileRowMenu.setAttribute("data-open", "true");
-    el.fileRowMenu.setAttribute("aria-hidden", "false");
+    syncFileRowMenuActions(file);
+    setOpenStateAttributes(el.fileRowMenu, true);
     positionMenuAt(el.fileRowMenu, clientX, clientY);
 }
 
@@ -18142,30 +18176,11 @@ function openFolderMenu(folderPath, anchorEl) {
     if (!el.fileFolderMenu) return;
     const normalized = normalizeFolderPath(folderPath, { allowEmpty: true });
     if (!normalized) return;
-    const knownFolders = collectFolderPaths(files);
-    const folderFiles = files.filter((file) => file.name.startsWith(`${normalized}/`));
-    const hasLockedFiles = folderFiles.some((file) => file.locked);
     closeFileMenus();
     openFileMenu = "folder";
     folderMenuTargetPath = normalized;
-    const renameBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="rename"]');
-    const newFileBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-file"]');
-    const newFolderBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-folder"]');
-    const deleteBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="delete"]');
-    const collapseBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="collapse-all"]');
-    const expandBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="expand-all"]');
-    const deleteSelection = shouldDeleteSelectionFromFolderMenu(normalized);
-    if (renameBtn) renameBtn.disabled = !knownFolders.has(normalized);
-    if (newFileBtn) newFileBtn.disabled = false;
-    if (newFolderBtn) newFolderBtn.disabled = false;
-    if (deleteBtn) {
-        deleteBtn.textContent = deleteSelection ? "Delete Selected Items" : "Delete Folder";
-        deleteBtn.disabled = deleteSelection ? false : !knownFolders.has(normalized) || hasLockedFiles;
-    }
-    if (collapseBtn) collapseBtn.disabled = knownFolders.size === 0;
-    if (expandBtn) expandBtn.disabled = collapsedFolderPaths.size === 0;
-    el.fileFolderMenu.setAttribute("data-open", "true");
-    el.fileFolderMenu.setAttribute("aria-hidden", "false");
+    syncFolderMenuActions(normalized);
+    setOpenStateAttributes(el.fileFolderMenu, true);
     positionMenu(el.fileFolderMenu, anchorEl);
 }
 
@@ -18173,30 +18188,11 @@ function openFolderMenuAt(folderPath, clientX, clientY) {
     if (!el.fileFolderMenu) return;
     const normalized = normalizeFolderPath(folderPath, { allowEmpty: true });
     if (!normalized) return;
-    const knownFolders = collectFolderPaths(files);
-    const folderFiles = files.filter((file) => file.name.startsWith(`${normalized}/`));
-    const hasLockedFiles = folderFiles.some((file) => file.locked);
     closeFileMenus();
     openFileMenu = "folder";
     folderMenuTargetPath = normalized;
-    const renameBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="rename"]');
-    const newFileBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-file"]');
-    const newFolderBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-folder"]');
-    const deleteBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="delete"]');
-    const collapseBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="collapse-all"]');
-    const expandBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="expand-all"]');
-    const deleteSelection = shouldDeleteSelectionFromFolderMenu(normalized);
-    if (renameBtn) renameBtn.disabled = !knownFolders.has(normalized);
-    if (newFileBtn) newFileBtn.disabled = false;
-    if (newFolderBtn) newFolderBtn.disabled = false;
-    if (deleteBtn) {
-        deleteBtn.textContent = deleteSelection ? "Delete Selected Items" : "Delete Folder";
-        deleteBtn.disabled = deleteSelection ? false : !knownFolders.has(normalized) || hasLockedFiles;
-    }
-    if (collapseBtn) collapseBtn.disabled = knownFolders.size === 0;
-    if (expandBtn) expandBtn.disabled = collapsedFolderPaths.size === 0;
-    el.fileFolderMenu.setAttribute("data-open", "true");
-    el.fileFolderMenu.setAttribute("aria-hidden", "false");
+    syncFolderMenuActions(normalized);
+    setOpenStateAttributes(el.fileFolderMenu, true);
     positionMenuAt(el.fileFolderMenu, clientX, clientY);
 }
 
