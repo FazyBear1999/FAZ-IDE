@@ -16,6 +16,13 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Closed applications-catalog scope gap with deterministic runtime extension contract coverage.
+- Notable safety/infra updates: Added `tests/ide.spec.js` contract enforcing applications catalog extension allowlist (`html/css/js/md`) over template files and entry files, with explicit hard-fail on unsupported runtime extensions.
+- Validation status: `npx playwright test tests/ide.spec.js --config config/playwright.config.js --grep "applications catalog scope guard allows only web-runtime file extensions"` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and `npm run test:quick` passed.
+- Follow-up actions: Add remaining C2 runtime-template copy/checklist scope guard in next runtime-template update and keep catalog changes tied to focused ide contracts.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Locked command-registry API behavior with focused contract coverage and completed strict async-integrity enforcement.
 - Notable safety/infra updates: Added command API contract in `tests/stability-contract.spec.js` for deterministic register/list/unregister behavior; aligned sync-only contract specs by removing redundant `async` callbacks so integrity rule `async tests without await` can remain hard-fail in `scripts/verify-test-integrity.js`.
 - Validation status: `npm run test:all` passed, `npx playwright test tests/stability-contract.spec.js --config config/playwright.config.js` passed (8/8), `npm run test:integrity` passed, and `npm run test:memory` passed.

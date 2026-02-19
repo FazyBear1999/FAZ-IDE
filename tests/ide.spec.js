@@ -1971,6 +1971,61 @@ test("runtime validation applications are present in Applications catalog", asyn
   expect(result.hasRuntimePy).toBeFalsy();
 });
 
+test("applications catalog scope guard allows only web-runtime file extensions", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const apps = window.fazide?.listApplications?.() || [];
+    const allowedExtensions = new Set(["html", "css", "js", "md"]);
+    const unsupportedExtensions = new Set(["py", "rb", "php", "java", "cs", "cpp", "go", "rs"]);
+
+    const collectExtension = (filePath = "") => {
+      const value = String(filePath || "").trim();
+      const dot = value.lastIndexOf(".");
+      return dot >= 0 ? value.slice(dot + 1).toLowerCase() : "";
+    };
+
+    const extensionSummary = {
+      allowedOnly: true,
+      unsupportedHits: [],
+      nonAllowedHits: [],
+    };
+
+    apps.forEach((app) => {
+      const filePaths = Array.isArray(app?.files) ? app.files.map((file) => String(file?.path || "")) : [];
+      const allPaths = [...filePaths, String(app?.entryFile || "")].filter(Boolean);
+
+      allPaths.forEach((filePath) => {
+        const ext = collectExtension(filePath);
+        if (!ext) {
+          extensionSummary.allowedOnly = false;
+          extensionSummary.nonAllowedHits.push({ id: String(app?.id || ""), path: filePath, ext: "" });
+          return;
+        }
+        if (unsupportedExtensions.has(ext)) {
+          extensionSummary.allowedOnly = false;
+          extensionSummary.unsupportedHits.push({ id: String(app?.id || ""), path: filePath, ext });
+          return;
+        }
+        if (!allowedExtensions.has(ext)) {
+          extensionSummary.allowedOnly = false;
+          extensionSummary.nonAllowedHits.push({ id: String(app?.id || ""), path: filePath, ext });
+        }
+      });
+    });
+
+    return {
+      count: apps.length,
+      ...extensionSummary,
+    };
+  });
+
+  expect(result.count).toBeGreaterThan(0);
+  expect(result.allowedOnly).toBeTruthy();
+  expect(result.unsupportedHits).toEqual([]);
+  expect(result.nonAllowedHits).toEqual([]);
+});
+
 test("runtime validation applications execute and emit expected console/sandbox signals", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

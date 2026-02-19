@@ -33,15 +33,6 @@
   - Validation command: focused Playwright runtime app checks
   - Owner/next action: Add in next runtime-template touch.
 
-- Checkpoint ID: C2
-  - Area: Applications catalog scope guard
-  - Gap: Add contract test that fails if unsupported language entries reappear in Applications catalog.
-  - Why it matters: Locks catalog to JS/HTML/CSS scope contract.
-  - Proposed test: Explicit catalog-entry allowlist assertion.
-  - Priority (P0/P1/P2): P0
-  - Validation command: focused catalog contract suite
-  - Owner/next action: Add when touching catalog seed data.
-
 - Checkpoint ID: C1
   - Area: Dev Terminal command contract
   - Gap: Add lightweight smoke contract for Dev Terminal help text to keep command list aligned with supported runtime scope.
@@ -68,6 +59,7 @@
 
 ## Completed Recently
 
+- Closed C2 applications catalog scope guard with explicit extension allowlist contract in `tests/ide.spec.js` (`html/css/js/md` only; hard-fail on unsupported runtime extensions).
 - Added focused command-registry API contract coverage in `tests/stability-contract.spec.js` (register replace semantics, list visibility, unregister idempotence).
 - Added focused contract coverage for workspace preview sanitization and local asset inlining.
 - Simplified runtime validation templates for deterministic marker-based pass/fail output.

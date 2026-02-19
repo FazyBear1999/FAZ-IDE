@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T14:35:00Z - C2 applications catalog scope-guard contract closure
+
+- Date (UTC):
+- 2026-02-19T14:35:00Z
+- Area:
+- Runtime scope governance and applications catalog safety
+- Decision:
+- Added a focused contract in `tests/ide.spec.js` that enforces an explicit application file-extension allowlist (`html`, `css`, `js`, `md`) across each application file path and entry file.
+- The contract hard-fails if unsupported runtime extensions (for example `py`, `rb`, `php`, `java`, `cs`, `cpp`, `go`, `rs`) appear in the Applications catalog.
+- Why:
+- This closes open C2 scope-risk by making runtime-catalog drift immediately visible in CI and keeps project scope aligned with JS/HTML/CSS runtime boundaries.
+- Follow-up:
+- Add the remaining C2 runtime-template copy/checklist scope guard in the next runtime-template touch and keep `test:integrity` + focused ide contracts mandatory for catalog changes.
+
 ## 2026-02-19T14:10:00Z - Command registry contract lock-in + strict async integrity rollout closure
 
 - Date (UTC):
