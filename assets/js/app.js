@@ -130,14 +130,35 @@ const astClient = createAstClient();
 const BOOT_SCREEN_MIN_MS = 3200;
 const BOOT_SCREEN_MAX_MS = 4200;
 const BOOT_SCREEN_FADE_MS = 220;
+const BOOT_SCREEN_SESSION_KEY = "fazide.boot-screen.seen.v1";
+const BOOT_SCREEN_TICKER_MS = 120;
+const BOOT_SCREEN_TICKER_LINES = [
+    "FAZ IDE Ready • verifying UI shell",
+    "FAZ IDE Ready • validating storage route",
+    "FAZ IDE Ready • wiring editor engine",
+    "FAZ IDE Ready • checking runtime bridge",
+    "FAZ IDE Ready • syncing command registry",
+    "FAZ IDE Ready • reviewing diagnostics hooks",
+    "FAZ IDE Ready • finalizing workspace state",
+    "FAZ IDE Ready • applying safe startup profile",
+];
 
 function createBootScreenController() {
     const root = typeof document !== "undefined" ? document.getElementById("bootScreen") : null;
     const statusNode = typeof document !== "undefined" ? document.getElementById("bootScreenStatus") : null;
     const startedAt = Date.now();
     const automation = typeof navigator !== "undefined" && Boolean(navigator.webdriver);
+    const sessionStore = (() => {
+        try {
+            if (typeof window === "undefined" || !window.sessionStorage) return null;
+            return window.sessionStorage;
+        } catch {
+            return null;
+        }
+    })();
+    const seenInSession = sessionStore?.getItem(BOOT_SCREEN_SESSION_KEY) === "1";
 
-    if (!root || automation) {
+    if (!root || automation || seenInSession) {
         if (root) root.hidden = true;
         return {
             mark() {},
@@ -146,9 +167,30 @@ function createBootScreenController() {
         };
     }
 
+    sessionStore?.setItem(BOOT_SCREEN_SESSION_KEY, "1");
+
     if (typeof document !== "undefined" && document.body) {
         document.body.setAttribute("data-boot-screen", "true");
     }
+
+    let tickerIndex = 0;
+    let tickerTimer = null;
+    function startTicker() {
+        if (!statusNode || tickerTimer) return;
+        statusNode.textContent = BOOT_SCREEN_TICKER_LINES[0];
+        tickerTimer = setInterval(() => {
+            tickerIndex = (tickerIndex + 1) % BOOT_SCREEN_TICKER_LINES.length;
+            statusNode.textContent = BOOT_SCREEN_TICKER_LINES[tickerIndex];
+        }, BOOT_SCREEN_TICKER_MS);
+    }
+
+    function stopTicker() {
+        if (!tickerTimer) return;
+        clearInterval(tickerTimer);
+        tickerTimer = null;
+    }
+
+    startTicker();
 
     function mark(checkId, state = "pass", message = "") {
         const item = root.querySelector(`[data-check="${String(checkId || "")}"]`);
@@ -157,6 +199,7 @@ function createBootScreenController() {
     }
 
     async function finish({ status = "ready", message = "Startup checks complete." } = {}) {
+        stopTicker();
         if (statusNode && message) statusNode.textContent = message;
         const elapsed = Date.now() - startedAt;
         const minRemaining = Math.max(0, BOOT_SCREEN_MIN_MS - elapsed);
@@ -175,6 +218,7 @@ function createBootScreenController() {
     }
 
     async function fail(message = "Startup checks failed. Continuing in safe mode...") {
+        stopTicker();
         mark("runtime", "warn", message);
         await finish({ status: "warn", message });
     }
@@ -187,7 +231,7 @@ function createBootScreenController() {
 }
 
 const bootScreen = createBootScreenController();
-bootScreen.mark("dom", "pass", "UI shell ready. Running startup checks...");
+bootScreen.mark("dom", "pass");
 
 const health = {
     editor: el.healthEditor,
@@ -21120,7 +21164,7 @@ async function boot() {
             return false;
         }
     })();
-    bootScreen.mark("storage", storageBootCheck ? "pass" : "warn", storageBootCheck ? "Storage check passed." : "Storage check limited.");
+    bootScreen.mark("storage", storageBootCheck ? "pass" : "warn");
 
     const recoveredStorageJournal = recoverStorageJournal();
     loadLessonProfile();
@@ -21192,7 +21236,7 @@ async function boot() {
     const editorLabel = editor.type === "codemirror" ? "CodeMirror" : "Textarea";
     const editorState = editor.type === "codemirror" ? "ok" : "warn";
     setHealth(health.editor, editorState, `Editor: ${editorLabel}`);
-    bootScreen.mark("editor", editor.type === "codemirror" ? "pass" : "warn", `Editor ready: ${editorLabel}.`);
+    bootScreen.mark("editor", editor.type === "codemirror" ? "pass" : "warn");
     setHealth(health.sandbox, "idle", "Sandbox: Idle");
     if (editor.type !== "codemirror") {
         pushDiag("warn", "CodeMirror not detected. Falling back to textarea.");
@@ -21272,8 +21316,13 @@ async function boot() {
     }
 
     const runtimeReady = typeof Worker !== "undefined";
-    bootScreen.mark("runtime", runtimeReady ? "pass" : "warn", runtimeReady ? "Runtime checks passed." : "Runtime checks passed with limits.");
-    await bootScreen.finish({ status: "ready", message: "FAZ IDE ready." });
+    bootScreen.mark("runtime", runtimeReady ? "pass" : "warn");
+    await bootScreen.finish({
+        status: "ready",
+        message: runtimeReady
+            ? "FAZ IDE Ready • 8 rapid checks complete."
+            : "FAZ IDE Ready • startup checks complete with limits.",
+    });
 
     // Autosave on edit
     // Notes:

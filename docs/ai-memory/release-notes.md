@@ -16,6 +16,13 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Refined startup loading UX with session-based suppression, rapid professional check ticker, and tokenized galaxy backdrop.
+- Notable safety/infra updates: Updated `assets/js/app.js` boot controller to show splash once per tab session via `sessionStorage`, added fast rotating startup-check copy, and kept automation bypass; enhanced `index.html` + `assets/css/layout.css` with tokenized galaxy/floating-square backdrop while preserving square panel style.
+- Validation status: `tests/release.spec.js` startup loading contract passed (includes session suppression + galaxy/ticker wiring checks), `npm run test:memory` passed, `npm run test:integrity` passed, and `npm run test:quick` passed.
+- Follow-up actions: Keep startup checks lightweight and deterministic, and maintain session-only display behavior unless product policy changes.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Added a square-themed startup loading screen with short boot checks and safe handoff to IDE shell.
 - Notable safety/infra updates: Added `#bootScreen` startup overlay in `index.html`, square-token styles in `assets/css/layout.css`, and bounded boot controller in `assets/js/app.js` with quick checks (`dom`, `storage`, `editor`, `runtime`) plus automation bypass (`navigator.webdriver`) to keep CI stable.
 - Validation status: `npm run test:quick` passed, and release contract `startup loading screen is wired and automation-safe` passed via `tests/release.spec.js`.

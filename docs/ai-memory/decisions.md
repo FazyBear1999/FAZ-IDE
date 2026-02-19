@@ -19,6 +19,21 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T17:25:00Z - Loading screen refinement (session-suppressed + rapid professional ticker + tokenized galaxy backdrop)
+
+- Date (UTC):
+- 2026-02-19T17:25:00Z
+- Area:
+- Startup UX polish, frequency control, and release safety
+- Decision:
+- Refined startup loading behavior so splash appears once per tab session using `sessionStorage` key `fazide.boot-screen.seen.v1` (shows on fresh tab/window sessions, skips repeated refreshes in same tab).
+- Added rapid startup ticker messaging to present fast professional checks while preserving real check-state markers.
+- Added tokenized galaxy-style backdrop + floating square particles behind the square modal panel without introducing non-tokenized style primitives.
+- Why:
+- Improves perceived polish and clarity while following best-practice startup frequency control and preserving deterministic automation/test behavior.
+- Follow-up:
+- Keep splash bounded and lightweight; if startup checks expand, update release contracts and avoid increasing splash duration beyond short boot window expectations.
+
 ## 2026-02-19T17:05:00Z - Startup loading screen (square theme, short checks, automation-safe)
 
 - Date (UTC):
