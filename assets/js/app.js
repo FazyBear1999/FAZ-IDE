@@ -1752,6 +1752,12 @@ let lessonsSelectorOpen = false;
 let lessonSession = null;
 let lessonProfileDirtyWrites = 0;
 let lessonSessionDirtyWrites = 0;
+let lessonHudBurstTimer = 0;
+let lessonHudLastTier = "none";
+let lessonHudLastMood = "focus";
+let lessonHudLastProgressBucket = -1;
+let lessonHudLastStepKey = "";
+let lessonHudLastRenderKey = "";
 let lessonProfile = {
     xp: 0,
     level: 1,
@@ -8752,11 +8758,55 @@ function loadLessonProfile() {
     persistLessonProfile({ force: true });
 }
 
+function setNodeText(node, text = "") {
+    if (!node) return;
+    const next = String(text || "");
+    if (node.textContent !== next) {
+        node.textContent = next;
+    }
+}
+
+function animateLessonHudPulse(kind = "soft") {
+    if (!el.lessonHud || typeof el.lessonHud.animate !== "function") return;
+    const keyframes = kind === "intense"
+        ? [
+            { transform: "translateY(0) scale(1)", filter: "saturate(1)", offset: 0 },
+            { transform: "translateY(-1px) scale(1.012)", filter: "saturate(1.2)", offset: 0.45 },
+            { transform: "translateY(0) scale(1)", filter: "saturate(1)", offset: 1 },
+        ]
+        : [
+            { transform: "translateY(0) scale(1)", offset: 0 },
+            { transform: "translateY(-1px) scale(1.006)", offset: 0.5 },
+            { transform: "translateY(0) scale(1)", offset: 1 },
+        ];
+    const duration = kind === "intense" ? 420 : 280;
+    el.lessonHud.animate(keyframes, {
+        duration,
+        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        iterations: 1,
+    });
+}
+
+function triggerLessonHaptic(duration = 8) {
+    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return;
+    try {
+        navigator.vibrate(Math.max(0, Math.min(24, Number(duration) || 0)));
+    } catch {
+    }
+}
+
 function updateLessonHud() {
     if (!el.lessonHud) return;
     const active = isLessonSessionActiveForCurrentFile();
     el.lessonHud.setAttribute("data-active", active ? "true" : "false");
     el.lessonHud.hidden = !active;
+    el.lessonHud.dataset.streakTier = "none";
+    el.lessonHud.dataset.mood = "focus";
+    el.lessonHud.style.setProperty("--lesson-progress", "0%");
+    if (el.lessonHudFill) {
+        el.lessonHudFill.style.setProperty("--lesson-progress", "0%");
+    }
+    setNodeText(el.lessonHudMood, "Lock in and build momentum ✨");
     if (!active) return;
 
     const step = getLessonCurrentStep();
@@ -8765,22 +8815,85 @@ function updateLessonHud() {
     const stepCount = Math.max(1, Number(lessonSession?.steps?.length) || 1);
     const progress = Math.max(0, Number(lessonSession?.progress) || 0);
     const total = Math.max(1, Number(step?.expected?.length) || 1);
-    if (el.lessonHudStep) {
-        el.lessonHudStep.textContent = `${stepId} ${stepIndex}/${stepCount}`;
+    const progressPercent = clamp(Math.round((progress / total) * 100), 0, 100);
+    const mistakes = Math.max(0, Number(lessonSession?.mistakes) || 0);
+    const accuracy = progress > 0 ? Math.round((progress / Math.max(1, progress + mistakes)) * 100) : 100;
+    const activeStreak = Math.max(0, Number(lessonSession?.streak) || lessonProfile.currentStreak || 0);
+    const streakTier = activeStreak >= 25 ? "fire" : activeStreak >= 12 ? "hot" : activeStreak >= 5 ? "warm" : "none";
+    const stepKey = `${stepId}:${stepIndex}/${stepCount}`;
+    if (stepKey !== lessonHudLastStepKey) {
+        lessonHudLastStepKey = stepKey;
+        lessonHudLastProgressBucket = -1;
     }
-    if (el.lessonHudProgress) {
-        el.lessonHudProgress.textContent = `${progress}/${total}`;
+    el.lessonHud.dataset.streakTier = streakTier;
+    el.lessonHud.style.setProperty("--lesson-progress", `${progressPercent}%`);
+    if (el.lessonHudFill) {
+        el.lessonHudFill.style.setProperty("--lesson-progress", `${progressPercent}%`);
     }
-    if (el.lessonHudLevel) {
-        el.lessonHudLevel.textContent = `Lv ${lessonProfile.level}`;
+    const stepPrefix = streakTier === "fire" ? "🔥" : streakTier === "hot" ? "⚡" : streakTier === "warm" ? "✨" : "•";
+    const mood = accuracy >= 98 && progressPercent >= 65
+        ? "perfect"
+        : accuracy >= 90
+            ? "strong"
+            : mistakes > 0
+                ? "recovery"
+                : "focus";
+    el.lessonHud.dataset.mood = mood;
+    const stepText = `${stepPrefix} ${stepId} ${stepIndex}/${stepCount}`;
+    const progressText = `${progress}/${total} (${progressPercent}%)`;
+    const levelText = `Lv ${lessonProfile.level}`;
+    const xpText = `XP ${lessonProfile.xp}`;
+    const streakText = `Streak ${activeStreak} • ${accuracy}%`;
+    const moodText = mood === "perfect"
+        ? "Perfect chain — you’re absolutely flying 🚀"
+        : mood === "strong"
+            ? "Strong tempo — keep the pressure on ⚡"
+            : mood === "recovery"
+                ? "One miss? Reset and dominate the next line 🎯"
+                : "Lock in and build momentum ✨";
+    const renderKey = `${stepText}|${progressText}|${levelText}|${xpText}|${streakText}|${moodText}|${streakTier}|${mood}`;
+    if (renderKey !== lessonHudLastRenderKey) {
+        lessonHudLastRenderKey = renderKey;
+        setNodeText(el.lessonHudStep, stepText);
+        setNodeText(el.lessonHudProgress, progressText);
+        setNodeText(el.lessonHudLevel, levelText);
+        setNodeText(el.lessonHudXp, xpText);
+        setNodeText(el.lessonHudStreak, streakText);
+        setNodeText(el.lessonHudMood, moodText);
     }
-    if (el.lessonHudXp) {
-        el.lessonHudXp.textContent = `XP ${lessonProfile.xp}`;
+
+    if (streakTier !== lessonHudLastTier || mood !== lessonHudLastMood) {
+        animateLessonHudPulse(streakTier === "fire" || mood === "perfect" ? "intense" : "soft");
+        lessonHudLastTier = streakTier;
+        lessonHudLastMood = mood;
     }
-    if (el.lessonHudStreak) {
-        const activeStreak = Math.max(0, Number(lessonSession?.streak) || lessonProfile.currentStreak || 0);
-        el.lessonHudStreak.textContent = `Streak ${activeStreak}`;
+
+    const progressBucket = Math.floor(progressPercent / 25);
+    if (progressBucket > lessonHudLastProgressBucket && progressBucket > 0 && progressPercent < 100) {
+        lessonHudLastProgressBucket = progressBucket;
+        triggerLessonHudBurst(`${progressBucket * 25}% locked`);
     }
+
+    el.lessonHud.setAttribute(
+        "aria-label",
+        `Lesson ${stepId}, step ${stepIndex} of ${stepCount}, progress ${progress} of ${total} (${progressPercent} percent), streak ${activeStreak}, accuracy ${accuracy} percent`
+    );
+}
+
+function triggerLessonHudBurst(message = "") {
+    if (!el.lessonHud || !el.lessonHudBurst) return;
+    const text = String(message || "").trim();
+    if (!text) return;
+    setNodeText(el.lessonHudBurst, text);
+    el.lessonHud.setAttribute("data-burst", "true");
+    animateLessonHudPulse("intense");
+    if (lessonHudBurstTimer) {
+        clearTimeout(lessonHudBurstTimer);
+    }
+    lessonHudBurstTimer = setTimeout(() => {
+        el.lessonHud?.setAttribute("data-burst", "false");
+        lessonHudBurstTimer = 0;
+    }, 620);
 }
 
 function awardLessonXp(amount = 0, { typedChar = false } = {}) {
@@ -8795,6 +8908,8 @@ function awardLessonXp(amount = 0, { typedChar = false } = {}) {
     if (lessonProfile.level > previousLevel) {
         status.set(`Level up! Lv ${lessonProfile.level}`);
         logger.append("system", [`Lesson level up: ${previousLevel} → ${lessonProfile.level}`]);
+        triggerLessonHudBurst(`Level ${lessonProfile.level}!`);
+        triggerLessonHaptic(12);
     }
     persistLessonProfile();
 }
@@ -8811,6 +8926,13 @@ function isLessonSessionActiveForCurrentFile() {
 }
 
 function syncLessonStateForActiveFile() {
+    if (lessonSession) {
+        const sessionFile = files.find((entry) => entry.id === lessonSession.fileId);
+        if (!sessionFile || !isLessonFamilyFile(sessionFile)) {
+            lessonSession = null;
+            clearPersistedLessonSession();
+        }
+    }
     if (isLessonSessionActiveForCurrentFile()) {
         syncLessonGhostMarks();
         updateLessonHud();
@@ -9076,6 +9198,10 @@ function applyLessonInputChar(inputChar = "") {
     lessonProfile.currentStreak = lessonSession.streak;
     lessonProfile.bestStreak = Math.max(lessonProfile.bestStreak, lessonSession.bestStreak);
     awardLessonXp(LESSON_XP_PER_CHAR, { typedChar: true });
+    if (lessonSession.streak > 0 && lessonSession.streak % 10 === 0) {
+        triggerLessonHudBurst(`${lessonSession.streak} streak!`);
+        triggerLessonHaptic(8);
+    }
     persistLessonSession();
     const finishedStep = lessonSession.progress >= step.expected.length;
     if (finishedStep) {
@@ -9210,6 +9336,8 @@ async function loadLessonById(id, { startTyping = true, runAfter = false } = {})
             const workspacePath = ensureUniquePathInSet(desiredPath, reservedPaths);
             const target = makeFile(workspacePath, file.code);
             target.savedCode = file.code;
+            target.family = "lesson";
+            target.lessonId = lesson.id;
             files.push(target);
             created.push(target);
         });
@@ -15804,7 +15932,7 @@ function getCommandPaletteEntries() {
             label: "Lessons: Skip To Next Step",
             keywords: "lesson next step skip",
             shortcut: "",
-            enabled: Boolean(lessonSession && !lessonSession.completed),
+            enabled: Boolean(isLessonSessionActiveForCurrentFile()),
             run: () => advanceLessonStep({ announce: true }),
         },
         {
@@ -15812,7 +15940,7 @@ function getCommandPaletteEntries() {
             label: "Lessons: Stop Typing Mode",
             keywords: "lesson stop typing exit",
             shortcut: "Esc",
-            enabled: Boolean(lessonSession),
+            enabled: Boolean(lessonSession && !lessonSession.completed),
             run: () => stopTypingLesson({ announce: true }),
         },
         {

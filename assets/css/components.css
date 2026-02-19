@@ -768,29 +768,62 @@ button:focus-visible {
 
 .lesson-hud {
     position: absolute;
-    top: 8px;
+    top: 10px;
     right: 10px;
     z-index: 8;
-    display: inline-flex;
-    align-items: center;
+    display: inline-grid;
     gap: 4px;
-    min-height: var(--control-height-xs);
+    min-height: 28px;
+    padding: 6px 6px 5px;
+    border: 1px solid var(--border-soft);
+    background: color-mix(in srgb, var(--surface-panel) 76%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--surface-raised) 24%, transparent),
+        0 10px 20px color-mix(in srgb, var(--surface-bg) 68%, transparent);
+    backdrop-filter: blur(4px) saturate(1.12);
     pointer-events: none;
-    max-width: calc(100% - 20px);
-    overflow: hidden;
+    max-width: min(560px, calc(100% - 20px));
+    --lesson-progress: 0%;
 }
 
 .lesson-hud[data-active="false"] {
     display: none;
 }
 
+.lesson-hud-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.lesson-hud::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--surface-selected-soft) 38%, transparent),
+        transparent 58%
+    );
+    opacity: 0.34;
+    pointer-events: none;
+}
+
 .lesson-hud-chip {
     display: inline-flex;
+    position: relative;
     align-items: center;
     min-height: 20px;
     padding: 0 6px;
     border: 1px solid var(--border-soft);
-    background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface-panel) 92%, transparent),
+        color-mix(in srgb, var(--surface-raised) 86%, transparent)
+    );
     color: var(--text-muted-soft);
     font-size: var(--text-size-2xs);
     letter-spacing: 0;
@@ -799,12 +832,171 @@ button:focus-visible {
     overflow: hidden;
 }
 
+.lesson-hud-chip::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--text-top-control) 7%, transparent),
+        transparent 55%
+    );
+    pointer-events: none;
+}
+
+.lesson-hud-chip-step {
+    max-width: 190px;
+}
+
+.lesson-hud-rail {
+    position: relative;
+    width: 100%;
+    height: 4px;
+    border: 1px solid var(--border-soft);
+    background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+    overflow: hidden;
+}
+
+.lesson-hud-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--lesson-progress, 0%);
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--text-top-control) 42%, transparent),
+        color-mix(in srgb, var(--text) 88%, transparent)
+    );
+    box-shadow: 0 0 8px color-mix(in srgb, var(--text-top-control) 36%, transparent);
+    transition: width var(--motion-ui) var(--motion-ease), filter var(--motion-ui) var(--motion-ease);
+}
+
+.lesson-hud-mood {
+    min-height: 16px;
+    padding: 0 4px;
+    color: var(--text-muted-soft);
+    font-size: var(--text-size-2xs);
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.lesson-hud-burst {
+    position: absolute;
+    top: -18px;
+    right: 0;
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+    padding: 3px 8px;
+    border: 1px solid var(--border-focus-soft);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface-selected-soft) 36%, var(--surface-raised) 64%),
+        color-mix(in srgb, var(--surface-raised) 88%, transparent)
+    );
+    color: var(--text-top-control);
+    font-size: var(--text-size-2xs);
+    letter-spacing: 0.12px;
+    pointer-events: none;
+}
+
+.lesson-hud[data-burst="true"] .lesson-hud-burst {
+    animation: lesson-hud-burst-in 560ms var(--motion-ease) 1;
+}
+
+.lesson-hud[data-streak-tier="warm"] .lesson-hud-fill,
+.lesson-hud[data-streak-tier="hot"] .lesson-hud-fill,
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-fill {
+    animation: lesson-hud-energy 0.9s ease-in-out infinite alternate;
+}
+
+.lesson-hud[data-streak-tier="warm"] .lesson-hud-chip-step {
+    border-color: color-mix(in srgb, var(--border-focus-soft) 65%, var(--border-soft) 35%);
+}
+
+.lesson-hud[data-streak-tier="hot"] .lesson-hud-chip-step,
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-chip-step {
+    border-color: color-mix(in srgb, var(--border-focus-strong) 70%, var(--border-soft) 30%);
+}
+
+.lesson-hud[data-streak-tier="hot"] {
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--surface-raised) 18%, transparent),
+        0 0 0 3px color-mix(in srgb, var(--surface-selected-soft) 34%, transparent);
+}
+
+.lesson-hud[data-streak-tier="fire"] {
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--surface-raised) 22%, transparent),
+        0 0 0 4px color-mix(in srgb, var(--surface-selected-soft) 44%, transparent);
+}
+
+.lesson-hud[data-streak-tier="warm"] .lesson-hud-mood,
+.lesson-hud[data-streak-tier="hot"] .lesson-hud-mood,
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-mood {
+    color: var(--text-top-control);
+}
+
+.lesson-hud[data-mood="perfect"] .lesson-hud-fill {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--surface-selected-soft) 42%, transparent),
+        color-mix(in srgb, var(--text) 92%, transparent)
+    );
+}
+
+@keyframes lesson-hud-energy {
+    from {
+        filter: saturate(0.95);
+        opacity: 0.8;
+    }
+    to {
+        filter: saturate(1.15);
+        opacity: 1;
+    }
+}
+
+@keyframes lesson-hud-burst-in {
+    0% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.92);
+    }
+    20% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-8px) scale(1.03);
+    }
+}
+
 #lessonHudStep,
 #lessonHudProgress,
 #lessonHudLevel,
 #lessonHudXp,
 #lessonHudStreak {
     color: var(--text-top-control);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lesson-hud-fill {
+        transition: none;
+    }
+
+    .lesson-hud[data-streak-tier="warm"] .lesson-hud-fill,
+    .lesson-hud[data-streak-tier="hot"] .lesson-hud-fill,
+    .lesson-hud[data-streak-tier="fire"] .lesson-hud-fill {
+        animation: none;
+    }
+
+    .lesson-hud[data-burst="true"] .lesson-hud-burst {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
 }
 
 .editor-buttons {

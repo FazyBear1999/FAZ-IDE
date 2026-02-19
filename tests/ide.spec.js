@@ -4087,6 +4087,61 @@ test("lesson mode restores typing progress after refresh", async ({ page }) => {
   expect(after.remaining).toBe(before.remaining);
 });
 
+test("lesson loader tags files with lesson family metadata", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.exportWorkspaceData) {
+      return { ready: false };
+    }
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: false, run: false });
+    const snapshot = api.exportWorkspaceData();
+    const files = Array.isArray(snapshot?.data?.files) ? snapshot.data.files : [];
+    const lessonFile = files.find((entry) => String(entry?.name || "").toLowerCase().endsWith("/game.js"))
+      || files.find((entry) => String(entry?.name || "").toLowerCase().endsWith("game.js"));
+    return {
+      ready: true,
+      loaded,
+      family: String(lessonFile?.family || ""),
+      lessonId: String(lessonFile?.lessonId || ""),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.family).toBe("lesson");
+  expect(result.lessonId).toBe("paddle-lesson-1");
+});
+
+test("lesson session clears when the lesson file is deleted", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.deleteFile || !api?.getLessonState) {
+      return { ready: false };
+    }
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const before = api.getLessonState();
+    const removed = api.deleteFile(String(before?.fileName || ""));
+    const after = api.getLessonState();
+    return {
+      ready: true,
+      loaded,
+      removed,
+      beforeActive: Boolean(before?.active),
+      afterStateIsNull: after == null,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.removed).toBeTruthy();
+  expect(result.beforeActive).toBeTruthy();
+  expect(result.afterStateIsNull).toBeTruthy();
+});
+
 test("lesson HUD hides and regular typing stays normal after switching to non-lesson file", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
