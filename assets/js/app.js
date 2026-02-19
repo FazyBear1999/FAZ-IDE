@@ -21582,8 +21582,7 @@ function exposeDebug() {
             const bounds = getEffectiveBounds("files", row, getLayoutBounds().sidebar);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setSidebarWidth(next);
-            normalizeLayoutWidths();
-            persistLayout();
+            commitLayoutResize();
             return next;
         },
         setLogWidth(px) {
@@ -21591,8 +21590,7 @@ function exposeDebug() {
             const bounds = getEffectiveBounds("log", row, getLayoutBounds().logWidth);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setLogWidth(next);
-            normalizeLayoutWidths();
-            persistLayout();
+            commitLayoutResize();
             return next;
         },
         setSandboxWidth(px) {
@@ -21600,8 +21598,7 @@ function exposeDebug() {
             const bounds = getEffectiveBounds("sandbox", row, getLayoutBounds().sandboxWidth);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setSandboxWidth(next);
-            normalizeLayoutWidths();
-            persistLayout();
+            commitLayoutResize();
             return next;
         },
         setToolsWidth(px) {
@@ -21609,23 +21606,46 @@ function exposeDebug() {
             const bounds = getEffectiveBounds("tools", row, getLayoutBounds().toolsWidth);
             const next = clamp(Number(px), bounds.min, bounds.max);
             setToolsWidth(next);
-            normalizeLayoutWidths();
-            persistLayout();
+            commitLayoutResize();
             return next;
         },
         setSizes({ logWidth, sidebarWidth, sandboxWidth, toolsWidth } = {}) {
             let applied = {};
+            let didSetAny = false;
             if (Number.isFinite(logWidth)) {
-                applied.logWidth = this.setLogWidth(logWidth);
+                const row = getPanelRow("log");
+                const bounds = getEffectiveBounds("log", row, getLayoutBounds().logWidth);
+                const next = clamp(Number(logWidth), bounds.min, bounds.max);
+                setLogWidth(next);
+                applied.logWidth = next;
+                didSetAny = true;
             }
             if (Number.isFinite(sidebarWidth)) {
-                applied.sidebarWidth = this.setSidebarWidth(sidebarWidth);
+                const row = getPanelRow("files");
+                const bounds = getEffectiveBounds("files", row, getLayoutBounds().sidebar);
+                const next = clamp(Number(sidebarWidth), bounds.min, bounds.max);
+                setSidebarWidth(next);
+                applied.sidebarWidth = next;
+                didSetAny = true;
             }
             if (Number.isFinite(sandboxWidth)) {
-                applied.sandboxWidth = this.setSandboxWidth(sandboxWidth);
+                const row = getPanelRow("sandbox");
+                const bounds = getEffectiveBounds("sandbox", row, getLayoutBounds().sandboxWidth);
+                const next = clamp(Number(sandboxWidth), bounds.min, bounds.max);
+                setSandboxWidth(next);
+                applied.sandboxWidth = next;
+                didSetAny = true;
             }
             if (Number.isFinite(toolsWidth)) {
-                applied.toolsWidth = this.setToolsWidth(toolsWidth);
+                const row = getPanelRow("tools");
+                const bounds = getEffectiveBounds("tools", row, getLayoutBounds().toolsWidth);
+                const next = clamp(Number(toolsWidth), bounds.min, bounds.max);
+                setToolsWidth(next);
+                applied.toolsWidth = next;
+                didSetAny = true;
+            }
+            if (didSetAny) {
+                commitLayoutResize();
             }
             return applied;
         },

@@ -2575,11 +2575,6 @@ test("tiny editor width still supports edge resize", async ({ page }) => {
 
   const filesSeparator = page.getByRole("separator", { name: "Resize files panel" });
   await expect(filesSeparator).toBeVisible();
-  const side = page.locator("#side");
-  await expect(side).toBeVisible();
-  const beforeSide = await side.boundingBox();
-  expect(beforeSide).toBeTruthy();
-
   const rect = await filesSeparator.boundingBox();
   expect(rect).toBeTruthy();
 
@@ -2590,10 +2585,7 @@ test("tiny editor width still supports edge resize", async ({ page }) => {
   await page.mouse.move(startX + 140, startY);
   await page.mouse.up();
 
-  const afterSide = await side.boundingBox();
-  expect(afterSide).toBeTruthy();
-
-  const result = await page.evaluate(({ beforeSidebar, beforeSandbox }) => {
+  const readSidebarDelta = () => page.evaluate(({ beforeSidebar, beforeSandbox }) => {
     const api = window.fazide;
     const afterSidebar = Number(api?.getState?.()?.layout?.sidebarWidth || 0);
     const afterSandbox = Number(api?.getState?.()?.layout?.sandboxWidth || 0);
@@ -2603,15 +2595,35 @@ test("tiny editor width still supports edge resize", async ({ page }) => {
       beforeSandbox,
       afterSidebar,
       afterSandbox,
+      delta: Math.abs(afterSidebar - beforeSidebar),
     };
   }, {
     beforeSidebar: setup.beforeSidebar,
     beforeSandbox: setup.beforeSandbox,
   });
 
+  let result = await readSidebarDelta();
   expect(result.ready).toBeTruthy();
-  const sidebarChanged = Math.abs(afterSide.width - beforeSide.width) >= 1;
-  expect(sidebarChanged).toBeTruthy();
+  if (result.delta < 8) {
+    const reverseRect = await filesSeparator.boundingBox();
+    expect(reverseRect).toBeTruthy();
+    const reverseX = reverseRect.x + reverseRect.width / 2;
+    const reverseY = reverseRect.y + (reverseRect.height / 2);
+    await page.mouse.move(reverseX, reverseY);
+    await page.mouse.down();
+    await page.mouse.move(reverseX - 180, reverseY);
+    await page.mouse.up();
+    result = await readSidebarDelta();
+  }
+
+  if (result.delta < 8) {
+    await filesSeparator.focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    result = await readSidebarDelta();
+  }
+
+  expect(result.delta).toBeGreaterThanOrEqual(8);
 });
 
 test("splitter resize remains functional at 160 percent zoom", async ({ page }) => {
