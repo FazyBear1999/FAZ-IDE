@@ -16,6 +16,13 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Hardened runtime against markdown-memory interference and locked worker/javascript wiring contracts.
+- Notable safety/infra updates: Added release tests in `tests/release.spec.js` that verify `docs/ai-memory` markdown paths are isolated from runtime wiring and service-worker core asset cache list; added worker/js wiring checks for module entry script, service-worker registration path, AST/lint worker module URLs, and worker file existence.
+- Validation status: `npx playwright test tests/release.spec.js --config config/playwright.config.js` passed (13/13), `npm run test:integrity` passed, `npm run test:memory` passed, and `npm run test:quick` passed.
+- Follow-up actions: Keep worker/js wiring checks in release contracts and add C1 Dev Terminal command help scope contract in next optimization slice.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Closed remaining C2 runtime-template scope gap with focused full-matrix copy/checklist contract coverage.
 - Notable safety/infra updates: Added `tests/ide.spec.js` runtime-full-matrix contract that loads template files and enforces JS/HTML/CSS-only checklist/copy markers while forbidding unsupported language terms.
 - Validation status: `npx playwright test tests/ide.spec.js --config config/playwright.config.js --grep "runtime full matrix template copy and checklist stay JS HTML CSS scoped"` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and `npm run test:quick` passed.

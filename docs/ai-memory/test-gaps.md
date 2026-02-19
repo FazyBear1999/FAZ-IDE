@@ -50,6 +50,7 @@
 
 ## Completed Recently
 
+- Added release contracts that enforce AI-memory markdown isolation from runtime wiring (`index.html`, `assets/js/app.js`, `assets/js/sw.js`) and lock worker/js setup correctness (service worker path, worker module URLs, cached worker assets, and file existence).
 - Closed C2 runtime validation template scope guard with focused runtime-full-matrix copy/checklist contract in `tests/ide.spec.js` (JS/HTML/CSS references required; unsupported language terms forbidden).
 - Closed C2 applications catalog scope guard with explicit extension allowlist contract in `tests/ide.spec.js` (`html/css/js/md` only; hard-fail on unsupported runtime extensions).
 - Added focused command-registry API contract coverage in `tests/stability-contract.spec.js` (register replace semantics, list visibility, unregister idempotence).

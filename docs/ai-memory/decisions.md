@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T15:30:00Z - Runtime isolation guard for AI-memory markdown + worker/js wiring lock
+
+- Date (UTC):
+- 2026-02-19T15:30:00Z
+- Area:
+- Release safety contracts, runtime isolation, and worker wiring reliability
+- Decision:
+- Added release contracts in `tests/release.spec.js` to enforce that AI-memory markdown paths (`docs/ai-memory`) are not referenced by runtime wiring surfaces (`index.html`, `assets/js/app.js`, `assets/js/sw.js`) and are excluded from service-worker `CORE_ASSETS`.
+- Added worker/js wiring contract checks that lock module entry and worker setup (`app.js` module entry in `index.html`, service-worker registration path, AST/lint worker module URLs, service-worker worker asset entries, and worker file existence).
+- Why:
+- This creates deterministic guardrails against documentation drift leaking into runtime and prevents silent worker-path regressions that can degrade diagnostics, parsing, and offline behavior.
+- Follow-up:
+- Keep these release contracts mandatory; next safe hardening target is C1 Dev Terminal help scope contract to lock command-surface scope copy.
+
 ## 2026-02-19T15:00:00Z - C2 runtime-template copy/checklist scope guard closure
 
 - Date (UTC):

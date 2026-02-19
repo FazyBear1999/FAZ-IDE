@@ -186,3 +186,58 @@ test("release contract: dist-site map includes lessons and package verification 
   expect(verifySitegroundSource.includes("collectTemplateSourcePathsFromConfig")).toBeTruthy();
   expect(verifySitegroundSource.includes("Missing deployed template source")).toBeTruthy();
 });
+
+test("release contract: ai-memory markdown remains isolated from runtime wiring", () => {
+  const indexPath = path.join(process.cwd(), "index.html");
+  const appPath = path.join(process.cwd(), "assets", "js", "app.js");
+  const swPath = path.join(process.cwd(), "assets", "js", "sw.js");
+
+  const indexSource = fs.readFileSync(indexPath, "utf8");
+  const appSource = fs.readFileSync(appPath, "utf8");
+  const swSource = fs.readFileSync(swPath, "utf8");
+
+  const forbiddenMemoryRefs = [
+    "docs/ai-memory",
+    "./docs/ai-memory",
+    "../docs/ai-memory",
+  ];
+
+  for (const marker of forbiddenMemoryRefs) {
+    expect(indexSource.includes(marker)).toBeFalsy();
+    expect(appSource.includes(marker)).toBeFalsy();
+    expect(swSource.includes(marker)).toBeFalsy();
+  }
+
+  const coreAssetsArrayMatch = swSource.match(/const\s+CORE_ASSETS\s*=\s*\[([\s\S]*?)\];/);
+  const coreAssetsBody = String(coreAssetsArrayMatch?.[1] || "");
+  expect(coreAssetsBody.includes("docs/ai-memory")).toBeFalsy();
+});
+
+test("release contract: worker and core javascript wiring remain valid", () => {
+  const root = process.cwd();
+  const indexPath = path.join(root, "index.html");
+  const appPath = path.join(root, "assets", "js", "app.js");
+  const swPath = path.join(root, "assets", "js", "sw.js");
+  const astClientPath = path.join(root, "assets", "js", "core", "astClient.js");
+  const astWorkerPath = path.join(root, "assets", "js", "workers", "ast.worker.js");
+  const lintWorkerPath = path.join(root, "assets", "js", "workers", "editorLint.worker.js");
+
+  const indexSource = fs.readFileSync(indexPath, "utf8");
+  const appSource = fs.readFileSync(appPath, "utf8");
+  const swSource = fs.readFileSync(swPath, "utf8");
+  const astClientSource = fs.readFileSync(astClientPath, "utf8");
+
+  expect(indexSource.includes('<script type="module" src="./assets/js/app.js"></script>')).toBeTruthy();
+  expect(appSource.includes('navigator.serviceWorker.register("./assets/js/sw.js")')).toBeTruthy();
+  expect(appSource.includes('new Worker(new URL("./workers/editorLint.worker.js", import.meta.url), { type: "module" })')).toBeTruthy();
+  expect(astClientSource.includes('new Worker(new URL("../workers/ast.worker.js", import.meta.url), { type: "module" })')).toBeTruthy();
+
+  const coreAssetsArrayMatch = swSource.match(/const\s+CORE_ASSETS\s*=\s*\[([\s\S]*?)\];/);
+  const coreAssetsBody = String(coreAssetsArrayMatch?.[1] || "");
+  expect(coreAssetsBody.includes("./assets/js/app.js")).toBeTruthy();
+  expect(coreAssetsBody.includes("./assets/js/workers/ast.worker.js")).toBeTruthy();
+  expect(coreAssetsBody.includes("./assets/js/workers/editorLint.worker.js")).toBeTruthy();
+
+  expect(fs.existsSync(astWorkerPath)).toBeTruthy();
+  expect(fs.existsSync(lintWorkerPath)).toBeTruthy();
+});
