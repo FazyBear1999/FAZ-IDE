@@ -19,6 +19,21 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T17:05:00Z - Startup loading screen (square theme, short checks, automation-safe)
+
+- Date (UTC):
+- 2026-02-19T17:05:00Z
+- Area:
+- Startup UX polish and boot safety
+- Decision:
+- Added a startup loading screen with square visual styling and quick boot checks (UI shell, storage, editor, runtime) shown during first boot seconds.
+- Loading flow is bounded to a short 3–4 second window (`BOOT_SCREEN_MIN_MS` / `BOOT_SCREEN_MAX_MS`) and fades into the existing app shell without changing post-boot behavior.
+- Added automation-safe bypass (`navigator.webdriver`) so CI/test harness runs do not block on timed splash UI.
+- Why:
+- Improves first impression and boot clarity while preserving reliability and deterministic test behavior.
+- Follow-up:
+- Keep splash checks lightweight and non-blocking; if startup stages expand, update release contracts instead of increasing splash duration.
+
 ## 2026-02-19T16:25:00Z - C2 sandbox runtime status determinism contract closure
 
 - Date (UTC):

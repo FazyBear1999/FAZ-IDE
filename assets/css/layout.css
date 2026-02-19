@@ -28,6 +28,130 @@
     flex-direction: column;
 }
 
+body[data-boot-screen="true"] {
+    overflow: hidden;
+}
+
+.boot-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: var(--overlay-backdrop-strong);
+}
+
+.boot-screen[hidden] {
+    display: none;
+}
+
+.boot-screen.is-hiding {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-fast) var(--motion-ease);
+}
+
+.boot-screen-panel {
+    width: min(560px, 100%);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-panel);
+    padding: 18px;
+    border-radius: 0;
+}
+
+.boot-screen-eyebrow {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted-quiet);
+}
+
+.boot-screen-title {
+    margin: 8px 0 6px;
+    font-size: 20px;
+    line-height: 1.2;
+}
+
+.boot-screen-status {
+    margin: 0 0 12px;
+    color: var(--text-muted-soft);
+    font-size: 13px;
+}
+
+.boot-screen-checks {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+}
+
+.boot-screen-checks li {
+    border: 1px solid var(--border-control);
+    padding: 8px 10px;
+    background: var(--surface-panel-alt);
+    font-size: 12px;
+    letter-spacing: 0.01em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.boot-screen-checks li::before {
+    content: "□";
+    color: var(--text-muted-quiet);
+}
+
+.boot-screen-checks li[data-state="pass"] {
+    border-color: var(--status-success-border);
+    background: var(--status-success-bg);
+    color: var(--status-success-text);
+}
+
+.boot-screen-checks li[data-state="pass"]::before {
+    content: "■";
+    color: var(--status-success-text);
+}
+
+.boot-screen-checks li[data-state="warn"] {
+    border-color: var(--status-warn-border);
+    background: var(--status-warn-bg);
+    color: var(--status-warn-text);
+}
+
+.boot-screen-checks li[data-state="warn"]::before {
+    content: "■";
+    color: var(--status-warn-text);
+}
+
+.boot-screen-progress {
+    margin-top: 12px;
+    height: 6px;
+    border: 1px solid var(--border-control);
+    background: var(--surface-panel-alt);
+    overflow: hidden;
+}
+
+.boot-screen-progress-bar {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-info), var(--accent));
+    transform-origin: left center;
+    animation: boot-progress 3.6s linear infinite;
+}
+
+@keyframes boot-progress {
+    0% {
+        transform: scaleX(0.08);
+    }
+    100% {
+        transform: scaleX(1);
+    }
+}
+
 /* Splitters */
 .splitter {
     background: transparent;

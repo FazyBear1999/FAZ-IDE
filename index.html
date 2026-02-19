@@ -58,6 +58,22 @@
         </head>
 
         <body>
+            <section id="bootScreen" class="boot-screen" role="status" aria-live="polite" aria-label="Starting FAZ IDE">
+                <div class="boot-screen-panel">
+                    <p class="boot-screen-eyebrow">FAZ IDE</p>
+                    <h2 class="boot-screen-title">Starting workspace...</h2>
+                    <p id="bootScreenStatus" class="boot-screen-status">Running startup checks...</p>
+                    <ul class="boot-screen-checks" aria-label="Startup checks">
+                        <li data-check="dom" data-state="pending">UI shell</li>
+                        <li data-check="storage" data-state="pending">Storage</li>
+                        <li data-check="editor" data-state="pending">Editor</li>
+                        <li data-check="runtime" data-state="pending">Runtime</li>
+                    </ul>
+                    <div class="boot-screen-progress" aria-hidden="true">
+                        <span class="boot-screen-progress-bar"></span>
+                    </div>
+                </div>
+            </section>
             <div id="appShell" class="app-shell" data-log="open" data-editor="open" data-files="open" data-sandbox="open" data-tools="closed" data-header="open" data-footer="open">
                 <div class="wrap">
                     <header class="top strip" aria-label="Top bar">

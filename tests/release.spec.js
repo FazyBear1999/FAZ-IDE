@@ -241,3 +241,31 @@ test("release contract: worker and core javascript wiring remain valid", () => {
   expect(fs.existsSync(astWorkerPath)).toBeTruthy();
   expect(fs.existsSync(lintWorkerPath)).toBeTruthy();
 });
+
+test("release contract: startup loading screen is wired and automation-safe", () => {
+  const indexPath = path.join(process.cwd(), "index.html");
+  const appPath = path.join(process.cwd(), "assets", "js", "app.js");
+  const layoutPath = path.join(process.cwd(), "assets", "css", "layout.css");
+
+  const indexSource = fs.readFileSync(indexPath, "utf8");
+  const appSource = fs.readFileSync(appPath, "utf8");
+  const layoutSource = fs.readFileSync(layoutPath, "utf8");
+
+  expect(indexSource.includes('id="bootScreen"')).toBeTruthy();
+  expect(indexSource.includes('id="bootScreenStatus"')).toBeTruthy();
+  expect(indexSource.includes('data-check="dom"')).toBeTruthy();
+  expect(indexSource.includes('data-check="storage"')).toBeTruthy();
+  expect(indexSource.includes('data-check="editor"')).toBeTruthy();
+  expect(indexSource.includes('data-check="runtime"')).toBeTruthy();
+
+  expect(appSource.includes("const BOOT_SCREEN_MIN_MS = 3200;")).toBeTruthy();
+  expect(appSource.includes("const BOOT_SCREEN_MAX_MS = 4200;")).toBeTruthy();
+  expect(appSource.includes("createBootScreenController")).toBeTruthy();
+  expect(appSource.includes("navigator.webdriver")).toBeTruthy();
+  expect(appSource.includes("bootScreen.mark(\"dom\"")).toBeTruthy();
+  expect(appSource.includes("await bootScreen.finish")).toBeTruthy();
+
+  expect(layoutSource.includes(".boot-screen")).toBeTruthy();
+  expect(layoutSource.includes(".boot-screen-panel")).toBeTruthy();
+  expect(layoutSource.includes("border-radius: 0;")).toBeTruthy();
+});
