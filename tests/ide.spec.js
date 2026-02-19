@@ -2142,6 +2142,75 @@ test("runtime validation applications execute and emit expected console/sandbox 
   expect(result.cssLangSeen).toBeTruthy();
 });
 
+test("sandbox runtime status and markers remain deterministic for JS HTML and CSS templates", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadApplication) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const readStatus = () => String(document.querySelector("#statusText")?.textContent || "").toLowerCase();
+    const readSandboxState = () => String(document.querySelector("#footerSandbox")?.getAttribute("data-state") || "").toLowerCase();
+    const readLog = () => String(document.querySelector("#log")?.textContent || "");
+
+    const jsLoaded = await api.loadApplication("runtime-js-check-app", { run: true });
+    await wait(420);
+    const jsStatus = readStatus();
+    const jsSandboxState = readSandboxState();
+    const jsLog = readLog();
+
+    const htmlLoaded = await api.loadApplication("runtime-html-check-app", { run: true });
+    await wait(420);
+    const htmlStatus = readStatus();
+    const htmlSandboxState = readSandboxState();
+    const htmlLog = readLog();
+
+    const cssLoaded = await api.loadApplication("runtime-css-check-app", { run: true });
+    await wait(420);
+    const cssStatus = readStatus();
+    const cssSandboxState = readSandboxState();
+    const cssLang = String(document.querySelector("#footerEditorLang")?.textContent || "").toLowerCase();
+    const runnerDoc = String(document.querySelector("#runner")?.getAttribute("srcdoc") || "").toLowerCase();
+
+    return {
+      ready: true,
+      jsLoaded,
+      htmlLoaded,
+      cssLoaded,
+      jsStatusRan: jsStatus.includes("ran"),
+      htmlStatusRan: htmlStatus.includes("ran"),
+      cssStatusRan: cssStatus.includes("ran"),
+      jsSandboxHealthy: ["ok", "warn"].includes(jsSandboxState),
+      htmlSandboxHealthy: ["ok", "warn"].includes(htmlSandboxState),
+      cssSandboxHealthy: ["ok", "warn"].includes(cssSandboxState),
+      jsMarkerSeen: /runtime-js-check:.*console-log/.test(jsLog),
+      htmlMarkerSeen: /runtime-html-check:.*linked-js-console/.test(htmlLog),
+      cssMarkerSeen: runnerDoc.includes("runtime-css-check:step-01") && runnerDoc.includes("runtime-css-check:step-02"),
+      cssLangSeen: cssLang.includes("css"),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.jsLoaded).toBeTruthy();
+  expect(result.htmlLoaded).toBeTruthy();
+  expect(result.cssLoaded).toBeTruthy();
+
+  expect(result.jsStatusRan).toBeTruthy();
+  expect(result.htmlStatusRan).toBeTruthy();
+  expect(result.cssStatusRan).toBeTruthy();
+  expect(result.jsSandboxHealthy).toBeTruthy();
+  expect(result.htmlSandboxHealthy).toBeTruthy();
+  expect(result.cssSandboxHealthy).toBeTruthy();
+
+  expect(result.jsMarkerSeen).toBeTruthy();
+  expect(result.htmlMarkerSeen).toBeTruthy();
+  expect(result.cssMarkerSeen).toBeTruthy();
+  expect(result.cssLangSeen).toBeTruthy();
+});
+
 test("runtime full matrix app emits detailed signals for html/css channels", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T16:25:00Z - C2 sandbox runtime status determinism contract closure
+
+- Date (UTC):
+- 2026-02-19T16:25:00Z
+- Area:
+- Runtime execution determinism and triage reliability
+- Decision:
+- Added a focused contract in `tests/ide.spec.js` that runs runtime JS, HTML, and CSS validation applications and locks status+marker pairing for each path.
+- Contract asserts per-template run success, healthy sandbox status state, and deterministic markers (`runtime-js-check` and `runtime-html-check` console markers, `runtime-css-check` style markers in sandbox doc).
+- Why:
+- This closes the final open C2 gap by ensuring runtime success signals remain deterministic and immediately regression-visible in CI.
+- Follow-up:
+- Keep runtime-template and run-status surfaces gated by this contract plus `test:integrity` and `test:memory`; next high-value gap is C8 low-signal test quality audit.
+
 ## 2026-02-19T16:05:00Z - C1 Dev Terminal help scope contract closure
 
 - Date (UTC):

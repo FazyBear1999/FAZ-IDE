@@ -16,6 +16,13 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Closed C2 sandbox runtime status determinism gap with explicit JS/HTML/CSS status-marker pairing contract.
+- Notable safety/infra updates: Added focused runtime test in `tests/ide.spec.js` that executes runtime JS/HTML/CSS applications, asserts run-status health, and verifies deterministic per-template markers across console/sandbox outputs.
+- Validation status: `npx playwright test --config config/playwright.config.js --grep 'sandbox runtime status and markers remain deterministic for JS HTML and CSS templates' tests/ide.spec.js` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and full project check `npm run test:all` passed.
+- Follow-up actions: Keep runtime marker/status contract mandatory for sandbox/runtime edits; next optimization target is C8 low-signal test-quality audit enforcement.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Closed C1 Dev Terminal help scope gap with explicit allowlist/denylist contract checks.
 - Notable safety/infra updates: Added a focused test in `tests/ide.spec.js` that runs Dev Terminal `help` and validates expected safe command snippets while forbidding unsupported language and unsafe command snippets.
 - Validation status: `npx playwright test --config config/playwright.config.js --grep 'dev terminal help stays aligned with safe runtime command scope' tests/ide.spec.js` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and `npm run test:quick` passed.

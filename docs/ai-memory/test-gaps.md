@@ -24,15 +24,6 @@
   - Validation command: `npm run test:integrity` + focused suite audit command
   - Owner/next action: Add with first C8 optimization implementation slice.
 
-- Checkpoint ID: C2
-  - Area: Sandbox runtime status determinism
-  - Gap: Add focused assertion that sandbox run status + console marker pairing stays deterministic for JS/HTML/CSS templates.
-  - Why it matters: Keeps runtime triage deterministic and repeatable.
-  - Proposed test: Status marker + console marker pair contract per template.
-  - Priority (P0/P1/P2): P0
-  - Validation command: focused runtime validation app tests
-  - Owner/next action: Add alongside runtime marker updates.
-
 ## Update Rules
 
 - Every open gap must carry a Checkpoint ID from roadmap-decision-map.md.
@@ -41,6 +32,7 @@
 
 ## Completed Recently
 
+- Closed C2 sandbox runtime status determinism gap with focused JS/HTML/CSS runtime contract in `tests/ide.spec.js` (status + marker pairing locked for each template path).
 - Closed C1 Dev Terminal help scope gap with focused command help contract in `tests/ide.spec.js` (expected safe command snippets required; unsupported language/unsafe command snippets forbidden).
 - Added release contracts that enforce AI-memory markdown isolation from runtime wiring (`index.html`, `assets/js/app.js`, `assets/js/sw.js`) and lock worker/js setup correctness (service worker path, worker module URLs, cached worker assets, and file existence).
 - Closed C2 runtime validation template scope guard with focused runtime-full-matrix copy/checklist contract in `tests/ide.spec.js` (JS/HTML/CSS references required; unsupported language terms forbidden).
