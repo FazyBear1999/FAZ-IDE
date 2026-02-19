@@ -130,29 +130,37 @@ function toBooleanAttribute(value) {
     return value ? "true" : "false";
 }
 
+function setBooleanAttribute(node, attrName, value) {
+    if (!node || !attrName) return;
+    node.setAttribute(attrName, toBooleanAttribute(Boolean(value)));
+}
+
 function setDataOpen(node, open) {
-    if (!node) return;
-    node.setAttribute("data-open", toBooleanAttribute(Boolean(open)));
+    setBooleanAttribute(node, "data-open", open);
 }
 
 function setAriaHidden(node, hidden) {
-    if (!node) return;
-    node.setAttribute("aria-hidden", toBooleanAttribute(Boolean(hidden)));
+    setBooleanAttribute(node, "aria-hidden", hidden);
 }
 
 function setAriaSelected(node, selected) {
-    if (!node) return;
-    node.setAttribute("aria-selected", toBooleanAttribute(Boolean(selected)));
+    setBooleanAttribute(node, "aria-selected", selected);
 }
 
 function setAriaExpanded(node, expanded) {
-    if (!node) return;
-    node.setAttribute("aria-expanded", toBooleanAttribute(Boolean(expanded)));
+    setBooleanAttribute(node, "aria-expanded", expanded);
+}
+
+function setAriaPressed(node, pressed) {
+    setBooleanAttribute(node, "aria-pressed", pressed);
 }
 
 function setDataActive(node, active) {
-    if (!node) return;
-    node.setAttribute("data-active", toBooleanAttribute(Boolean(active)));
+    setBooleanAttribute(node, "data-active", active);
+}
+
+function setDataPanelOpen(node, open) {
+    setBooleanAttribute(node, "data-panel-open", open);
 }
 
 function setVisibilityState(node, visible, { dataOpen = false } = {}) {
@@ -6358,48 +6366,32 @@ function isPanelOpen(panel) {
 }
 
 function syncPanelToggles() {
-    if (el.btnToggleLog) {
-        el.btnToggleLog.setAttribute("aria-expanded", layoutState.logOpen ? "true" : "false");
-        el.btnToggleLog.setAttribute("data-panel-open", layoutState.logOpen ? "true" : "false");
-        el.btnToggleLog.textContent = "Console";
-    }
-    if (el.btnToggleEditor) {
-        el.btnToggleEditor.setAttribute("aria-expanded", layoutState.editorOpen ? "true" : "false");
-        el.btnToggleEditor.setAttribute("data-panel-open", layoutState.editorOpen ? "true" : "false");
-        el.btnToggleEditor.textContent = "Editor";
-    }
-    if (el.btnToggleFiles) {
-        el.btnToggleFiles.setAttribute("aria-expanded", layoutState.filesOpen ? "true" : "false");
-        el.btnToggleFiles.setAttribute("data-panel-open", layoutState.filesOpen ? "true" : "false");
-        el.btnToggleFiles.textContent = "Files";
-    }
-    if (el.btnToggleSandbox) {
-        el.btnToggleSandbox.setAttribute("aria-expanded", layoutState.sandboxOpen ? "true" : "false");
-        el.btnToggleSandbox.setAttribute("data-panel-open", layoutState.sandboxOpen ? "true" : "false");
-        el.btnToggleSandbox.textContent = "Sandbox";
-    }
-    if (el.btnToggleTools) {
-        el.btnToggleTools.setAttribute("aria-expanded", layoutState.toolsOpen ? "true" : "false");
-        el.btnToggleTools.setAttribute("data-panel-open", layoutState.toolsOpen ? "true" : "false");
-        el.btnToggleTools.textContent = "Tools";
-    }
+    const toggleStates = [
+        [el.btnToggleLog, layoutState.logOpen, "Console"],
+        [el.btnToggleEditor, layoutState.editorOpen, "Editor"],
+        [el.btnToggleFiles, layoutState.filesOpen, "Files"],
+        [el.btnToggleSandbox, layoutState.sandboxOpen, "Sandbox"],
+        [el.btnToggleTools, layoutState.toolsOpen, "Tools"],
+    ];
+    toggleStates.forEach(([button, open, label]) => {
+        if (!button) return;
+        setAriaExpanded(button, open);
+        setDataPanelOpen(button, open);
+        button.textContent = label;
+    });
 }
 
 function syncQuickBar() {
-    if (el.btnToggleHeader) {
-        el.btnToggleHeader.setAttribute("aria-expanded", layoutState.headerOpen ? "true" : "false");
-        el.btnToggleHeader.setAttribute("data-panel-open", layoutState.headerOpen ? "true" : "false");
-        el.btnToggleHeader.textContent = "Header";
-    }
-    if (el.quickHeader) {
-        el.quickHeader.setAttribute("aria-expanded", layoutState.headerOpen ? "true" : "false");
-        el.quickHeader.setAttribute("data-panel-open", layoutState.headerOpen ? "true" : "false");
-        el.quickHeader.textContent = "Header";
-    }
+    [el.btnToggleHeader, el.quickHeader].forEach((button) => {
+        if (!button) return;
+        setAriaExpanded(button, layoutState.headerOpen);
+        setDataPanelOpen(button, layoutState.headerOpen);
+        button.textContent = "Header";
+    });
     if (!el.quickBar) return;
     const visible = !layoutState.headerOpen;
-    el.quickBar.setAttribute("data-visible", visible ? "true" : "false");
-    el.quickBar.setAttribute("aria-hidden", visible ? "false" : "true");
+    setBooleanAttribute(el.quickBar, "data-visible", visible);
+    setAriaHidden(el.quickBar, !visible);
 }
 
 function setHeaderOpen(open) {
@@ -6908,7 +6900,7 @@ function syncEditorToolButtons() {
     ];
     states.forEach(([btn, active]) => {
         if (!btn) return;
-        btn.setAttribute("data-active", active ? "true" : "false");
+        setDataActive(btn, active);
     });
 }
 
@@ -8955,20 +8947,18 @@ function setLessonStatsView(view = "overview") {
     const normalizedView = view === "shop" ? "shop" : "overview";
     lessonStatsView = normalizedView;
     if (el.lessonStatsOverview) {
-        el.lessonStatsOverview.hidden = normalizedView !== "overview";
-        el.lessonStatsOverview.setAttribute("aria-hidden", normalizedView === "overview" ? "false" : "true");
+        setVisibilityState(el.lessonStatsOverview, normalizedView === "overview");
     }
     if (el.lessonStatsShop) {
-        el.lessonStatsShop.hidden = normalizedView !== "shop";
-        el.lessonStatsShop.setAttribute("aria-hidden", normalizedView === "shop" ? "false" : "true");
+        setVisibilityState(el.lessonStatsShop, normalizedView === "shop");
     }
     if (el.lessonStatsOverviewTab) {
-        el.lessonStatsOverviewTab.setAttribute("data-active", normalizedView === "overview" ? "true" : "false");
-        el.lessonStatsOverviewTab.setAttribute("aria-pressed", normalizedView === "overview" ? "true" : "false");
+        setDataActive(el.lessonStatsOverviewTab, normalizedView === "overview");
+        setAriaPressed(el.lessonStatsOverviewTab, normalizedView === "overview");
     }
     if (el.lessonStatsShopTab) {
-        el.lessonStatsShopTab.setAttribute("data-active", normalizedView === "shop" ? "true" : "false");
-        el.lessonStatsShopTab.setAttribute("aria-pressed", normalizedView === "shop" ? "true" : "false");
+        setDataActive(el.lessonStatsShopTab, normalizedView === "shop");
+        setAriaPressed(el.lessonStatsShopTab, normalizedView === "shop");
     }
 }
 
