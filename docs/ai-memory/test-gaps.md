@@ -68,6 +68,7 @@
 
 ## Completed Recently
 
+- Added focused command-registry API contract coverage in `tests/stability-contract.spec.js` (register replace semantics, list visibility, unregister idempotence).
 - Added focused contract coverage for workspace preview sanitization and local asset inlining.
 - Simplified runtime validation templates for deterministic marker-based pass/fail output.
 - Removed unsupported runtime branches and aligned tests to web-language-only execution.

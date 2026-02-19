@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T14:10:00Z - Command registry contract lock-in + strict async integrity rollout closure
+
+- Date (UTC):
+- 2026-02-19T14:10:00Z
+- Area:
+- Command routing safety and test-quality hardening
+- Decision:
+- Added focused API contract coverage in `tests/stability-contract.spec.js` for `registerCommand` / `listCommands` / `unregisterCommand` semantics (replace=false guard, replace overwrite behavior, and unregister idempotence).
+- Completed strict integrity rollout by aligning sync-only contract tests to non-async callbacks while keeping `scripts/verify-test-integrity.js` hard-fail rule (`async` test callbacks must contain `await`).
+- Why:
+- Command registry is a central extension surface and lacked direct lock tests; strict async integrity catches false-signal tests but required cleanup of redundant async declarations to avoid noise.
+- Follow-up:
+- Keep command-surface changes gated by focused `tests/stability-contract.spec.js` evidence plus `test:integrity`; expand coverage to execution-disabled command behavior when command execution surface is touched.
+
 ## 2026-02-19T13:30:00Z - Safe workspace-preview path-normalization cleanup (optimization slice)
 
 - Date (UTC):

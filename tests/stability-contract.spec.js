@@ -46,6 +46,71 @@ test("boot has no fatal runtime errors and exposes critical API contract", async
   expect(pageErrors).toEqual([]);
 });
 
+test("command registry API preserves register/list/unregister contract", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.registerCommand || !api?.unregisterCommand || !api?.listCommands) {
+      return { ready: false };
+    }
+
+    const commandId = `contract-command-${Date.now().toString(16)}`;
+    const firstRegister = api.registerCommand({
+      id: commandId,
+      label: "Contract Command",
+      keywords: ["contract", "command"],
+      run() {
+        return "first";
+      },
+    });
+
+    const duplicateWithoutReplace = api.registerCommand({
+      id: commandId,
+      label: "Contract Command Duplicate",
+      run() {
+        return "duplicate";
+      },
+    }, { replace: false });
+
+    const replaceRegister = api.registerCommand({
+      id: commandId,
+      label: "Contract Command Updated",
+      source: "contract",
+      run() {
+        return "updated";
+      },
+    });
+
+    const listedEntry = api.listCommands().find((entry) => entry.id === commandId) || null;
+    const removed = api.unregisterCommand(commandId);
+    const removedAgain = api.unregisterCommand(commandId);
+    const listedAfterRemove = api.listCommands().some((entry) => entry.id === commandId);
+
+    return {
+      ready: true,
+      firstRegister,
+      duplicateWithoutReplace,
+      replaceRegister,
+      listedEntry,
+      removed,
+      removedAgain,
+      listedAfterRemove,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.firstRegister).toBeTruthy();
+  expect(result.duplicateWithoutReplace).toBeNull();
+  expect(result.replaceRegister).toBe(result.firstRegister);
+  expect(result.listedEntry).toBeTruthy();
+  expect(result.listedEntry.label).toBe("Contract Command Updated");
+  expect(result.listedEntry.source).toBe("contract");
+  expect(result.removed).toBeTruthy();
+  expect(result.removedAgain).toBeFalsy();
+  expect(result.listedAfterRemove).toBeFalsy();
+});
+
 test("first sandbox run reaches ready/ok health without crashing", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

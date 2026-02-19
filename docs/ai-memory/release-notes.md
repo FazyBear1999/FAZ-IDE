@@ -16,6 +16,13 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
+- Summary: Locked command-registry API behavior with focused contract coverage and completed strict async-integrity enforcement.
+- Notable safety/infra updates: Added command API contract in `tests/stability-contract.spec.js` for deterministic register/list/unregister behavior; aligned sync-only contract specs by removing redundant `async` callbacks so integrity rule `async tests without await` can remain hard-fail in `scripts/verify-test-integrity.js`.
+- Validation status: `npm run test:all` passed, `npx playwright test tests/stability-contract.spec.js --config config/playwright.config.js` passed (8/8), `npm run test:integrity` passed, and `npm run test:memory` passed.
+- Follow-up actions: Add a command-execution contract (enabled/disabled/error result shape) when command-runner API surface is modified.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
 - Summary: Applied safe sandbox workspace-preview cleanup for path normalization and resolver key reuse.
 - Notable safety/infra updates: Refactored `assets/js/sandbox/workspacePreview.js` to centralize normalized cache-key/path-key generation, reducing duplication without changing resolver behavior.
 - Validation status: `tests/workspace-preview-contract.spec.js` passed (4/4), `tests/stability-contract.spec.js` passed (14/14), and `npm run frank:full` passed (14/14).
