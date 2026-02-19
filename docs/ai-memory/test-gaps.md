@@ -51,16 +51,6 @@
   - Validation command: focused runtime validation app tests
   - Owner/next action: Add alongside runtime marker updates.
 
-- Checkpoint ID: C6
-  - Area: Lessons theme shop policy
-  - Gap: Add strict-policy contract coverage for theme unlock gating (buy/apply behavior) before enabling global strict Bytes spending.
-  - Why it matters: Prevents economy regressions and inconsistent unlock behavior across fresh vs migrated profiles.
-  - Proposed test: Fresh-profile e2e verifies locked theme messaging, buy flow, bytes deduction, and apply-after-unlock path.
-  - Priority (P0/P1/P2): P0
-  - Validation command: focused lesson/shop Playwright contracts
-  - Owner/next action: Add in next strict-unlock policy wave.
-
-
 ## Update Rules
 
 - Every open gap must carry a Checkpoint ID from roadmap-decision-map.md.
@@ -73,3 +63,4 @@
 - Simplified runtime validation templates for deterministic marker-based pass/fail output.
 - Removed unsupported runtime branches and aligned tests to web-language-only execution.
 - Added lesson shop hidden-render regression (`overview` active should not rebuild shop list DOM during typing updates).
+- Added strict lesson theme-unlock policy contracts for fresh-profile lock gating and buy/apply byte-economy flow (`tests/ide.spec.js`).

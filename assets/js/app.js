@@ -1791,7 +1791,7 @@ let lessonProfile = {
     xp: 0,
     level: 1,
     bytes: 0,
-    unlockedThemes: [...THEMES],
+    unlockedThemes: [DEFAULT_THEME],
     totalTypedChars: 0,
     lessonsCompleted: 0,
     bestStreak: 0,
@@ -8670,7 +8670,7 @@ function sanitizeLessonProfile(raw = null) {
     const source = raw && typeof raw === "object" ? raw : {};
     const xp = Math.max(0, Math.floor(Number(source.xp) || 0));
     const bytes = Math.max(0, Math.floor(Number(source.bytes ?? source.coins) || 0));
-    const unlockedThemes = new Set(THEMES);
+    const unlockedThemes = new Set([DEFAULT_THEME]);
     const rawUnlockedThemes = Array.isArray(source.unlockedThemes) ? source.unlockedThemes : [];
     rawUnlockedThemes.forEach((themeName) => {
         const normalizedTheme = normalizeTheme(themeName, THEMES, "");
@@ -9826,7 +9826,7 @@ function getLessonProfileSnapshot() {
         level: Number(lessonProfile.level) || 1,
         bytes: Number(lessonProfile.bytes) || 0,
         coins: Number(lessonProfile.bytes) || 0,
-        unlockedThemes: Array.isArray(lessonProfile.unlockedThemes) ? [...lessonProfile.unlockedThemes] : [...THEMES],
+        unlockedThemes: Array.isArray(lessonProfile.unlockedThemes) ? [...lessonProfile.unlockedThemes] : [DEFAULT_THEME],
         totalTypedChars: Number(lessonProfile.totalTypedChars) || 0,
         lessonsCompleted: Number(lessonProfile.lessonsCompleted) || 0,
         bestStreak: Number(lessonProfile.bestStreak) || 0,

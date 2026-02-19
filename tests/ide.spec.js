@@ -87,9 +87,14 @@ test("ui theme selection auto-matches syntax theme", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
+    const api = window.fazide;
     const themeSelect = document.querySelector("#themeSelect");
     const syntaxSelect = document.querySelector("#editorSyntaxThemeSelect");
-    if (!themeSelect || !syntaxSelect) return { ready: false };
+    if (!api?.unlockTheme || !themeSelect || !syntaxSelect) return { ready: false };
+
+    ["light", "retro", "temple", "midnight"].forEach((theme) => {
+      api.unlockTheme(theme, { spend: false });
+    });
 
     const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const readPair = async (theme) => {
@@ -346,7 +351,11 @@ test("theme dropdown uses simple themed native select surface", async ({ page })
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
+    const api = window.fazide;
     const select = document.querySelector("#themeSelect");
+    if (api?.unlockTheme) {
+      ["light", "purple", "temple"].forEach((theme) => api.unlockTheme(theme, { spend: false }));
+    }
     const parseAlpha = (value = "") => {
       const raw = String(value || "").trim().toLowerCase();
       if (!raw || raw === "transparent") return 0;
@@ -1208,7 +1217,11 @@ test("editor syntax token colors follow selected theme", async ({ page }) => {
   const result = await page.evaluate(async () => {
     const api = window.fazide;
     const themeSelect = document.querySelector("#themeSelect");
-    if (!api?.setCode || !themeSelect) return { ready: false };
+    if (!api?.setCode || !api?.unlockTheme || !themeSelect) return { ready: false };
+
+    ["light", "purple"].forEach((theme) => {
+      api.unlockTheme(theme, { spend: false });
+    });
 
     api.setCode("const total = 1;\\nif (total) { console.log('ok'); }\\n");
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -1696,6 +1709,10 @@ test("light theme drag handles render a plus marker", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (api?.unlockTheme) {
+      api.unlockTheme("light", { spend: false });
+    }
     const themeSelect = document.querySelector("#themeSelect");
     if (themeSelect) {
       themeSelect.value = "light";
@@ -1722,6 +1739,10 @@ test("purple theme drag handles render a plus marker and purple status tokens", 
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (api?.unlockTheme) {
+      api.unlockTheme("purple", { spend: false });
+    }
     const themeSelect = document.querySelector("#themeSelect");
     if (themeSelect) {
       themeSelect.value = "purple";
@@ -4973,6 +4994,184 @@ test("lesson shop list does not re-render while overview tab is active", async (
   expect(result.afterCount).toBe(result.initialCount);
   expect(result.sameFirstNode).toBeTruthy();
   expect(result.sameMarkup).toBeTruthy();
+});
+
+test("lesson shop keeps premium themes locked on a fresh profile", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.listThemeShop || !api?.getTheme || !api?.setTheme || !api?.getLessonProfile) {
+      return { ready: false };
+    }
+
+    const shop = api.listThemeShop();
+    const locked = shop.filter((entry) => !entry?.unlocked && Number(entry?.cost || 0) > 0);
+    const target = locked[0] || null;
+    const initialTheme = String(api.getTheme() || "");
+    const attemptedTheme = target ? String(api.setTheme(target.id) || "") : initialTheme;
+    const finalTheme = String(api.getTheme() || "");
+    const profile = api.getLessonProfile();
+
+    const openBtn = document.querySelector("#lessonStatsBtn");
+    const shopTab = document.querySelector("#lessonStatsShopTab");
+    if (openBtn instanceof HTMLElement) openBtn.click();
+    if (shopTab instanceof HTMLElement) shopTab.click();
+
+    const getThemeRow = (theme) => Array.from(document.querySelectorAll("#lessonStatsShopList .lesson-shop-item"))
+      .find((node) => String(node.getAttribute("data-theme") || "") === String(theme || ""));
+    const buyButton = target
+      ? getThemeRow(target.id)?.querySelector("button[data-lesson-shop-action='buy']")
+      : null;
+    const option = target
+      ? Array.from(document.querySelectorAll("#themeSelect option")).find(
+          (node) => String(node?.value || "") === String(target.id || "")
+        )
+      : null;
+
+    return {
+      ready: true,
+      lockedCount: locked.length,
+      targetId: target?.id || "",
+      targetCost: Number(target?.cost || 0),
+      initialTheme,
+      attemptedTheme,
+      finalTheme,
+      hasDefaultThemeOnly: Array.isArray(profile?.unlockedThemes)
+        ? profile.unlockedThemes.length === 1 && profile.unlockedThemes[0] === initialTheme
+        : false,
+      hasBuyButton: buyButton instanceof HTMLElement,
+      buyDisabledAtZeroBytes: Boolean(buyButton?.disabled),
+      optionMentionsBytes: String(option?.textContent || "").includes("Bytes"),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.lockedCount).toBeGreaterThan(0);
+  expect(result.targetId.length).toBeGreaterThan(0);
+  expect(result.targetCost).toBeGreaterThan(0);
+  expect(result.attemptedTheme).toBe(result.initialTheme);
+  expect(result.finalTheme).toBe(result.initialTheme);
+  expect(result.hasDefaultThemeOnly).toBeTruthy();
+  expect(result.hasBuyButton).toBeTruthy();
+  expect(result.buyDisabledAtZeroBytes).toBeTruthy();
+  expect(result.optionMentionsBytes).toBeTruthy();
+});
+
+test("lesson shop buy flow deducts bytes and allows re-apply after unlock", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const seed = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.listThemeShop || !api?.getTheme) {
+      return { ready: false };
+    }
+    const initialTheme = String(api.getTheme() || "dark");
+    const target = (api.listThemeShop() || []).find((entry) => !entry?.unlocked && Number(entry?.cost || 0) > 0);
+    if (!target?.id || !Number.isFinite(Number(target.cost)) || Number(target.cost) <= 0) {
+      return { ready: false };
+    }
+
+    return {
+      ready: true,
+      targetId: String(target.id),
+      cost: Number(target.cost),
+      initialTheme,
+    };
+  });
+
+  expect(seed.ready).toBeTruthy();
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(String(key || ""), String(value || ""));
+  }, {
+    key: "fazide.lesson-profile.v1",
+    value: JSON.stringify({
+      xp: 0,
+      level: 1,
+      bytes: Number(seed.cost),
+      unlockedThemes: [seed.initialTheme],
+      totalTypedChars: 0,
+      lessonsCompleted: 0,
+      bestStreak: 0,
+      currentStreak: 0,
+      dailyStreak: 0,
+      lastActiveDay: "",
+    }),
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async ({ targetId, cost, initialTheme }) => {
+    const api = window.fazide;
+    if (!api?.getLessonProfile || !api?.getTheme || !api?.unlockTheme || !api?.setTheme) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const getThemeRow = (theme) => Array.from(document.querySelectorAll("#lessonStatsShopList .lesson-shop-item"))
+      .find((node) => String(node.getAttribute("data-theme") || "") === String(theme || ""));
+    const pickButton = (theme, action) => getThemeRow(theme)?.querySelector(`button[data-lesson-shop-action="${action}"]`);
+
+    const openBtn = document.querySelector("#lessonStatsBtn");
+    const shopTab = document.querySelector("#lessonStatsShopTab");
+    if (!(openBtn instanceof HTMLElement) || !(shopTab instanceof HTMLElement)) {
+      return { ready: false };
+    }
+    openBtn.click();
+    shopTab.click();
+    await wait(60);
+
+    const beforeProfile = api.getLessonProfile();
+    const bought = Boolean(api.unlockTheme(targetId, { spend: true }));
+    await wait(40);
+
+    const afterBuyProfile = api.getLessonProfile();
+    const switchedToTarget = String(api.setTheme(targetId) || "");
+    const themeAfterBuy = String(api.getTheme() || "");
+
+    const switchAwayButton = pickButton(initialTheme, "apply");
+    if (switchAwayButton instanceof HTMLElement) {
+      switchAwayButton.click();
+      await wait(40);
+    }
+    const themeAfterSwitchAway = String(api.getTheme() || "");
+
+    const reapplyButton = pickButton(targetId, "apply");
+    if (reapplyButton instanceof HTMLElement) {
+      reapplyButton.click();
+      await wait(40);
+    }
+    const finalTheme = String(api.getTheme() || "");
+    const hint = String(document.querySelector("#lessonStatsShopHint")?.textContent || "");
+
+    return {
+      ready: true,
+      bought,
+      beforeBytes: Number(beforeProfile?.bytes || 0),
+      afterBuyBytes: Number(afterBuyProfile?.bytes || 0),
+      cost: Number(cost || 0),
+      unlockedAfterBuy: Array.isArray(afterBuyProfile?.unlockedThemes)
+        ? afterBuyProfile.unlockedThemes.includes(targetId)
+        : false,
+      switchedToTarget,
+      themeAfterBuy,
+      themeAfterSwitchAway,
+      finalTheme,
+      hint,
+      targetId,
+      initialTheme,
+    };
+  }, seed);
+
+  expect(result.ready).toBeTruthy();
+  expect(result.beforeBytes).toBe(result.cost);
+  expect(result.bought).toBeTruthy();
+  expect(result.afterBuyBytes).toBe(0);
+  expect(result.unlockedAfterBuy).toBeTruthy();
+  expect(result.switchedToTarget).toBe(result.targetId);
+  expect(result.themeAfterBuy).toBe(result.targetId);
+  expect(result.themeAfterSwitchAway).toBe(result.initialTheme);
+  expect(result.finalTheme).toBe(result.targetId);
+  expect(result.hint.toLowerCase()).toContain("applied");
 });
 
 test("lesson streak milestones award coins and expose them in profile", async ({ page }) => {

@@ -4,6 +4,7 @@ const path = require("node:path");
 const root = process.cwd();
 const outputRoot = path.join(root, "release", "siteground");
 const publicHtmlDir = path.join(outputRoot, "public_html");
+const configPath = path.join(root, "assets", "js", "config.js");
 
 const requiredFiles = [
   "index.html",
@@ -22,6 +23,7 @@ const requiredDirs = [
   "assets/apps",
   "assets/css",
   "assets/games",
+  "assets/lessons",
   "assets/icons",
   "assets/js",
   "assets/vendor",
@@ -52,6 +54,37 @@ function assertDirectoryNotEmpty(relDir) {
   }
 }
 
+function collectTemplateSourcePathsFromConfig() {
+  if (!fs.existsSync(configPath)) {
+    fail(`Missing config file: ${path.relative(root, configPath).replace(/\\/g, "/")}`);
+    return [];
+  }
+  const source = fs.readFileSync(configPath, "utf8");
+  const matches = Array.from(source.matchAll(/src:\s*["']\.\/([^"']+)["']/g));
+  const unique = new Set();
+  matches.forEach((match) => {
+    const rel = String(match?.[1] || "").trim();
+    if (!rel) return;
+    unique.add(rel.replace(/\\/g, "/"));
+  });
+  return [...unique].sort();
+}
+
+function assertTemplateSourcesDeployed() {
+  const templateSources = collectTemplateSourcePathsFromConfig();
+  for (const relPath of templateSources) {
+    const sourceAbs = path.join(root, relPath);
+    const deployedAbs = path.join(publicHtmlDir, relPath);
+    if (!fs.existsSync(sourceAbs)) {
+      fail(`Config template source missing in workspace: ${relPath}`);
+      continue;
+    }
+    if (!fs.existsSync(deployedAbs)) {
+      fail(`Missing deployed template source: public_html/${relPath}`);
+    }
+  }
+}
+
 if (!fs.existsSync(outputRoot)) {
   fail("release/siteground folder was not found.");
 }
@@ -67,6 +100,8 @@ for (const relDir of requiredDirs) {
 for (const relFile of requiredFiles) {
   assertExists(relFile);
 }
+
+assertTemplateSourcesDeployed();
 
 const deployNotePath = path.join(outputRoot, "DEPLOY.txt");
 if (!fs.existsSync(deployNotePath)) {

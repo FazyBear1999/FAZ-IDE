@@ -170,3 +170,19 @@ test("release contract: seo metadata and web crawler files are present", async (
   expect(fs.existsSync(robotsPath)).toBeTruthy();
   expect(fs.existsSync(sitemapPath)).toBeTruthy();
 });
+
+test("release contract: dist-site map includes lessons and package verification checks config template sources", async () => {
+  const distMapPath = path.join(process.cwd(), "scripts", "dist-site-map.js");
+  const verifyDistPath = path.join(process.cwd(), "scripts", "verify-dist-site-sync.js");
+  const verifySitegroundPath = path.join(process.cwd(), "scripts", "verify-siteground-package.js");
+
+  const distMapSource = fs.readFileSync(distMapPath, "utf8");
+  const verifyDistSource = fs.readFileSync(verifyDistPath, "utf8");
+  const verifySitegroundSource = fs.readFileSync(verifySitegroundPath, "utf8");
+
+  expect(distMapSource.includes('["assets/lessons", "dist_site/assets/lessons"]')).toBeTruthy();
+  expect(verifyDistSource.includes("collectTemplateSourcePathsFromConfig")).toBeTruthy();
+  expect(verifyDistSource.includes("Config template source missing in dist_site")).toBeTruthy();
+  expect(verifySitegroundSource.includes("collectTemplateSourcePathsFromConfig")).toBeTruthy();
+  expect(verifySitegroundSource.includes("Missing deployed template source")).toBeTruthy();
+});

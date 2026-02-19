@@ -5,14 +5,7 @@ Each issue should link to a checkpoint and decision context when applicable.
 
 ## Open
 
-- 2026-02-18: Lessons theme shop strict unlock policy is not yet enforced globally.
-  - Checkpoint ID: C6
-  - Decision reference: 2026-02-18T23:59:00Z
-  - Area: Lessons economy / theme unlock flow
-  - Symptoms: Theme shop UI exists, but compatibility baseline keeps themes broadly unlocked; Bytes spending path is underutilized for many profiles.
-  - Repro steps: Open Lessons > Shop and compare available buy actions across themes on a fresh profile.
-  - Validation command: focused lesson/shop contracts in `tests/ide.spec.js`
-  - Fix status: Open (requires strict-policy contract wave)
+- None currently recorded.
 
 ## Tracking Rules
 
@@ -24,6 +17,13 @@ Each issue should link to a checkpoint and decision context when applicable.
 ## Resolved
 
 - 2026-02-14: `npm test:all` command confusion; standardized usage to `npm run test:all`.
+- 2026-02-18: Lessons theme shop strict unlock policy enforced globally.
+  - Checkpoint ID: C6
+  - Decision reference: 2026-02-18T23:59:00Z
+  - Area: Lessons economy / theme unlock flow
+  - Resolution summary: Theme unlock baseline now defaults to `DEFAULT_THEME` only; locked theme selection remains gated until unlock.
+  - Validation command: `npx playwright test tests/ide.spec.js --grep "lesson shop keeps premium themes locked on a fresh profile|lesson shop buy flow deducts bytes and allows re-apply after unlock"`
+  - Fix status: Closed
 
 ## Template
 

@@ -4,8 +4,11 @@ test("persistence micro: theme selection persists to storage and root dataset", 
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
+    const api = window.fazide;
     const themeSelect = document.querySelector("#themeSelect");
-    if (!themeSelect) return { ready: false };
+    if (!api?.unlockTheme || !themeSelect) return { ready: false };
+
+    api.unlockTheme("light", { spend: false });
 
     themeSelect.value = "light";
     themeSelect.dispatchEvent(new Event("change", { bubbles: true }));

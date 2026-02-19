@@ -11,6 +11,7 @@ const dirPairs = [
   ["assets/css", "dist_site/assets/css"],
   ["assets/apps", "dist_site/assets/apps"],
   ["assets/games", "dist_site/assets/games"],
+  ["assets/lessons", "dist_site/assets/lessons"],
   ["assets/icons", "dist_site/assets/icons"],
   ["assets/js", "dist_site/assets/js"],
   ["assets/vendor", "dist_site/assets/vendor"],

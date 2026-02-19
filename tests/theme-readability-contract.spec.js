@@ -4,6 +4,10 @@ const THEMES = ["dark", "light", "purple", "retro", "temple"];
 
 async function applyTheme(page, theme) {
   await page.evaluate(async ({ theme }) => {
+    const api = window.fazide;
+    if (api?.unlockTheme) {
+      api.unlockTheme(theme, { spend: false });
+    }
     const select = document.querySelector("#themeSelect");
     if (!select) return;
     select.value = theme;

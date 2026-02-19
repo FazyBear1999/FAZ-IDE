@@ -4,6 +4,23 @@ const crypto = require("node:crypto");
 const { dirPairs, filePairs } = require("./dist-site-map.js");
 
 const root = process.cwd();
+const configPath = path.join(root, "assets", "js", "config.js");
+
+function collectTemplateSourcePathsFromConfig() {
+  if (!fs.existsSync(configPath)) {
+    fail(`Missing config file: ${path.relative(root, configPath).replace(/\\/g, "/")}`);
+    return [];
+  }
+  const source = fs.readFileSync(configPath, "utf8");
+  const matches = Array.from(source.matchAll(/src:\s*["']\.\/([^"']+)["']/g));
+  const unique = new Set();
+  matches.forEach((match) => {
+    const rel = String(match?.[1] || "").trim();
+    if (!rel) return;
+    unique.add(rel.replace(/\\/g, "/"));
+  });
+  return [...unique].sort();
+}
 
 function sha256(filePath) {
   const hash = crypto.createHash("sha256");
@@ -104,6 +121,24 @@ for (const [srcRel, distRel] of filePairs) {
 
 for (const [srcRelDir, distRelDir] of dirPairs) {
   compareDirPair(srcRelDir, distRelDir);
+}
+
+const templateSources = collectTemplateSourcePathsFromConfig();
+for (const relPath of templateSources) {
+  const src = path.join(root, relPath);
+  const dist = path.join(root, "dist_site", relPath);
+  if (!fs.existsSync(src)) {
+    fail(`Config template source missing in workspace: ${relPath}`);
+    continue;
+  }
+  if (!fs.existsSync(dist)) {
+    fail(`Config template source missing in dist_site: dist_site/${relPath}`);
+    continue;
+  }
+  comparedFiles += 1;
+  if (sha256(src) !== sha256(dist)) {
+    fail(`Content mismatch for config template source: ${relPath}`);
+  }
 }
 
 if (failures.length) {
