@@ -83,6 +83,10 @@ If `selfTest()` reports any failures, check the console output table for details
 
 See `docs/CHANGELOG.md`.
 
+## Detailed Release Notes
+
+See `docs/RELEASE_NOTES_v0.2.0.md` for the full open-source release narrative and deployment notes.
+
 ## AI Memory
 
 Project memory for future updates lives in `docs/ai-memory/`:
