@@ -24,15 +24,6 @@
   - Validation command: `npm run test:integrity` + focused suite audit command
   - Owner/next action: Add with first C8 optimization implementation slice.
 
-- Checkpoint ID: C2
-  - Area: Runtime validation templates
-  - Gap: Add focused regression that verifies runtime full-matrix copy and checklist remain JS/HTML/CSS-only.
-  - Why it matters: Prevents runtime scope drift and ambiguous matrix messaging.
-  - Proposed test: Snapshot/marker assertion around matrix template labels and checklist entries.
-  - Priority (P0/P1/P2): P0
-  - Validation command: focused Playwright runtime app checks
-  - Owner/next action: Add in next runtime-template touch.
-
 - Checkpoint ID: C1
   - Area: Dev Terminal command contract
   - Gap: Add lightweight smoke contract for Dev Terminal help text to keep command list aligned with supported runtime scope.
@@ -59,6 +50,7 @@
 
 ## Completed Recently
 
+- Closed C2 runtime validation template scope guard with focused runtime-full-matrix copy/checklist contract in `tests/ide.spec.js` (JS/HTML/CSS references required; unsupported language terms forbidden).
 - Closed C2 applications catalog scope guard with explicit extension allowlist contract in `tests/ide.spec.js` (`html/css/js/md` only; hard-fail on unsupported runtime extensions).
 - Added focused command-registry API contract coverage in `tests/stability-contract.spec.js` (register replace semantics, list visibility, unregister idempotence).
 - Added focused contract coverage for workspace preview sanitization and local asset inlining.

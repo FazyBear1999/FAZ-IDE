@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T15:00:00Z - C2 runtime-template copy/checklist scope guard closure
+
+- Date (UTC):
+- 2026-02-19T15:00:00Z
+- Area:
+- Runtime template scope governance and drift prevention
+- Decision:
+- Added a focused runtime contract in `tests/ide.spec.js` that loads `runtime-full-matrix-app` and asserts template copy/checklist lines remain explicitly JS/HTML/CSS-scoped.
+- The contract requires core checklist markers and blocks unsupported language terms in runtime template copy.
+- Why:
+- This closes the remaining C2 scope gap for runtime template copy/checklist drift and ensures CI catches accidental language-scope expansion early.
+- Follow-up:
+- Keep runtime template edits gated by focused runtime-app checks plus `test:integrity` and `test:memory`; next scope-alignment gap is C1 Dev Terminal help contract.
+
 ## 2026-02-19T14:35:00Z - C2 applications catalog scope-guard contract closure
 
 - Date (UTC):

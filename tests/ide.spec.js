@@ -1971,6 +1971,78 @@ test("runtime validation applications are present in Applications catalog", asyn
   expect(result.hasRuntimePy).toBeFalsy();
 });
 
+test("runtime full matrix template copy and checklist stay JS HTML CSS scoped", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadApplication || !api?.exportWorkspaceData) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadApplication("runtime-full-matrix-app", { run: false });
+    const snapshot = api.exportWorkspaceData();
+    const files = Array.isArray(snapshot?.data?.files) ? snapshot.data.files : [];
+
+    const getFileBySuffix = (suffix) => {
+      const lowerSuffix = String(suffix || "").toLowerCase();
+      const matches = files.filter((entry) => String(entry?.name || "").toLowerCase().endsWith(lowerSuffix));
+      const preferred = matches.find((entry) => /runtime[\s-]*full[\s-]*matrix/i.test(String(entry?.name || "")));
+      return preferred || matches[0] || null;
+    };
+
+    const indexFile = getFileBySuffix("index.html");
+    const readmeFile = getFileBySuffix("readme.md");
+    const indexCode = String(indexFile?.code || "");
+    const readmeCode = String(readmeFile?.code || "");
+    const combined = `${indexCode}\n${readmeCode}`.toLowerCase();
+
+    const checklistSignals = [
+      /step\s*1/i,
+      /step\s*2/i,
+      /step\s*3/i,
+      /step\s*4/i,
+      /js\s+done\s+marker/i,
+      /html(?:\s*\+\s*linked\s*js|\s+linked\s+js)\s+marker/i,
+      /css\s+visual\s+markers?/i,
+      /console\s+and\s+status.*run\s+completion/i,
+    ];
+    const missingChecklistSignals = checklistSignals
+      .filter((pattern) => !pattern.test(combined))
+      .map((pattern) => pattern.toString());
+    const hasJsReference = /\bjavascript\b|\bjs\b/.test(combined);
+    const hasHtmlReference = /\bhtml\b/.test(combined);
+    const hasCssReference = /\bcss\b/.test(combined);
+    const hasUnsupportedLanguageTerm = /\bpython\b|\bruby\b|\bphp\b|\bjava\b|\bc#\b|\bc\+\+\b|\bgolang\b|\brust\b/.test(combined);
+
+    return {
+      ready: true,
+      loaded,
+      indexName: String(indexFile?.name || ""),
+      readmeName: String(readmeFile?.name || ""),
+      hasIndex: indexCode.length > 0,
+      hasReadme: readmeCode.length > 0,
+      missingChecklistSignals,
+      hasJsReference,
+      hasHtmlReference,
+      hasCssReference,
+      hasUnsupportedLanguageTerm,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.indexName.toLowerCase()).toContain("runtime-full-matrix");
+  expect(result.readmeName.toLowerCase()).toContain("runtime-full-matrix");
+  expect(result.hasIndex).toBeTruthy();
+  expect(result.hasReadme).toBeTruthy();
+  expect(result.missingChecklistSignals).toEqual([]);
+  expect(result.hasJsReference).toBeTruthy();
+  expect(result.hasHtmlReference).toBeTruthy();
+  expect(result.hasCssReference).toBeTruthy();
+  expect(result.hasUnsupportedLanguageTerm).toBeFalsy();
+});
+
 test("applications catalog scope guard allows only web-runtime file extensions", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
