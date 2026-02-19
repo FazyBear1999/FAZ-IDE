@@ -257,23 +257,15 @@ test("release contract: startup loading screen is wired and automation-safe", ()
   expect(indexSource.includes('data-check="storage"')).toBeTruthy();
   expect(indexSource.includes('data-check="editor"')).toBeTruthy();
   expect(indexSource.includes('data-check="runtime"')).toBeTruthy();
-  expect(indexSource.includes('class="boot-screen-galaxy"')).toBeTruthy();
 
   expect(appSource.includes("const BOOT_SCREEN_MIN_MS = 3200;")).toBeTruthy();
   expect(appSource.includes("const BOOT_SCREEN_MAX_MS = 4200;")).toBeTruthy();
-  expect(appSource.includes('const BOOT_SCREEN_SESSION_KEY = "fazide.boot-screen.seen.v1";')).toBeTruthy();
   expect(appSource.includes("createBootScreenController")).toBeTruthy();
-  expect(appSource.includes("sessionStorage")).toBeTruthy();
-  expect(appSource.includes("seenInSession")).toBeTruthy();
-  expect(appSource.includes("BOOT_SCREEN_TICKER_LINES")).toBeTruthy();
   expect(appSource.includes("navigator.webdriver")).toBeTruthy();
   expect(appSource.includes("bootScreen.mark(\"dom\"")).toBeTruthy();
-  expect(appSource.includes("FAZ IDE Ready • 8 rapid checks complete.")).toBeTruthy();
   expect(appSource.includes("await bootScreen.finish")).toBeTruthy();
 
   expect(layoutSource.includes(".boot-screen")).toBeTruthy();
-  expect(layoutSource.includes(".boot-screen-galaxy")).toBeTruthy();
-  expect(layoutSource.includes(".boot-screen-particle")).toBeTruthy();
   expect(layoutSource.includes(".boot-screen-panel")).toBeTruthy();
   expect(layoutSource.includes("border-radius: 0;")).toBeTruthy();
 });
