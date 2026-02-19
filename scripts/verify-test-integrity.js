@@ -217,12 +217,18 @@ function verifySpecAst(relPath, ast) {
     }
 
     let assertionCount = 0;
+    let awaitCount = 0;
     walkNode(callback.body, (child) => {
       if (isExpectationCall(child)) assertionCount += 1;
+      if (child?.type === "AwaitExpression") awaitCount += 1;
     });
 
     if (assertionCount === 0) {
       fail(`${relPath}: test "${title}" has no assertion (${toLocation(node)})`);
+    }
+
+    if (callback.async && awaitCount === 0) {
+      fail(`${relPath}: async test "${title}" has no await (${toLocation(node)})`);
     }
   });
 }
@@ -258,7 +264,7 @@ function main() {
 
   console.log("Test integrity verification passed.");
   console.log(`- Spec files scanned: ${specFiles.length}`);
-  console.log("- Hard-fail checks: focused/skip/fixme calls, waitForTimeout calls, trivial assertions, missing assertions, placeholder test titles");
+  console.log("- Hard-fail checks: focused/skip/fixme calls, waitForTimeout calls, trivial assertions, missing assertions, placeholder test titles, async tests without await");
 }
 
 try {

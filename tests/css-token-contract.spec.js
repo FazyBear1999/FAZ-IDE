@@ -8,7 +8,7 @@ function read(relPath) {
   return fs.readFileSync(path.join(ROOT, relPath), "utf8");
 }
 
-test("css contract: component and layout layers avoid raw color literals", async () => {
+test("css contract: component and layout layers avoid raw color literals", () => {
   const targets = [
     "assets/css/components.css",
     "assets/css/layout.css",

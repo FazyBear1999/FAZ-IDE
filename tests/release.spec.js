@@ -28,7 +28,7 @@ test("critical static assets are reachable", async ({ request }) => {
   }
 });
 
-test("release contract: css gate is present in quick and all pipelines", async () => {
+test("release contract: css gate is present in quick and all pipelines", () => {
   const packageJsonPath = path.join(process.cwd(), "package.json");
   const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
   const scripts = pkg?.scripts || {};
@@ -67,7 +67,7 @@ test("release contract: css gate is present in quick and all pipelines", async (
   expect(allPlaywrightIndex).toBeGreaterThan(allCssIndex);
 });
 
-test("release contract: ai verify runs css gate before changed and smoke suites", async () => {
+test("release contract: ai verify runs css gate before changed and smoke suites", () => {
   const aiVerifyPath = path.join(process.cwd(), "scripts", "ai-verify.js");
   const source = fs.readFileSync(aiVerifyPath, "utf8");
 
@@ -82,7 +82,7 @@ test("release contract: ai verify runs css gate before changed and smoke suites"
   expect(smokeIndex).toBeGreaterThan(changedIndex);
 });
 
-test("release contract: modal css optimization keeps deduped selector contract", async () => {
+test("release contract: modal css optimization keeps deduped selector contract", () => {
   const cssPath = path.join(process.cwd(), "assets", "css", "components.css");
   const source = fs.readFileSync(cssPath, "utf8");
 
@@ -97,7 +97,7 @@ test("release contract: modal css optimization keeps deduped selector contract",
   expect(legacyMatches.length).toBe(0);
 });
 
-test("release contract: search panel css keeps shared deduped selectors", async () => {
+test("release contract: search panel css keeps shared deduped selectors", () => {
   const cssPath = path.join(process.cwd(), "assets", "css", "components.css");
   const source = fs.readFileSync(cssPath, "utf8");
 
@@ -112,7 +112,7 @@ test("release contract: search panel css keeps shared deduped selectors", async 
   expect((source.match(legacyProjectStandalone) || []).length).toBe(0);
 });
 
-test("release contract: footer runtime status selector includes zoom chip", async () => {
+test("release contract: footer runtime status selector includes zoom chip", () => {
   const cssPath = path.join(process.cwd(), "assets", "css", "layout.css");
   const source = fs.readFileSync(cssPath, "utf8");
 
@@ -121,7 +121,7 @@ test("release contract: footer runtime status selector includes zoom chip", asyn
   expect(source.includes(":is(#footerSandbox, #footerStorage, #footerProblems, #footerEditorRuntime, #footerZoom)[data-state=\"error\"]")).toBeTruthy();
 });
 
-test("release contract: themes css keeps deduped retro and purple input selector lists", async () => {
+test("release contract: themes css keeps deduped retro and purple input selector lists", () => {
   const cssPath = path.join(process.cwd(), "assets", "css", "themes.css");
   const source = fs.readFileSync(cssPath, "utf8");
 
@@ -134,7 +134,7 @@ test("release contract: themes css keeps deduped retro and purple input selector
   expect(legacyPurpleList.test(source)).toBeFalsy();
 });
 
-test("release contract: frank full-gate includes css stage", async () => {
+test("release contract: frank full-gate includes css stage", () => {
   const franklinPath = path.join(process.cwd(), "scripts", "franklin.js");
   const source = fs.readFileSync(franklinPath, "utf8");
 
@@ -147,7 +147,7 @@ test("release contract: frank full-gate includes css stage", async () => {
   expect(testIndex).toBeGreaterThan(cssIndex);
 });
 
-test("release contract: seo metadata and web crawler files are present", async () => {
+test("release contract: seo metadata and web crawler files are present", () => {
   const indexPath = path.join(process.cwd(), "index.html");
   const manifestPath = path.join(process.cwd(), "manifest.webmanifest");
   const robotsPath = path.join(process.cwd(), "robots.txt");
@@ -171,7 +171,7 @@ test("release contract: seo metadata and web crawler files are present", async (
   expect(fs.existsSync(sitemapPath)).toBeTruthy();
 });
 
-test("release contract: dist-site map includes lessons and package verification checks config template sources", async () => {
+test("release contract: dist-site map includes lessons and package verification checks config template sources", () => {
   const distMapPath = path.join(process.cwd(), "scripts", "dist-site-map.js");
   const verifyDistPath = path.join(process.cwd(), "scripts", "verify-dist-site-sync.js");
   const verifySitegroundPath = path.join(process.cwd(), "scripts", "verify-siteground-package.js");
