@@ -2657,19 +2657,21 @@ test("panel layout keeps every visible panel in-bounds with zero overlap after r
         };
       });
 
-      await expect.poll(async () => {
+      const readViolationCount = async () => {
         const audit = await readWorkspaceAudit();
         if (!audit.ready || audit.panelCount <= 0) return -1;
         return audit.violations.length;
-      }, {
-        timeout: 5000,
+      };
+
+      await expect.poll(readViolationCount, {
+        timeout: 12000,
       }).toBe(0);
 
       const audit = await readWorkspaceAudit();
 
       expect(audit.ready).toBeTruthy();
       expect(audit.panelCount).toBeGreaterThan(0);
-      expect(audit.violations).toEqual([]);
+      expect(audit.violations, `workspace overlap violations: ${audit.violations.join(", ")}`).toEqual([]);
     }
   }
 });

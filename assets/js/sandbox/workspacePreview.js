@@ -4,6 +4,14 @@ function normalizePathSlashes(value = "") {
         .replace(/\/{2,}/g, "/");
 }
 
+function toPathKey(value = "") {
+    return normalizePathSlashes(value).toLowerCase();
+}
+
+function toPathTrimmedKey(value = "") {
+    return normalizePathSlashes(value).trim().toLowerCase();
+}
+
 function splitPathSegments(value = "") {
     return normalizePathSlashes(value)
         .split("/")
@@ -86,7 +94,7 @@ export function createWorkspaceAssetResolver(workspaceFiles = []) {
         if (workspaceFileMap && fromDirSegmentsCache && resolvedAssetFileCache && sourceLanguageCache) return;
         workspaceFileMap = new Map(
             workspaceFiles.map((file) => [
-                normalizePathSlashes(String(file.name || "")).toLowerCase(),
+                toPathKey(String(file.name || "")),
                 file,
             ])
         );
@@ -97,14 +105,14 @@ export function createWorkspaceAssetResolver(workspaceFiles = []) {
 
     const resolveWorkspaceFile = (filePath = "") => {
         ensureState();
-        const normalized = normalizePathSlashes(String(filePath || "")).toLowerCase();
+        const normalized = toPathKey(String(filePath || ""));
         if (!normalized) return null;
         return workspaceFileMap.get(normalized) || null;
     };
 
     const getSourceLanguage = (fileName = "") => {
         ensureState();
-        const key = String(fileName || "").toLowerCase();
+        const key = String(fileName || "").trim().toLowerCase();
         if (!key) return "";
         if (sourceLanguageCache.has(key)) return sourceLanguageCache.get(key);
         const language = detectLanguageFromFileName(key);
@@ -154,7 +162,7 @@ export function createWorkspaceAssetResolver(workspaceFiles = []) {
         if (!clean) return [];
         const rootRelative = clean.startsWith("/");
         const refValue = rootRelative ? clean.slice(1) : clean;
-        const fromKey = normalizePathSlashes(String(fromFileName || "")).toLowerCase();
+        const fromKey = toPathKey(String(fromFileName || ""));
         const fromDirSegments = fromDirSegmentsCache.has(fromKey)
             ? fromDirSegmentsCache.get(fromKey)
             : splitPathSegments(getFileDirectory(fromKey));
@@ -180,7 +188,7 @@ export function createWorkspaceAssetResolver(workspaceFiles = []) {
 
     const resolveWorkspaceAssetFile = (fromFileName, assetRef) => {
         ensureState();
-        const cacheKey = `${normalizePathSlashes(String(fromFileName || "")).toLowerCase()}::${normalizePathSlashes(String(assetRef || "")).trim().toLowerCase()}`;
+        const cacheKey = `${toPathKey(String(fromFileName || ""))}::${toPathTrimmedKey(String(assetRef || ""))}`;
         if (resolvedAssetFileCache.has(cacheKey)) {
             return resolvedAssetFileCache.get(cacheKey);
         }
