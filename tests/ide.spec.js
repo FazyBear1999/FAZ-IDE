@@ -952,6 +952,40 @@ test("shortcut help panel opens centered in the viewport", async ({ page }) => {
   expect(result.deltaY).toBeLessThanOrEqual(4);
 });
 
+test("lesson stats modal stays centered and scrollable on tight viewports", async ({ page }) => {
+  await page.setViewportSize({ width: 880, height: 280 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.locator("#lessonStatsBtn").click();
+
+  const result = await page.evaluate(() => {
+    const panel = document.querySelector("#lessonStatsPanel");
+    const body = document.querySelector("#lessonStatsPanel .lesson-stats-body");
+    if (!(panel instanceof HTMLElement)) return { ready: false };
+    const rect = panel.getBoundingClientRect();
+    const centerX = rect.left + (rect.width / 2);
+    const centerY = rect.top + (rect.height / 2);
+    const viewportX = window.innerWidth / 2;
+    const viewportY = window.innerHeight / 2;
+    const style = getComputedStyle(panel);
+    return {
+      ready: true,
+      open: panel.getAttribute("data-open") === "true",
+      deltaX: Math.abs(centerX - viewportX),
+      deltaY: Math.abs(centerY - viewportY),
+      overflowY: String(style.overflowY || ""),
+      panelScrollable: panel.scrollHeight > panel.clientHeight,
+      bodyScrollable: body instanceof HTMLElement ? body.scrollHeight > body.clientHeight : false,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.open).toBeTruthy();
+  expect(result.deltaX).toBeLessThanOrEqual(4);
+  expect(result.deltaY).toBeLessThanOrEqual(4);
+  expect(["auto", "scroll"]).toContain(result.overflowY);
+  expect(result.panelScrollable || result.bodyScrollable).toBeTruthy();
+});
+
 test("shortcut help panel stays square and lists required shortcuts", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.locator("#editorShortcutHelpBtn").click();
@@ -2919,6 +2953,141 @@ test("dev terminal runs safe commands and blocks privileged eval commands", asyn
   expect(result.outputText).toContain("Command disabled for safety: dev-js");
 });
 
+test("fresh-start confirm resets workspace and browser-persisted app state", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const seeded = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.createFile || !api?.listFiles || !api?.openDevTerminal) {
+      return { ready: false };
+    }
+
+    const markerFile = `reset-proof-${Date.now().toString(36)}.js`;
+    api.createFile(markerFile, "console.log('persisted marker');");
+    const hasMarkerFile = api.listFiles().some((entry) => String(entry?.name || "") === markerFile);
+
+    const lessonProfileKey = "fazide.lesson-profile.v1";
+    localStorage.setItem("fazide.test-reset-local", "present");
+    sessionStorage.setItem("fazide.test-reset-session", "present");
+    localStorage.setItem(lessonProfileKey, JSON.stringify({
+      xp: 987,
+      level: 9,
+      totalTypedChars: 500,
+      lessonsCompleted: 42,
+      bestStreak: 90,
+      currentStreak: 11,
+      dailyStreak: 5,
+      lastActiveDay: "2099-01-01",
+    }));
+
+    const dbName = `fazide-reset-proof-${Date.now().toString(36)}`;
+    let idbSeeded = false;
+    if (typeof indexedDB !== "undefined" && indexedDB && typeof indexedDB.open === "function") {
+      await new Promise((resolve) => {
+        try {
+          const request = indexedDB.open(dbName, 1);
+          request.onupgradeneeded = () => {
+            const db = request.result;
+            if (db && !db.objectStoreNames.contains("items")) {
+              db.createObjectStore("items", { keyPath: "id" });
+            }
+          };
+          request.onsuccess = () => {
+            try {
+              request.result.close();
+            } catch {
+              // no-op
+            }
+            idbSeeded = true;
+            resolve();
+          };
+          request.onerror = () => resolve();
+          request.onblocked = () => resolve();
+        } catch {
+          resolve();
+        }
+      });
+    }
+
+    api.openDevTerminal();
+    return {
+      ready: true,
+      markerFile,
+      hasMarkerFile,
+      dbName,
+      idbSeeded,
+      localSeeded: localStorage.getItem("fazide.test-reset-local") === "present",
+      sessionSeeded: sessionStorage.getItem("fazide.test-reset-session") === "present",
+    };
+  });
+
+  expect(seeded.ready).toBeTruthy();
+  expect(seeded.hasMarkerFile).toBeTruthy();
+  expect(seeded.localSeeded).toBeTruthy();
+  expect(seeded.sessionSeeded).toBeTruthy();
+
+  const terminalInput = page.locator("#devTerminalInput");
+  await expect(terminalInput).toBeVisible();
+  await terminalInput.fill("fresh-start confirm");
+  await terminalInput.press("Enter");
+  await page.waitForFunction(() => {
+    const output = String(document.querySelector("#devTerminalOutput")?.textContent || "");
+    return output.includes("Dev Terminal ready") && !output.includes("$ fresh-start confirm");
+  }, null, { timeout: 8000 });
+
+  const after = await page.evaluate(async ({ markerFile, dbName }) => {
+    const api = window.fazide;
+    if (!api?.listFiles || !api?.getLessonProfile) {
+      return { ready: false };
+    }
+
+    const names = api.listFiles().map((entry) => String(entry?.name || ""));
+    const profile = api.getLessonProfile();
+
+    let idbStillExists = false;
+    let idbChecked = false;
+    if (
+      typeof indexedDB !== "undefined"
+      && indexedDB
+      && typeof indexedDB.databases === "function"
+      && dbName
+    ) {
+      try {
+        const databases = await indexedDB.databases();
+        idbStillExists = (Array.isArray(databases) ? databases : [])
+          .some((entry) => String(entry?.name || "") === dbName);
+        idbChecked = true;
+      } catch {
+        idbChecked = false;
+      }
+    }
+
+    return {
+      ready: true,
+      markerFilePresent: names.includes(markerFile),
+      localMarkerPresent: localStorage.getItem("fazide.test-reset-local") === "present",
+      sessionMarkerPresent: sessionStorage.getItem("fazide.test-reset-session") === "present",
+      lessonLevel: Number(profile?.level || 0),
+      lessonXp: Number(profile?.xp || 0),
+      idbChecked,
+      idbStillExists,
+    };
+  }, {
+    markerFile: seeded.markerFile,
+    dbName: seeded.dbName,
+  });
+
+  expect(after.ready).toBeTruthy();
+  expect(after.markerFilePresent).toBeFalsy();
+  expect(after.localMarkerPresent).toBeFalsy();
+  expect(after.sessionMarkerPresent).toBeFalsy();
+  expect(after.lessonLevel).toBe(1);
+  expect(after.lessonXp).toBe(0);
+  if (seeded.idbSeeded && after.idbChecked) {
+    expect(after.idbStillExists).toBeFalsy();
+  }
+});
+
 test("sandbox ignores spoofed parent-window messages even with a valid token", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -3999,6 +4168,67 @@ test("lesson mode accepts strict real keyboard typing on first line", async ({ p
   expect(after.statusText.toLowerCase()).not.toContain("expected");
 });
 
+test("lesson mode accepts Tab for space-based indentation", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    let tabBoostFound = false;
+    let tabBoost = 0;
+    let iterations = 0;
+
+    while (iterations < 900) {
+      iterations += 1;
+      const state = api.getLessonState();
+      const next = String(state?.expectedNext || "");
+      if (!next) break;
+
+      if (next === " ") {
+        const before = Number(state?.progress || 0);
+        api.typeLessonInput("\t");
+        const afterState = api.getLessonState();
+        const after = Number(afterState?.progress || 0);
+        const delta = Math.max(0, after - before);
+
+        if (delta > tabBoost) tabBoost = delta;
+        if (delta > 1) {
+          tabBoostFound = true;
+          break;
+        }
+
+        if (delta === 0) {
+          api.typeLessonInput(" ");
+        }
+        continue;
+      }
+
+      api.typeLessonInput(next);
+    }
+
+    return {
+      ready: true,
+      loaded: true,
+      tabBoostFound,
+      tabBoost,
+      iterations,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.tabBoostFound).toBeTruthy();
+  expect(result.tabBoost).toBeGreaterThan(1);
+});
+
 test("lesson mode mismatch keeps progress and reports expected key", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -4030,6 +4260,72 @@ test("lesson mode mismatch keeps progress and reports expected key", async ({ pa
   expect(result.afterProgress).toBe(0);
   expect(result.typed).toBe(0);
   expect(result.statusText.toLowerCase()).toContain("expected");
+});
+
+test("lesson typing throttles haptics during rapid mismatch bursts", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    const calls = [];
+    const vibrateSpy = (duration) => {
+      calls.push(Number(duration) || 0);
+      return true;
+    };
+
+    let patched = false;
+    try {
+      Object.defineProperty(navigator, "vibrate", {
+        configurable: true,
+        writable: true,
+        value: vibrateSpy,
+      });
+      patched = true;
+    } catch {
+      try {
+        Object.defineProperty(Navigator.prototype, "vibrate", {
+          configurable: true,
+          writable: true,
+          value: vibrateSpy,
+        });
+        patched = true;
+      } catch {
+        patched = false;
+      }
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false, patched };
+    }
+
+    for (let i = 0; i < 14; i += 1) {
+      api.typeLessonInput("X");
+    }
+
+    const state = api.getLessonState();
+    return {
+      ready: true,
+      loaded: true,
+      patched,
+      mismatchAttempts: 14,
+      hapticCalls: calls.length,
+      progress: Number(state?.progress || 0),
+      mistakes: Number(state?.mistakes || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.patched).toBeTruthy();
+  expect(result.progress).toBe(0);
+  expect(result.mistakes).toBe(14);
+  expect(result.hapticCalls).toBeGreaterThan(0);
+  expect(result.hapticCalls).toBeLessThan(result.mismatchAttempts);
 });
 
 test("lesson mode restores typing progress after refresh", async ({ page }) => {
@@ -4220,7 +4516,11 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
     const hudProgress = String(document.querySelector("#lessonHudProgress")?.textContent || "");
     const hudLevel = String(document.querySelector("#lessonHudLevel")?.textContent || "");
     const hudXp = String(document.querySelector("#lessonHudXp")?.textContent || "");
+    const hudCoins = String(document.querySelector("#lessonHudCoins")?.textContent || "");
     const hudStreak = String(document.querySelector("#lessonHudStreak")?.textContent || "");
+    const hudPace = String(document.querySelector("#lessonHudPace")?.textContent || "");
+    const hudComboProgress = String(hud instanceof HTMLElement ? hud.style.getPropertyValue("--lesson-combo-progress") : "").trim();
+    const hudComboNumeric = Number.parseFloat(hudComboProgress.replace("%", ""));
 
     return {
       ready: true,
@@ -4228,6 +4528,8 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
       typed,
       beforeXp: Number(before?.xp || 0),
       afterXp: Number(after?.xp || 0),
+      beforeCoins: Number(before?.coins || 0),
+      afterCoins: Number(after?.coins || 0),
       dailyStreak: Number(after?.dailyStreak || 0),
       active: Boolean(lessonState?.active),
       hudActive: hud?.getAttribute("data-active") === "true" && !hud?.hidden,
@@ -4235,7 +4537,11 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
       hudProgress,
       hudLevel,
       hudXp,
+      hudCoins,
       hudStreak,
+      hudPace,
+      hudComboProgress,
+      hudComboNumeric,
     };
   });
 
@@ -4243,6 +4549,7 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
   expect(result.loaded).toBeTruthy();
   expect(result.typed).toBeGreaterThan(10);
   expect(result.afterXp).toBeGreaterThan(result.beforeXp);
+  expect(result.afterCoins).toBeGreaterThan(result.beforeCoins);
   expect(result.dailyStreak).toBeGreaterThanOrEqual(0);
   expect(result.active).toBeTruthy();
   expect(result.hudActive).toBeTruthy();
@@ -4250,7 +4557,464 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
   expect(result.hudProgress).toContain("/");
   expect(result.hudLevel).toContain("Lv ");
   expect(result.hudXp).toContain("XP ");
+  expect(result.hudCoins).toContain("Bytes ");
   expect(result.hudStreak).toContain("Streak ");
+  expect(result.hudPace).toContain("WPM ");
+  expect(result.hudComboProgress.endsWith("%")).toBeTruthy();
+  expect(result.hudComboNumeric).toBeGreaterThanOrEqual(0);
+  expect(result.hudComboNumeric).toBeLessThanOrEqual(100);
+});
+
+test("lesson HUD uses professional copy and concise burst labels", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    api.typeLessonInput("const canvas");
+    const moodText = String(document.querySelector("#lessonHudMood")?.textContent || "").trim();
+    const burstText = String(document.querySelector("#lessonHudBurst")?.textContent || "").trim();
+
+    const hasEmoji = /[\u{1F300}-\u{1FAFF}]/u.test(moodText) || /[\u{1F300}-\u{1FAFF}]/u.test(burstText);
+    const hasShoutySuffix = /!\s*$/.test(burstText);
+
+    return {
+      ready: true,
+      loaded: true,
+      moodText,
+      burstText,
+      hasEmoji,
+      hasShoutySuffix,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.moodText.length).toBeGreaterThan(0);
+  expect(result.hasEmoji).toBeFalsy();
+  expect(result.hasShoutySuffix).toBeFalsy();
+});
+
+test("lesson HUD typography is readable and visually bounded", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    api.typeLessonInput("const canvas");
+
+    const chip = document.querySelector("#lessonHudStep");
+    const mood = document.querySelector("#lessonHudMood");
+    const burst = document.querySelector("#lessonHudBurst");
+    if (!(chip instanceof HTMLElement) || !(mood instanceof HTMLElement) || !(burst instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const chipSize = parseFloat(getComputedStyle(chip).fontSize || "0");
+    const moodSize = parseFloat(getComputedStyle(mood).fontSize || "0");
+    const burstSize = parseFloat(getComputedStyle(burst).fontSize || "0");
+
+    return {
+      ready: true,
+      loaded: true,
+      chipSize,
+      moodSize,
+      burstSize,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.chipSize).toBeGreaterThanOrEqual(11);
+  expect(result.chipSize).toBeLessThanOrEqual(14);
+  expect(result.moodSize).toBeGreaterThanOrEqual(11);
+  expect(result.moodSize).toBeLessThanOrEqual(14);
+  expect(result.burstSize).toBeGreaterThanOrEqual(11);
+  expect(result.burstSize).toBeLessThanOrEqual(14);
+});
+
+test("lesson level up triggers editor celebration animation", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("fazide.lesson-profile.v1", JSON.stringify({
+      xp: 249,
+      level: 1,
+      totalTypedChars: 0,
+      lessonsCompleted: 0,
+      bestStreak: 0,
+      currentStreak: 0,
+      dailyStreak: 0,
+      lastActiveDay: "",
+    }));
+  });
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput || !api?.getLessonProfile) {
+      return { ready: false };
+    }
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const state = api.getLessonState();
+    const expected = String(state?.expectedNext || "");
+    const typed = api.typeLessonInput(expected || "c");
+    const profile = api.getLessonProfile();
+    const pane = document.querySelector("#editorPanel .editor-pane");
+    const during = pane?.getAttribute("data-lesson-levelup") === "true";
+    await new Promise((resolve) => setTimeout(resolve, 1050));
+    const after = pane?.getAttribute("data-lesson-levelup") === "true";
+    return {
+      ready: true,
+      loaded,
+      typed,
+      level: Number(profile?.level || 0),
+      during,
+      after,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.typed).toBeGreaterThan(0);
+  expect(result.level).toBeGreaterThanOrEqual(2);
+  expect(result.during).toBeTruthy();
+  expect(result.after).toBeFalsy();
+});
+
+test("lesson state exposes pace and accuracy metrics", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState) {
+      return { ready: false };
+    }
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    api.typeLessonInput("const ");
+    api.typeLessonInput("X");
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const state = api.getLessonState();
+    return {
+      ready: true,
+      loaded,
+      active: Boolean(state?.active),
+      typedChars: Number(state?.typedChars || 0),
+      correctChars: Number(state?.correctChars || 0),
+      mistakes: Number(state?.mistakes || 0),
+      accuracy: Number(state?.accuracy || 0),
+      wpm: Number(state?.wpm || 0),
+      elapsedMs: Number(state?.elapsedMs || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.active).toBeTruthy();
+  expect(result.typedChars).toBeGreaterThan(result.correctChars);
+  expect(result.mistakes).toBeGreaterThan(0);
+  expect(result.accuracy).toBeGreaterThanOrEqual(0);
+  expect(result.accuracy).toBeLessThan(100);
+  expect(result.wpm).toBeGreaterThan(0);
+  expect(result.elapsedMs).toBeGreaterThan(0);
+});
+
+test("lesson stats button sits next to shortcuts and opens themed modal with live stats", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const placement = await page.evaluate(() => {
+    const help = document.querySelector("#editorShortcutHelpBtn");
+    const stats = document.querySelector("#lessonStatsBtn");
+    if (!(help instanceof HTMLElement) || !(stats instanceof HTMLElement)) {
+      return { ready: false };
+    }
+    return {
+      ready: true,
+      helpNextIsStats: help.nextElementSibling?.id === "lessonStatsBtn",
+      statsLabel: String(stats.textContent || "").trim(),
+    };
+  });
+
+  expect(placement.ready).toBeTruthy();
+  expect(placement.helpNextIsStats).toBeTruthy();
+  expect(placement.statsLabel).toBe("Lessons");
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const openBtn = document.querySelector("#lessonStatsBtn");
+    if (!(openBtn instanceof HTMLElement)) {
+      return { ready: false };
+    }
+    openBtn.click();
+
+    const panel = document.querySelector("#lessonStatsPanel");
+    const beforeOpen = {
+      panelOpen: panel?.getAttribute("data-open") === "true",
+      panelAria: panel?.getAttribute("aria-hidden") === "false",
+    };
+
+    const readModal = () => ({
+      level: String(document.querySelector("#lessonHeaderLevel")?.textContent || ""),
+      xp: String(document.querySelector("#lessonHeaderXp")?.textContent || ""),
+      coins: String(document.querySelector("#lessonHeaderCoins")?.textContent || ""),
+      done: String(document.querySelector("#lessonHeaderCompleted")?.textContent || ""),
+      best: String(document.querySelector("#lessonHeaderBest")?.textContent || ""),
+      daily: String(document.querySelector("#lessonHeaderDaily")?.textContent || ""),
+      accuracy: String(document.querySelector("#lessonHeaderAccuracy")?.textContent || ""),
+      wpm: String(document.querySelector("#lessonHeaderWpm")?.textContent || ""),
+      heroTitle: String(document.querySelector("#lessonStatsHeroTitle")?.textContent || ""),
+      heroSub: String(document.querySelector("#lessonStatsHeroSubtitle")?.textContent || ""),
+      nextLabel: String(document.querySelector("#lessonStatsNextLabel")?.textContent || ""),
+      safety: String(document.querySelector("#lessonStatsSafety")?.textContent || ""),
+      sessionState: String(document.querySelector("#lessonStatsSessionState")?.textContent || ""),
+      overviewTab: String(document.querySelector("#lessonStatsOverviewTab")?.textContent || "").trim(),
+      shopTab: String(document.querySelector("#lessonStatsShopTab")?.textContent || "").trim(),
+    });
+
+    const before = readModal();
+    const shopTab = document.querySelector("#lessonStatsShopTab");
+    if (shopTab instanceof HTMLElement) {
+      shopTab.click();
+    }
+    const shopState = {
+      shopVisible: document.querySelector("#lessonStatsShop")?.getAttribute("aria-hidden") === "false",
+      shopItems: document.querySelectorAll("#lessonStatsShopList .lesson-shop-item").length,
+    };
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    api.typeLessonInput("const ");
+    api.typeLessonInput("X");
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const after = readModal();
+
+    const panelStyles = panel ? window.getComputedStyle(panel) : null;
+    const closeBtn = document.querySelector("#lessonStatsClose");
+    if (closeBtn instanceof HTMLElement) {
+      closeBtn.click();
+    }
+
+    const afterClose = {
+      panelOpen: panel?.getAttribute("data-open") === "true",
+      panelAria: panel?.getAttribute("aria-hidden") === "false",
+    };
+
+    return {
+      ready: true,
+      loaded,
+      beforeOpen,
+      before,
+      shopState,
+      after,
+      afterClose,
+      themed: Boolean(panelStyles?.backgroundColor && panelStyles?.backgroundColor !== "rgba(0, 0, 0, 0)"),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.beforeOpen.panelOpen).toBeTruthy();
+  expect(result.beforeOpen.panelAria).toBeTruthy();
+  expect(result.themed).toBeTruthy();
+  expect(result.before.level).toContain("Lv ");
+  expect(result.before.xp).toContain("XP ");
+  expect(result.before.coins).toContain("Bytes ");
+  expect(result.before.done).toContain("Done ");
+  expect(result.before.best).toContain("Best ");
+  expect(result.before.daily).toContain("Daily ");
+  expect(result.before.heroTitle.length).toBeGreaterThan(0);
+  expect(result.before.overviewTab).toBe("Overview");
+  expect(result.before.shopTab).toBe("Shop");
+  expect(result.shopState.shopVisible).toBeTruthy();
+  expect(result.shopState.shopItems).toBeGreaterThan(0);
+  expect(result.before.nextLabel).toContain("Next level in ");
+  expect(result.before.safety.toLowerCase()).toContain("local");
+  expect(result.after.accuracy).toContain("Acc ");
+  expect(result.after.wpm).toContain("WPM ");
+  expect(result.after.heroSub.length).toBeGreaterThan(0);
+  expect(result.after.accuracy).not.toBe("Acc 100%");
+  expect(result.after.coins).toContain("Bytes ");
+  expect(result.after.sessionState.toLowerCase()).toContain("active");
+  expect(result.afterClose.panelOpen).toBeFalsy();
+  expect(result.afterClose.panelAria).toBeFalsy();
+});
+
+test("lesson stats modal live-updates elapsed time while open", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    api.typeLessonInput("const ");
+    const openBtn = document.querySelector("#lessonStatsBtn");
+    if (!(openBtn instanceof HTMLElement)) {
+      return { ready: false };
+    }
+    openBtn.click();
+
+    const parseElapsed = (text) => {
+      const source = String(text || "").trim();
+      const hours = /([0-9]+)h/.exec(source);
+      const minutes = /([0-9]+)m/.exec(source);
+      const seconds = /([0-9]+)s/.exec(source);
+      const h = hours ? Number(hours[1]) : 0;
+      const m = minutes ? Number(minutes[1]) : 0;
+      const s = seconds ? Number(seconds[1]) : 0;
+      return (h * 3600) + (m * 60) + s;
+    };
+
+    const beforeText = String(document.querySelector("#lessonStatsElapsed")?.textContent || "0s");
+    const beforeSeconds = parseElapsed(beforeText);
+
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+
+    const afterText = String(document.querySelector("#lessonStatsElapsed")?.textContent || "0s");
+    const afterSeconds = parseElapsed(afterText);
+
+    const closeBtn = document.querySelector("#lessonStatsClose");
+    if (closeBtn instanceof HTMLElement) closeBtn.click();
+
+    return {
+      ready: true,
+      loaded: true,
+      beforeText,
+      afterText,
+      beforeSeconds,
+      afterSeconds,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.afterSeconds).toBeGreaterThanOrEqual(result.beforeSeconds + 1);
+  expect(result.beforeText).not.toBe(result.afterText);
+});
+
+test("lesson shop list does not re-render while overview tab is active", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const openBtn = document.querySelector("#lessonStatsBtn");
+    const shopTab = document.querySelector("#lessonStatsShopTab");
+    const overviewTab = document.querySelector("#lessonStatsOverviewTab");
+    const list = document.querySelector("#lessonStatsShopList");
+    if (!(openBtn instanceof HTMLElement) || !(shopTab instanceof HTMLElement) || !(overviewTab instanceof HTMLElement) || !(list instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    openBtn.click();
+    shopTab.click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const initialCount = list.childElementCount;
+    const initialFirstNode = list.firstElementChild;
+    const initialMarkup = list.innerHTML;
+
+    overviewTab.click();
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    api.typeLessonInput("const ");
+    api.typeLessonInput("canvas");
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    const afterCount = list.childElementCount;
+    const sameFirstNode = list.firstElementChild === initialFirstNode;
+    const sameMarkup = list.innerHTML === initialMarkup;
+
+    const closeBtn = document.querySelector("#lessonStatsClose");
+    if (closeBtn instanceof HTMLElement) closeBtn.click();
+
+    return {
+      ready: true,
+      loaded,
+      initialCount,
+      afterCount,
+      sameFirstNode,
+      sameMarkup,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.initialCount).toBeGreaterThan(0);
+  expect(result.afterCount).toBe(result.initialCount);
+  expect(result.sameFirstNode).toBeTruthy();
+  expect(result.sameMarkup).toBeTruthy();
+});
+
+test("lesson streak milestones award coins and expose them in profile", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState || !api?.getLessonProfile) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    const before = api.getLessonProfile();
+    let typed = 0;
+    let guards = 0;
+    while (typed < 20 && guards < 120) {
+      guards += 1;
+      const state = api.getLessonState();
+      const expectedNext = String(state?.expectedNext || "");
+      if (!expectedNext) break;
+      const applied = Number(api.typeLessonInput(expectedNext) || 0);
+      if (applied <= 0) break;
+      typed += applied;
+    }
+    const after = api.getLessonProfile();
+    return {
+      ready: true,
+      loaded: true,
+      typed,
+      beforeCoins: Number(before?.coins || 0),
+      afterCoins: Number(after?.coins || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.typed).toBeGreaterThanOrEqual(20);
+  expect(result.afterCoins).toBeGreaterThanOrEqual(result.beforeCoins + 3);
 });
 
 test("fazide recovers pending storage journal entries", async ({ page }) => {

@@ -18,6 +18,7 @@
 - Stability of file workflows (create/rename/move/delete/trash/undo).
 - Reliable workspace import/export and persistence.
 - Strong release gating (`npm run test:all`).
+- Production-safe web deployment with domain-aware packaging (`SITE_URL` for canonical/OG/sitemap output).
 
 ## Architecture Notes
 - Web app entry: `assets/js/app.js`

@@ -10,6 +10,7 @@ Treat it as a lightweight runbook for daily development and emergency fixes.
 - Prefer appending new entries over rewriting history.
 - If behavior changed, update `decisions.md` and at least one of (`feature-map.md`, `test-gaps.md`, `release-notes.md`).
 - If only docs changed, record why the docs-only change improves safety or clarity.
+- If deploy packaging changed, record `SITE_URL` expectations and packaged-output verification evidence.
 
 ## Fast decision loop
 

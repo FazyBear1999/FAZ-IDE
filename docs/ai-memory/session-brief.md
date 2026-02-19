@@ -18,8 +18,8 @@
 - Standard QA path
 
 ## Generated
-- Timestamp: 2026-02-16T21:11:10.875Z
-- Goal: Stabilize current branch and implement scoped change safely.
+- Timestamp: 2026-02-18T00:00:00.000Z
+- Goal: Keep release/docs/AI memory fully synchronized and production deploy-safe.
 
 ## Fast Start Checklist
 - Read `project-context.md` and `feature-map.md`.
@@ -30,6 +30,7 @@
 - Stability of file workflows (create/rename/move/delete/trash/undo).
 - Reliable workspace import/export and persistence.
 - Strong release gating (`npm run test:all`).
+- Domain-accurate SiteGround packaging (`SITE_URL`) for canonical/OG/sitemap output.
 
 ## Open Issues Snapshot
 - (none)
@@ -41,29 +42,21 @@
 
 ## Working Tree
 - README.md
-- assets/css/base.css
-- assets/css/components.css
-- assets/js/app.js
-- config/playwright.config.js
+- desktop/README.md
+- docs/CHANGELOG.md
+- docs/RELEASE_CHECKLIST.md
 - docs/ai-memory/README.md
+- docs/ai-memory/decisions.md
+- docs/ai-memory/handoff-checklist.md
 - docs/ai-memory/project-context.md
 - docs/ai-memory/release-notes.md
-- package.json
-- scripts/verify-ai-memory.js
-- tests/ide.spec.js
-- docs/ai-memory/ai-prompt.md
-- docs/ai-memory/feature-intake.md
-- docs/ai-memory/issue-intake.md
 - docs/ai-memory/session-brief.md
-- scripts/ai-assist.js
-- scripts/ai-verify.js
-- scripts/run-playwright-changed.js
-- scripts/run-playwright-flake-critical.js
-- scripts/run-playwright-smoke.js
+- docs/ai-memory/session-command-center.md
 
 ## Standard QA Path
-- npm run frank:check
-- npm run test:quick
+- npm run test:memory
+- npm run test:integrity
+- npm run frank:full
 
 ## Decision Log Format
 - Date (UTC):

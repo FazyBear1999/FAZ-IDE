@@ -9,6 +9,8 @@ const requiredFiles = [
   "index.html",
   "manifest.webmanifest",
   ".htaccess",
+  "robots.txt",
+  "sitemap.xml",
   "favicon.ico",
   "assets/css/base.css",
   "assets/js/app.js",

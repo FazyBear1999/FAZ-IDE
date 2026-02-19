@@ -25,6 +25,7 @@
 - Run `npm run test:memory`.
 - Run `npm run test:integrity`.
 - Run target QA gate (`test:quick` or `test:all`).
+- If release packaging/deploy changed, set `SITE_URL` and run `npm run deploy:siteground`, then verify packaged canonical/OG/sitemap domain values.
 - Update `release-notes.md` if deploy-impacting behavior changed.
 - Update `decisions.md` for behavior, architecture, or safety-policy changes.
 - If anything failed during session, update `recovery-playbook.md` or `known-issues.md`.

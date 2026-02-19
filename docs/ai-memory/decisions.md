@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-19T05:40:00Z - Canonical/social URL deployment contract (SITE_URL-aware packaging)
+
+- Date (UTC):
+- 2026-02-19T05:40:00Z
+- Area:
+- SEO metadata integrity, SiteGround package correctness, and release-runbook reliability
+- Decision:
+- Kept source `index.html` canonical and `og:url` as relative-safe defaults and added explicit `SITE_URL` rewrite support in `scripts/prepare-siteground.js` so packaged output can be stamped with production absolute URLs for canonical, Open Graph URL, and sitemap `<loc>`.
+- Expanded release runbook requirements in `docs/RELEASE_CHECKLIST.md` to require domain input, metadata/icon checks, and crawler sanity checks before upload.
+- Why:
+- Source control should remain environment-agnostic while production package output must carry final domain-accurate URLs for SEO and social previews.
+- Follow-up:
+- Always set `SITE_URL` in production packaging sessions and keep release contracts (`frank:full`, release spec, verify-siteground) green before upload.
+
 ## 2026-02-17T23:59:00Z - AI memory hardening contract
 
 - Date (UTC):
@@ -813,3 +827,94 @@ Keep entries short, dated, and explicit about why the change was made.
 - Deep memory audit showed command-center output was still biasing guidance toward legacy checkpoints (`C1/C3/C4`) even when active work clearly belonged to `C5/C7`, creating governance drift risk.
 - Follow-up:
 - Add a focused contract test for checkpoint inference mapping in a future scripts-contract wave; preserve roadmap-lane inference whenever checkpoint definitions evolve.
+
+## 2026-02-18T23:20:00Z - Lesson Stats modal made memorable with explicit local-only safety framing
+
+- Date (UTC):
+- 2026-02-18T23:20:00Z
+- Area:
+- Lessons UX engagement + safe telemetry/memory behavior
+- Decision:
+- Upgraded the Lesson Stats modal with a performance hero, next-level XP progress rail, richer live session insights, and stable centered/scrollable behavior under constrained viewports.
+- Kept safety posture explicit by rendering local-only privacy messaging directly in modal copy and aria summary, without introducing any external telemetry or cross-session network dependencies.
+- Extended regression coverage for modal placement/scroll behavior and live stat rendering contracts.
+- Why:
+- User requested a more memorable lessons experience while explicitly prioritizing safety and reliability.
+- Follow-up:
+- Preserve local-only lesson-stat safety language and keep future modal polish behind focused UX + viewport regression checks.
+
+## 2026-02-18T23:58:00Z - Lesson smoothness optimization wave (low-overhead stats + throttled feedback)
+
+- Date (UTC):
+- 2026-02-18T23:58:00Z
+- Area:
+- Lesson runtime smoothness, input feedback stability, and AI memory traceability
+- Decision:
+- Optimized lesson stats update flow by reusing precomputed session metrics in `getLessonStateSnapshot({ metrics })` and by limiting live modal polling work to active lesson sessions only.
+- Added short cooldown throttles for HUD pulse and haptic calls to prevent effect spam under rapid mismatch/typing bursts while preserving milestone/level-up feedback.
+- Added mismatch haptic feedback using the same throttle path for consistent tactile signal without vibration overload.
+- Why:
+- User requested a super-smooth lesson pass with optimization-first changes and no regressions.
+- Follow-up:
+- Keep lesson feedback pacing conservative; treat haptic/pulse spam regressions and stale stats-modal elapsed updates as non-regression contracts.
+
+## 2026-02-19T00:20:00Z - Lesson coin economy phase 1 (local-only progression baseline)
+
+- Date (UTC):
+- 2026-02-19T00:20:00Z
+- Area:
+- Lessons progression economy + roadmap checkpoint traceability
+- Decision:
+- Added a local-only coin field to lesson profile state (`coins`) with backward-safe sanitization so existing profiles migrate without resets.
+- Added coin rewards to deterministic lesson milestones only (step completion, lesson completion/perfect bonus, and streak milestones every 20 correct inputs) to avoid noisy per-keystroke farming paths.
+- Surfaced coin totals in both active lesson HUD and Lesson Stats modal, keeping existing token-aligned UI and privacy-safe copy unchanged.
+- Added focused lesson regressions for coin rendering and milestone rewards while preserving prior XP/session contracts.
+- Why:
+- User requested starting the coin/theme-unlock roadmap now, with strict safety, organization, and AI memory synchronization requirements.
+- Follow-up:
+- Keep coins local-only until a dedicated unlocks/shop surface is introduced; gate any spending/unlock flow behind additional anti-abuse and persistence-contract tests.
+
+## 2026-02-18T23:59:00Z - Lessons deep-audit optimization pass (shop render throttling + terminology sync)
+
+- Date (UTC):
+- 2026-02-18T23:59:00Z
+- Area:
+- Lessons runtime performance + AI memory accuracy
+- Decision:
+- Updated lesson shop rendering to avoid hidden/off-screen list rebuilds during live lesson updates by making `updateLessonShopUi` visibility-aware and render-key cached.
+- Preserved existing lessons behavior while reducing unnecessary DOM churn from HUD/Stats-driven update calls.
+- Synchronized memory language toward `Lessons` modal and `Bytes` economy wording to reduce policy/docs drift.
+- Why:
+- Deep lessons review identified avoidable rendering work in the shop path as a practical smoothness flaw under active typing sessions.
+- Follow-up:
+- Add strict Bytes unlock-policy contracts before changing default unlocked-theme compatibility baseline.
+
+## 2026-02-18T23:59:30Z - Lessons shop-tab-aware refresh gating + hidden re-render regression lock
+
+- Date (UTC):
+- 2026-02-18T23:59:30Z
+- Area:
+- Lessons runtime efficiency and non-regression safety
+- Decision:
+- Reduced lesson runtime overhead by gating `updateLessonShopUi` calls from `updateLessonHeaderStats` so shop refresh occurs only when the Lessons modal is open on the Shop tab.
+- Added focused Playwright regression ensuring shop list DOM is not rebuilt while Overview remains active during typing updates.
+- Why:
+- Even with visibility-aware shop rendering, calling the shop refresh path from every stats update introduced avoidable overhead in common Overview workflows.
+- Follow-up:
+- Keep hidden-work elimination and DOM-stability checks in future lesson optimization waves; keep strict Bytes unlock policy as a separate checkpointed policy wave.
+
+## 2026-02-19T05:15:00Z - Franklin full-gate parity + web SEO/icon release hardening
+
+- Date (UTC):
+- 2026-02-19T05:15:00Z
+- Area:
+- Release orchestration reliability, web SEO readiness, and SiteGround packaging completeness
+- Decision:
+- Added `test:css` to `frank:full` full-gate stages and refactored parallel mode stage grouping to script-name lookup instead of fixed indices, preventing silent drift when stage ordering changes.
+- Upgraded web SEO surface with crawler metadata and social previews in `index.html`, added PNG icon variants for web/app contexts, expanded `manifest.webmanifest` icon set/metadata, and introduced `robots.txt` + `sitemap.xml` as deployable release assets.
+- Extended dist/siteground mapping and package verification so SEO files are guaranteed in `release/siteground/public_html`.
+- Added release contract coverage for Franklin CSS-stage presence and SEO metadata/file requirements.
+- Why:
+- User requested confirmation that Franklin does the complete release workflow and asked for SEO/icon perfection before production upload.
+- Follow-up:
+- Use `SITE_URL` before `npm run deploy:siteground` so packaged canonical/OG/sitemap URLs are stamped automatically with the live domain.

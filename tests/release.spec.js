@@ -133,3 +133,40 @@ test("release contract: themes css keeps deduped retro and purple input selector
   expect(legacyRetroList.test(source)).toBeFalsy();
   expect(legacyPurpleList.test(source)).toBeFalsy();
 });
+
+test("release contract: frank full-gate includes css stage", async () => {
+  const franklinPath = path.join(process.cwd(), "scripts", "franklin.js");
+  const source = fs.readFileSync(franklinPath, "utf8");
+
+  const integrityIndex = source.indexOf('{ script: "test:integrity"');
+  const cssIndex = source.indexOf('{ script: "test:css"');
+  const testIndex = source.indexOf('{ script: "test"');
+
+  expect(integrityIndex).toBeGreaterThanOrEqual(0);
+  expect(cssIndex).toBeGreaterThan(integrityIndex);
+  expect(testIndex).toBeGreaterThan(cssIndex);
+});
+
+test("release contract: seo metadata and web crawler files are present", async () => {
+  const indexPath = path.join(process.cwd(), "index.html");
+  const manifestPath = path.join(process.cwd(), "manifest.webmanifest");
+  const robotsPath = path.join(process.cwd(), "robots.txt");
+  const sitemapPath = path.join(process.cwd(), "sitemap.xml");
+
+  const indexSource = fs.readFileSync(indexPath, "utf8");
+  const manifestSource = fs.readFileSync(manifestPath, "utf8");
+
+  expect(indexSource.includes('name="robots"')).toBeTruthy();
+  expect(indexSource.includes('property="og:title"')).toBeTruthy();
+  expect(indexSource.includes('property="og:description"')).toBeTruthy();
+  expect(indexSource.includes('name="twitter:card"')).toBeTruthy();
+  expect(indexSource.includes('rel="apple-touch-icon"')).toBeTruthy();
+  expect(indexSource.includes('assets/icons/faz-192.png')).toBeTruthy();
+  expect(indexSource.includes('assets/icons/faz-512.png')).toBeTruthy();
+
+  expect(manifestSource.includes('"./assets/icons/faz-192.png"')).toBeTruthy();
+  expect(manifestSource.includes('"./assets/icons/faz-512.png"')).toBeTruthy();
+
+  expect(fs.existsSync(robotsPath)).toBeTruthy();
+  expect(fs.existsSync(sitemapPath)).toBeTruthy();
+});

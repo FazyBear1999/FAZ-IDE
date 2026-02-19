@@ -14,6 +14,7 @@
 ## Release Mistakes
 - Uploading from the wrong source folder (must use `release/siteground/public_html`).
 - Skipping package verification before upload.
+- Forgetting to set `SITE_URL` before `npm run deploy:siteground` for production web cutover.
 - Assuming a passing local run equals deploy-ready without gate outputs.
 
 ## Memory Mistakes

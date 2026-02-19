@@ -773,17 +773,22 @@ button:focus-visible {
     z-index: 8;
     display: inline-grid;
     gap: 4px;
-    min-height: 28px;
-    padding: 6px 6px 5px;
+    min-height: 30px;
+    padding: 6px 7px;
     border: 1px solid var(--border-soft);
-    background: color-mix(in srgb, var(--surface-panel) 76%, transparent);
+    border-radius: var(--radius-sm);
+    background:
+        radial-gradient(120% 140% at 100% -20%, color-mix(in srgb, var(--surface-selected-soft) 26%, transparent), transparent 52%),
+        linear-gradient(165deg, color-mix(in srgb, var(--surface-panel) 84%, transparent), color-mix(in srgb, var(--surface-raised) 88%, transparent));
     box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--surface-raised) 24%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--surface-raised) 22%, transparent),
         0 10px 20px color-mix(in srgb, var(--surface-bg) 68%, transparent);
-    backdrop-filter: blur(4px) saturate(1.12);
+    backdrop-filter: blur(7px) saturate(1.14);
     pointer-events: none;
-    max-width: min(560px, calc(100% - 20px));
+    max-width: min(640px, calc(100% - 22px));
     --lesson-progress: 0%;
+    --lesson-hud-chip-font-size: clamp(11px, 0.72rem, 12px);
+    --lesson-hud-meta-font-size: clamp(11px, 0.7rem, 12px);
 }
 
 .lesson-hud[data-active="false"] {
@@ -793,7 +798,8 @@ button:focus-visible {
 .lesson-hud-row {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 5px;
     min-width: 0;
     max-width: 100%;
     overflow: hidden;
@@ -808,7 +814,17 @@ button:focus-visible {
         color-mix(in srgb, var(--surface-selected-soft) 38%, transparent),
         transparent 58%
     );
-    opacity: 0.34;
+    opacity: 0.32;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.lesson-hud::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid color-mix(in srgb, var(--text-top-control) 8%, transparent);
     pointer-events: none;
 }
 
@@ -816,16 +832,18 @@ button:focus-visible {
     display: inline-flex;
     position: relative;
     align-items: center;
-    min-height: 20px;
-    padding: 0 6px;
+    min-height: 21px;
+    padding: 0 7px;
     border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xxs);
     background: linear-gradient(
         180deg,
         color-mix(in srgb, var(--surface-panel) 92%, transparent),
         color-mix(in srgb, var(--surface-raised) 86%, transparent)
     );
     color: var(--text-muted-soft);
-    font-size: var(--text-size-2xs);
+    font-size: var(--lesson-hud-chip-font-size);
+    line-height: 1.22;
     letter-spacing: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -845,14 +863,22 @@ button:focus-visible {
 }
 
 .lesson-hud-chip-step {
-    max-width: 190px;
+    max-width: 210px;
+    font-weight: 600;
+    border-color: color-mix(in srgb, var(--border-focus-soft) 56%, var(--border-soft) 44%);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface-selected-soft) 14%, var(--surface-panel) 86%),
+        color-mix(in srgb, var(--surface-panel) 90%, transparent)
+    );
 }
 
 .lesson-hud-rail {
     position: relative;
     width: 100%;
-    height: 4px;
+    height: 5px;
     border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xxs);
     background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
     overflow: hidden;
 }
@@ -863,20 +889,44 @@ button:focus-visible {
     left: 0;
     bottom: 0;
     width: var(--lesson-progress, 0%);
+    border-radius: inherit;
     background: linear-gradient(
         90deg,
-        color-mix(in srgb, var(--text-top-control) 42%, transparent),
+        color-mix(in srgb, var(--surface-selected-soft) 42%, transparent),
         color-mix(in srgb, var(--text) 88%, transparent)
     );
-    box-shadow: 0 0 8px color-mix(in srgb, var(--text-top-control) 36%, transparent);
-    transition: width var(--motion-ui) var(--motion-ease), filter var(--motion-ui) var(--motion-ease);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--text-top-control) 28%, transparent);
+    transition: width 140ms linear, filter var(--motion-ui) var(--motion-ease);
+}
+
+.lesson-hud-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    left: -38%;
+    width: 38%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--text-top-control) 30%, transparent),
+        transparent
+    );
+    opacity: 0;
+    transform: skewX(-14deg);
+    pointer-events: none;
 }
 
 .lesson-hud-mood {
-    min-height: 16px;
-    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 19px;
+    padding: 0 8px;
+    border: 1px solid color-mix(in srgb, var(--border-soft) 88%, transparent);
+    border-radius: var(--radius-xxs);
+    background: color-mix(in srgb, var(--surface-panel) 82%, transparent);
     color: var(--text-muted-soft);
-    font-size: var(--text-size-2xs);
+    font-size: var(--lesson-hud-meta-font-size);
+    line-height: 1.22;
     letter-spacing: 0.1px;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -885,31 +935,40 @@ button:focus-visible {
 
 .lesson-hud-burst {
     position: absolute;
-    top: -18px;
-    right: 0;
+    top: -20px;
+    right: 4px;
     opacity: 0;
     transform: translateY(6px) scale(0.96);
     padding: 3px 8px;
     border: 1px solid var(--border-focus-soft);
+    border-radius: var(--radius-xxs);
     background: linear-gradient(
         180deg,
-        color-mix(in srgb, var(--surface-selected-soft) 36%, var(--surface-raised) 64%),
+        color-mix(in srgb, var(--surface-selected-soft) 32%, var(--surface-raised) 68%),
         color-mix(in srgb, var(--surface-raised) 88%, transparent)
     );
     color: var(--text-top-control);
-    font-size: var(--text-size-2xs);
+    font-size: var(--lesson-hud-meta-font-size);
+    line-height: 1.2;
     letter-spacing: 0.12px;
     pointer-events: none;
 }
 
 .lesson-hud[data-burst="true"] .lesson-hud-burst {
-    animation: lesson-hud-burst-in 560ms var(--motion-ease) 1;
+    animation: lesson-hud-burst-in 500ms var(--motion-ease) 1;
 }
 
 .lesson-hud[data-streak-tier="warm"] .lesson-hud-fill,
 .lesson-hud[data-streak-tier="hot"] .lesson-hud-fill,
 .lesson-hud[data-streak-tier="fire"] .lesson-hud-fill {
-    animation: lesson-hud-energy 0.9s ease-in-out infinite alternate;
+    animation: lesson-hud-energy 1.6s ease-in-out infinite alternate;
+}
+
+.lesson-hud[data-streak-tier="warm"] .lesson-hud-fill::after,
+.lesson-hud[data-streak-tier="hot"] .lesson-hud-fill::after,
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-fill::after {
+    opacity: 0.44;
+    animation: lesson-hud-fill-sweep 2.2s ease-in-out infinite;
 }
 
 .lesson-hud[data-streak-tier="warm"] .lesson-hud-chip-step {
@@ -924,13 +983,15 @@ button:focus-visible {
 .lesson-hud[data-streak-tier="hot"] {
     box-shadow:
         0 0 0 1px color-mix(in srgb, var(--surface-raised) 18%, transparent),
-        0 0 0 3px color-mix(in srgb, var(--surface-selected-soft) 34%, transparent);
+        0 0 0 3px color-mix(in srgb, var(--surface-selected-soft) 32%, transparent),
+        0 12px 22px color-mix(in srgb, var(--surface-bg) 68%, transparent);
 }
 
 .lesson-hud[data-streak-tier="fire"] {
     box-shadow:
         0 0 0 1px color-mix(in srgb, var(--surface-raised) 22%, transparent),
-        0 0 0 4px color-mix(in srgb, var(--surface-selected-soft) 44%, transparent);
+        0 0 0 4px color-mix(in srgb, var(--surface-selected-soft) 40%, transparent),
+        0 14px 24px color-mix(in srgb, var(--surface-bg) 70%, transparent);
 }
 
 .lesson-hud[data-streak-tier="warm"] .lesson-hud-mood,
@@ -949,19 +1010,28 @@ button:focus-visible {
 
 @keyframes lesson-hud-energy {
     from {
-        filter: saturate(0.95);
-        opacity: 0.8;
+        filter: saturate(0.98);
+        opacity: 0.9;
     }
     to {
-        filter: saturate(1.15);
+        filter: saturate(1.08);
         opacity: 1;
+    }
+}
+
+@keyframes lesson-hud-fill-sweep {
+    from {
+        transform: translateX(-34%) skewX(-14deg);
+    }
+    to {
+        transform: translateX(318%) skewX(-14deg);
     }
 }
 
 @keyframes lesson-hud-burst-in {
     0% {
         opacity: 0;
-        transform: translateY(8px) scale(0.92);
+        transform: translateY(6px) scale(0.96);
     }
     20% {
         opacity: 1;
@@ -969,7 +1039,7 @@ button:focus-visible {
     }
     100% {
         opacity: 0;
-        transform: translateY(-8px) scale(1.03);
+        transform: translateY(-5px) scale(1.01);
     }
 }
 
@@ -977,8 +1047,54 @@ button:focus-visible {
 #lessonHudProgress,
 #lessonHudLevel,
 #lessonHudXp,
-#lessonHudStreak {
+#lessonHudStreak,
+#lessonHudPace {
     color: var(--text-top-control);
+}
+
+#lessonHudStreak {
+    position: relative;
+    overflow: hidden;
+    padding-bottom: 2px;
+}
+
+#lessonHudStreak::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: color-mix(in srgb, var(--surface-panel) 72%, transparent);
+    pointer-events: none;
+}
+
+#lessonHudStreak::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    width: var(--lesson-combo-progress, 0%);
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--surface-selected-soft) 64%, transparent),
+        color-mix(in srgb, var(--text-top-control) 88%, transparent)
+    );
+    transition: width var(--motion-ui) var(--motion-ease);
+    pointer-events: none;
+}
+
+@media (max-width: 960px) {
+    .lesson-hud {
+        max-width: min(500px, calc(100% - 18px));
+        --lesson-hud-chip-font-size: clamp(11px, 0.68rem, 12px);
+        --lesson-hud-meta-font-size: clamp(11px, 0.66rem, 12px);
+    }
+
+    .lesson-hud-chip-step {
+        max-width: 164px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -992,10 +1108,79 @@ button:focus-visible {
         animation: none;
     }
 
+    .lesson-hud[data-streak-tier="warm"] .lesson-hud-fill::after,
+    .lesson-hud[data-streak-tier="hot"] .lesson-hud-fill::after,
+    .lesson-hud[data-streak-tier="fire"] .lesson-hud-fill::after {
+        animation: none;
+        opacity: 0;
+    }
+
     .lesson-hud[data-burst="true"] .lesson-hud-burst {
         animation: none;
         opacity: 1;
         transform: none;
+    }
+}
+
+.editor-pane[data-lesson-levelup="true"]::after {
+    content: attr(data-lesson-level-label);
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9;
+    padding: 5px 10px;
+    border: 1px solid var(--border-focus-strong);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface-selected-soft) 44%, var(--surface-raised) 56%),
+        color-mix(in srgb, var(--surface-raised) 88%, transparent)
+    );
+    color: var(--text-top-control);
+    font-size: var(--text-size-xs);
+    letter-spacing: 0.34px;
+    pointer-events: none;
+    animation: lesson-editor-levelup-banner 900ms var(--motion-ease) 1;
+}
+
+.editor-pane[data-lesson-levelup="true"] :is(.CodeMirror, #editor) {
+    animation: lesson-editor-levelup-wave 780ms var(--motion-ease) 1;
+}
+
+@keyframes lesson-editor-levelup-wave {
+    0% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--surface-selected-soft) 44%, transparent);
+        filter: saturate(1);
+    }
+    35% {
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface-selected-soft) 48%, transparent);
+        filter: saturate(1.2);
+    }
+    100% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--surface-selected-soft) 0%, transparent);
+        filter: saturate(1);
+    }
+}
+
+@keyframes lesson-editor-levelup-banner {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, 8px) scale(0.95);
+    }
+    18% {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -10px) scale(1.02);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .editor-pane[data-lesson-levelup="true"]::after,
+    .editor-pane[data-lesson-levelup="true"] :is(.CodeMirror, #editor) {
+        animation: none;
     }
 }
 
@@ -3117,7 +3302,8 @@ body[data-resize="row"] {
 
 #shortcutHelpPanel[data-open="true"],
 #editorHistoryPanel[data-open="true"],
-#editorSettingsPanel[data-open="true"] {
+#editorSettingsPanel[data-open="true"],
+#lessonStatsPanel[data-open="true"] {
     transform: translate(-50%, -50%);
 }
 
@@ -3882,6 +4068,18 @@ body[data-resize="row"] {
     overflow: hidden;
 }
 
+.lesson-stats-panel {
+    left: 50%;
+    right: auto;
+    top: 50%;
+    width: min(var(--modal-width-md), calc(100vw - 24px));
+    max-height: min(760px, var(--modal-viewport-max-height));
+    transform: translate(-50%, -50%);
+    z-index: 1380;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
 .editor-history-panel,
 .editor-settings-panel {
     left: 50%;
@@ -3947,7 +4145,7 @@ body[data-resize="row"] {
     line-height: 1.45;
 }
 
-:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel, #lessonStatsPanel) {
     border-radius: var(--modal-radius);
     border-color: var(--modal-border-color);
     background: var(--modal-surface);
@@ -3956,7 +4154,7 @@ body[data-resize="row"] {
     gap: var(--modal-gap);
 }
 
-:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-header {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel, #lessonStatsPanel) .layout-header {
     align-items: flex-start;
     min-height: var(--modal-header-min-height);
     overflow-x: auto;
@@ -3966,24 +4164,268 @@ body[data-resize="row"] {
     border-bottom: 1px solid var(--modal-header-border);
 }
 
-:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-header > div {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel, #lessonStatsPanel) .layout-header > div {
     min-width: 0;
     flex: 1 1 auto;
 }
 
-:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-title {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel, #lessonStatsPanel) .layout-title {
     font-size: var(--text-size-2xs);
     letter-spacing: 0.45px;
     text-transform: uppercase;
 }
 
-:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) .layout-sub {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel, #lessonStatsPanel) .layout-sub {
     font-size: var(--text-size-2xs);
     color: var(--text-muted-quiet);
 }
 
-:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel) :is(.layout-title, .layout-sub) {
+:is(#editorHistoryPanel, #shortcutHelpPanel, #editorSettingsPanel, #lessonStatsPanel) :is(.layout-title, .layout-sub) {
     line-height: 1.35;
+}
+
+#lessonStatsPanel .lesson-stats-body {
+    min-height: 0;
+    gap: 10px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.lesson-stats-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.lesson-stats-tab {
+    min-height: 30px;
+    border: 1px solid var(--panel-item-border);
+    background: var(--panel-item-bg);
+    color: var(--text-muted-soft);
+    font-size: var(--text-size-xs);
+    letter-spacing: 0.15px;
+}
+
+.lesson-stats-tab[data-active="true"] {
+    border-color: var(--btn-pressed-border);
+    background: var(--surface-selected-soft);
+    color: var(--text-top-control);
+}
+
+.lesson-stats-view[hidden] {
+    display: none;
+}
+
+.lesson-stats-view {
+    display: grid;
+    gap: 10px;
+}
+
+.lesson-stats-shop {
+    align-content: start;
+}
+
+.lesson-shop-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--panel-item-border);
+    background: var(--panel-item-bg);
+}
+
+.lesson-shop-header strong {
+    font-size: var(--text-size-sm);
+    color: var(--text-top-control);
+}
+
+.lesson-shop-header span {
+    font-size: var(--text-size-2xs);
+    color: var(--text-muted-soft);
+}
+
+.lesson-shop-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+}
+
+.lesson-shop-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid var(--panel-item-border);
+    background: var(--panel-item-bg);
+}
+
+.lesson-shop-meta {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.lesson-shop-meta strong {
+    font-size: var(--text-size-xs);
+    color: var(--text-top-control);
+}
+
+.lesson-shop-meta span {
+    font-size: var(--text-size-2xs);
+    color: var(--text-muted-soft);
+}
+
+.lesson-shop-action {
+    min-width: 82px;
+}
+
+.lesson-stats-hero {
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--border-soft);
+    background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--surface-selected-soft) 18%, var(--surface-panel) 82%),
+        color-mix(in srgb, var(--surface-raised) 80%, transparent)
+    );
+}
+
+.lesson-stats-hero-title {
+    margin: 0;
+    font-size: var(--text-size-sm);
+    color: var(--text-top-control);
+    letter-spacing: 0.16px;
+}
+
+.lesson-stats-hero-sub {
+    margin: 0;
+    font-size: var(--text-size-xs);
+    color: var(--text-muted-soft);
+    line-height: 1.35;
+}
+
+.lesson-stats-next {
+    display: grid;
+    gap: 4px;
+}
+
+.lesson-stats-next-label {
+    font-size: var(--text-size-2xs);
+    color: var(--text-muted-soft);
+    letter-spacing: 0.2px;
+}
+
+.lesson-stats-next-rail {
+    position: relative;
+    height: 6px;
+    border: 1px solid var(--border-soft);
+    background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+    overflow: hidden;
+}
+
+.lesson-stats-next-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--lesson-next-progress, 0%);
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--surface-selected-soft) 44%, transparent),
+        color-mix(in srgb, var(--text) 90%, transparent)
+    );
+    transition: width var(--motion-ui) var(--motion-ease);
+}
+
+.lesson-stats-safety {
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border-soft);
+    background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+    color: var(--text-muted-soft);
+    font-size: var(--text-size-2xs);
+    line-height: 1.35;
+}
+
+.lesson-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.lesson-stats-card {
+    display: grid;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid var(--panel-item-border);
+    background: var(--panel-item-bg);
+}
+
+.lesson-stats-label {
+    font-size: var(--text-size-2xs);
+    color: var(--text-muted-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.22px;
+}
+
+.lesson-stats-card strong {
+    font-size: var(--text-size-sm);
+    color: var(--text-top-control);
+    line-height: 1.25;
+}
+
+.lesson-stats-session {
+    border: 1px solid var(--border-soft);
+    background: var(--surface-panel);
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.lesson-stats-session-title {
+    margin: 0;
+    font-size: var(--text-size-xs);
+    color: var(--text-muted-soft);
+    letter-spacing: 0.14px;
+}
+
+.lesson-stats-session-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(110px, 1fr));
+    gap: 6px;
+}
+
+.lesson-stats-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--border-soft);
+    background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+    font-size: var(--text-size-2xs);
+    color: var(--text-muted-soft);
+}
+
+.lesson-stats-line strong {
+    color: var(--text-top-control);
+    font-size: var(--text-size-xs);
+}
+
+@media (max-width: 900px) {
+    .lesson-stats-grid {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
+
+    .lesson-stats-session-grid {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
 }
 
 #editorHistoryPanel .layout-body {

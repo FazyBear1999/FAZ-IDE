@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-02-18 (v0.2.0)
+- Hardened Franklin full release orchestration (`frank:full`) and verified full stage parity, including CSS safety gate coverage.
+- Expanded web SEO/release readiness: canonical + Open Graph URL metadata, crawler assets, and web icon coverage.
+- Added domain-aware SiteGround packaging support via `SITE_URL` so packaged canonical/OG/sitemap URLs can be stamped for production.
+- Expanded release runbook with a full preflight/deploy/crawl checklist and explicit production domain-input contract.
+- Synced AI memory docs and operating checklists to enforce release-domain verification during handoff.
+
 ## 2026-02-13 (v0.1.0)
 - Set project version metadata to 0.1.0.
 - Added safe release workflow commands and documentation for repeatable deploys.

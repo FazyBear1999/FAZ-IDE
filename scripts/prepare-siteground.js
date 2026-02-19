@@ -8,6 +8,46 @@ const distDir = path.join(root, "dist_site");
 const outputRoot = path.join(root, "release", "siteground");
 const publicHtmlDir = path.join(outputRoot, "public_html");
 
+function normalizeSiteUrl(raw = "") {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    if (!/^https?:$/i.test(parsed.protocol)) return "";
+    parsed.pathname = "/";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function applySiteUrlOverrides(publicDir, siteUrl) {
+  if (!siteUrl) return;
+
+  const canonicalUrl = `${siteUrl}/`;
+  const indexPath = path.join(publicDir, "index.html");
+  if (fs.existsSync(indexPath)) {
+    const source = fs.readFileSync(indexPath, "utf8");
+    const updated = source
+      .replace(/<link rel="canonical" href="[^"]*"\s*\/>/, `<link rel="canonical" href="${canonicalUrl}" />`)
+      .replace(/<meta property="og:url" content="[^"]*"\s*\/>/, `<meta property="og:url" content="${canonicalUrl}" />`);
+    if (updated !== source) {
+      fs.writeFileSync(indexPath, updated, "utf8");
+    }
+  }
+
+  const sitemapPath = path.join(publicDir, "sitemap.xml");
+  if (fs.existsSync(sitemapPath)) {
+    const source = fs.readFileSync(sitemapPath, "utf8");
+    const updated = source.replace(/<loc>[^<]*<\/loc>/, `<loc>${canonicalUrl}</loc>`);
+    if (updated !== source) {
+      fs.writeFileSync(sitemapPath, updated, "utf8");
+    }
+  }
+}
+
 function runNodeScript(scriptName) {
   const scriptPath = path.join(scriptsDir, scriptName);
   const result = spawnSync(process.execPath, [scriptPath], {
@@ -34,6 +74,9 @@ function main() {
 
   fs.cpSync(distDir, publicHtmlDir, { recursive: true, force: true });
 
+  const siteUrl = normalizeSiteUrl(process.env.SITE_URL || "");
+  applySiteUrlOverrides(publicHtmlDir, siteUrl);
+
   const indexPath = path.join(publicHtmlDir, "index.html");
   if (!fs.existsSync(indexPath)) {
     throw new Error("public_html/index.html is missing after preparation.");
@@ -48,6 +91,9 @@ function main() {
       "Upload the public_html folder contents (or extract this folder on server).",
       "Path:",
       `./${publicHtmlRelative || "public_html"}`,
+      siteUrl
+        ? `SITE_URL applied: ${siteUrl}/`
+        : "SITE_URL not provided (canonical/og:url remain relative and sitemap keeps default placeholder domain).",
       "",
     ].join("\n"),
     "utf8"

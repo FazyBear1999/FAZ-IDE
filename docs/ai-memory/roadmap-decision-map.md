@@ -60,6 +60,7 @@ No checkpoint is complete without all five fields.
 - Decision reference: required before enabling lesson editing constraints in default editor flow.
 - Validation minimum: focused lesson-editor contracts + typing-zone behavior tests + `test:integrity`.
 - Rollback trigger: blocked normal editing outside lesson mode, non-deterministic step progress, or marker-range corruption.
+- Status note: progression baseline extended with local-only lesson coins (step/lesson/streak milestones) and HUD/stats surfacing, with focused lesson contract tests passing.
 
 ### C7 — Layout customization + docking stability hardening (Master Roadmap Phase 1 safety lane)
 - Scope boundary: layout token wiring, docking behavior invariants, and test reliability adjustments only; no new runtime products/surfaces.

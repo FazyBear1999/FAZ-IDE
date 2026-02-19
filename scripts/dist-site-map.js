@@ -2,6 +2,8 @@ const filePairs = [
   ["index.html", "dist_site/index.html"],
   ["manifest.webmanifest", "dist_site/manifest.webmanifest"],
   ["favicon.ico", "dist_site/favicon.ico"],
+  ["robots.txt", "dist_site/robots.txt"],
+  ["sitemap.xml", "dist_site/sitemap.xml"],
   [".htaccess", "dist_site/.htaccess"],
 ];
 

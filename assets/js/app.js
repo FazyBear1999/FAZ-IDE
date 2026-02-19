@@ -1644,6 +1644,7 @@ let commandPaletteQuery = "";
 let commandPaletteResults = [];
 let commandPaletteIndex = 0;
 let shortcutHelpOpen = false;
+let lessonStatsOpen = false;
 let editorSearchOpen = false;
 let symbolPaletteOpen = false;
 let projectSearchOpen = false;
@@ -1719,6 +1720,7 @@ let consoleViewMode = "console";
 let toolsTabMode = "task-runner";
 let toolsProblemsOpen = true;
 let editorAutosaveTimer = null;
+let persistenceWritesLocked = false;
 let editorCompletionOpen = false;
 let editorCompletionItems = [];
 let editorCompletionIndex = 0;
@@ -1743,6 +1745,23 @@ const LESSON_XP_PER_CHAR = 1;
 const LESSON_XP_STEP_COMPLETE = 12;
 const LESSON_XP_LESSON_COMPLETE = 80;
 const LESSON_XP_PERFECT_BONUS = 30;
+const LESSON_BYTES_STEP_COMPLETE = 2;
+const LESSON_BYTES_LESSON_COMPLETE = 15;
+const LESSON_BYTES_PERFECT_BONUS = 5;
+const LESSON_BYTES_STREAK_MILESTONE = 3;
+const LESSON_BYTES_STREAK_INTERVAL = 20;
+const THEME_BYTE_COSTS = Object.freeze({
+    dark: 0,
+    light: 120,
+    purple: 180,
+    retro: 220,
+    temple: 260,
+    midnight: 300,
+    ocean: 320,
+    forest: 340,
+    graphite: 360,
+    sunset: 400,
+});
 let selectedGameId = games[0]?.id ?? "";
 let gamesSelectorOpen = false;
 let selectedApplicationId = applications[0]?.id ?? "";
@@ -1758,9 +1777,21 @@ let lessonHudLastMood = "focus";
 let lessonHudLastProgressBucket = -1;
 let lessonHudLastStepKey = "";
 let lessonHudLastRenderKey = "";
+let lessonHudWasActive = false;
+let lessonShopRenderKey = "";
+let lessonHeaderStatsRenderKey = "";
+let lessonEditorLevelUpTimer = 0;
+let lessonStatsLiveTimer = 0;
+let lessonHeaderStatsLastSyncAt = 0;
+let lessonHudPulseLastAt = 0;
+let lessonHapticLastAt = 0;
+let lessonStatsView = "overview";
+let lessonShopNotice = "";
 let lessonProfile = {
     xp: 0,
     level: 1,
+    bytes: 0,
+    unlockedThemes: [...THEMES],
     totalTypedChars: 0,
     lessonsCompleted: 0,
     bestStreak: 0,
@@ -2394,8 +2425,18 @@ function setBottomHeight(next) {
     }
 }
 
-function applyTheme(theme, { persist = true } = {}) {
-    currentTheme = applyThemeState(theme, {
+function applyTheme(theme, { persist = true, source = "ui" } = {}) {
+    const normalizedTheme = normalizeTheme(theme, THEMES, DEFAULT_THEME);
+    if (!isThemeUnlocked(normalizedTheme)) {
+        if (source !== "boot") {
+            const cost = getThemeByteCost(normalizedTheme);
+            setLessonShopNotice(`${getThemeDisplayLabel(normalizedTheme)} requires ${cost} Bytes.`);
+            openLessonStats({ view: "shop" });
+            status.set(`Theme locked: ${getThemeDisplayLabel(normalizedTheme)} (${cost} Bytes)`);
+        }
+        return currentTheme;
+    }
+    currentTheme = applyThemeState(normalizedTheme, {
         themeSelect: el.themeSelect,
         editor,
         persist,
@@ -2419,6 +2460,8 @@ function applyTheme(theme, { persist = true } = {}) {
     applyEditorSyntaxTheme();
     editor.refresh?.();
     syncSandboxTheme();
+    updateLessonShopUi();
+    return currentTheme;
 }
 
 function getSupportedThemeUsage() {
@@ -2439,7 +2482,10 @@ function renderHeaderThemeSelectOptions() {
     THEMES.forEach((themeName) => {
         const option = document.createElement("option");
         option.value = themeName;
-        option.textContent = getThemeDisplayLabel(themeName);
+        const unlocked = isThemeUnlocked(themeName);
+        option.textContent = unlocked
+            ? getThemeDisplayLabel(themeName)
+            : `${getThemeDisplayLabel(themeName)} • ${getThemeByteCost(themeName)} Bytes`;
         fragment.appendChild(option);
     });
     select.innerHTML = "";
@@ -4463,6 +4509,7 @@ function maskDevTerminalCommand(input = "") {
 }
 
 async function resetAppToFirstLaunchState() {
+    persistenceWritesLocked = true;
     flushEditorAutosave();
 
     const keysToRemove = new Set(
@@ -4547,11 +4594,43 @@ async function resetAppToFirstLaunchState() {
         // no-op
     }
 
+    let indexedDbCleared = 0;
+    try {
+        if (
+            typeof indexedDB !== "undefined"
+            && indexedDB
+            && typeof indexedDB.databases === "function"
+            && typeof indexedDB.deleteDatabase === "function"
+        ) {
+            const databases = await indexedDB.databases();
+            await Promise.all((Array.isArray(databases) ? databases : []).map(async (entry) => {
+                const name = String(entry?.name || "").trim();
+                if (!name) return;
+                await new Promise((resolve) => {
+                    try {
+                        const request = indexedDB.deleteDatabase(name);
+                        request.onsuccess = () => {
+                            indexedDbCleared += 1;
+                            resolve();
+                        };
+                        request.onerror = () => resolve();
+                        request.onblocked = () => resolve();
+                    } catch {
+                        resolve();
+                    }
+                });
+            }));
+        }
+    } catch {
+        // no-op
+    }
+
     return {
         removedKeys,
         removedSessionKeys,
         serviceWorkersCleared,
         cachesCleared,
+        indexedDbCleared,
     };
 }
 
@@ -4993,7 +5072,7 @@ async function executeDevTerminalCommand(input = "") {
         const summary = await resetAppToFirstLaunchState();
         appendDevTerminalEntry(
             "info",
-            `Cleared local keys: ${summary.removedKeys}, session keys: ${summary.removedSessionKeys}, service workers: ${summary.serviceWorkersCleared}, caches: ${summary.cachesCleared}. Reloading...`
+            `Cleared local keys: ${summary.removedKeys}, session keys: ${summary.removedSessionKeys}, service workers: ${summary.serviceWorkersCleared}, caches: ${summary.cachesCleared}, indexedDB: ${summary.indexedDbCleared}. Reloading...`
         );
         setTimeout(() => {
             window.location.reload();
@@ -7692,6 +7771,7 @@ function readSessionState() {
 }
 
 function setSessionState(active) {
+    if (persistenceWritesLocked) return;
     save(STORAGE.SESSION, JSON.stringify({ active: Boolean(active), at: Date.now() }));
 }
 
@@ -8589,6 +8669,13 @@ function computeLessonLevel(xp = 0) {
 function sanitizeLessonProfile(raw = null) {
     const source = raw && typeof raw === "object" ? raw : {};
     const xp = Math.max(0, Math.floor(Number(source.xp) || 0));
+    const bytes = Math.max(0, Math.floor(Number(source.bytes ?? source.coins) || 0));
+    const unlockedThemes = new Set(THEMES);
+    const rawUnlockedThemes = Array.isArray(source.unlockedThemes) ? source.unlockedThemes : [];
+    rawUnlockedThemes.forEach((themeName) => {
+        const normalizedTheme = normalizeTheme(themeName, THEMES, "");
+        if (normalizedTheme) unlockedThemes.add(normalizedTheme);
+    });
     const totalTypedChars = Math.max(0, Math.floor(Number(source.totalTypedChars) || 0));
     const lessonsCompleted = Math.max(0, Math.floor(Number(source.lessonsCompleted) || 0));
     const bestStreak = Math.max(0, Math.floor(Number(source.bestStreak) || 0));
@@ -8598,6 +8685,8 @@ function sanitizeLessonProfile(raw = null) {
     return {
         xp,
         level: Math.max(1, Math.floor(Number(source.level) || computeLessonLevel(xp))),
+        bytes,
+        unlockedThemes: [...unlockedThemes],
         totalTypedChars,
         lessonsCompleted,
         bestStreak,
@@ -8633,19 +8722,24 @@ function sanitizeStoredLessonSession(raw = null) {
         stepIndex: Math.max(0, Math.floor(Number(source.stepIndex) || 0)),
         progress: Math.max(0, Math.floor(Number(source.progress) || 0)),
         startedAt: Math.max(0, Math.floor(Number(source.startedAt) || 0)) || Date.now(),
+        typedChars: Math.max(0, Math.floor(Number(source.typedChars) || 0)),
+        correctChars: Math.max(0, Math.floor(Number(source.correctChars) || 0)),
         streak: Math.max(0, Math.floor(Number(source.streak) || 0)),
         bestStreak: Math.max(0, Math.floor(Number(source.bestStreak) || 0)),
+        coinMilestoneIndex: Math.max(0, Math.floor(Number(source.coinMilestoneIndex) || 0)),
         mistakes: Math.max(0, Math.floor(Number(source.mistakes) || 0)),
         sessionXp: Math.max(0, Math.floor(Number(source.sessionXp) || 0)),
     };
 }
 
 function clearPersistedLessonSession() {
+    if (persistenceWritesLocked) return;
     lessonSessionDirtyWrites = 0;
     save(STORAGE.LESSON_SESSION, "");
 }
 
 function persistLessonSession({ force = false } = {}) {
+    if (persistenceWritesLocked) return;
     if (!lessonSession || lessonSession.completed) {
         clearPersistedLessonSession();
         return;
@@ -8660,8 +8754,11 @@ function persistLessonSession({ force = false } = {}) {
         stepIndex: Math.max(0, Math.floor(Number(lessonSession.stepIndex) || 0)),
         progress: Math.max(0, Math.floor(Number(lessonSession.progress) || 0)),
         startedAt: Math.max(0, Math.floor(Number(lessonSession.startedAt) || 0)) || Date.now(),
+        typedChars: Math.max(0, Math.floor(Number(lessonSession.typedChars) || 0)),
+        correctChars: Math.max(0, Math.floor(Number(lessonSession.correctChars) || 0)),
         streak: Math.max(0, Math.floor(Number(lessonSession.streak) || 0)),
         bestStreak: Math.max(0, Math.floor(Number(lessonSession.bestStreak) || 0)),
+        coinMilestoneIndex: Math.max(0, Math.floor(Number(lessonSession.coinMilestoneIndex) || 0)),
         mistakes: Math.max(0, Math.floor(Number(lessonSession.mistakes) || 0)),
         sessionXp: Math.max(0, Math.floor(Number(lessonSession.sessionXp) || 0)),
     };
@@ -8710,8 +8807,11 @@ function restoreLessonSessionFromStorage() {
         progress,
         completed: false,
         startedAt: parsed.startedAt || Date.now(),
+        typedChars: parsed.typedChars,
+        correctChars: parsed.correctChars,
         streak: parsed.streak,
         bestStreak: Math.max(parsed.bestStreak, parsed.streak),
+        coinMilestoneIndex: Math.max(parsed.coinMilestoneIndex, Math.floor(parsed.streak / LESSON_BYTES_STREAK_INTERVAL)),
         mistakes: parsed.mistakes,
         sessionXp: parsed.sessionXp,
     };
@@ -8747,6 +8847,7 @@ function getLessonDayStamp(now = Date.now()) {
 }
 
 function persistLessonProfile({ force = false } = {}) {
+    if (persistenceWritesLocked) return;
     lessonProfileDirtyWrites += 1;
     if (!force && lessonProfileDirtyWrites < 8) return;
     lessonProfileDirtyWrites = 0;
@@ -8755,7 +8856,142 @@ function persistLessonProfile({ force = false } = {}) {
 
 function loadLessonProfile() {
     lessonProfile = sanitizeLessonProfile(parseStoredJson(load(STORAGE.LESSON_PROFILE)));
+    const storedTheme = normalizeTheme(load(STORAGE.THEME), THEMES, "");
+    if (storedTheme && !lessonProfile.unlockedThemes.includes(storedTheme)) {
+        lessonProfile.unlockedThemes = [...new Set([...lessonProfile.unlockedThemes, storedTheme])];
+    }
     persistLessonProfile({ force: true });
+    updateLessonHeaderStats();
+}
+
+function getThemeByteCost(themeName = "") {
+    const normalizedTheme = normalizeTheme(themeName, THEMES, DEFAULT_THEME);
+    return Math.max(0, Math.floor(Number(THEME_BYTE_COSTS[normalizedTheme]) || 0));
+}
+
+function isThemeUnlocked(themeName = "") {
+    const normalizedTheme = normalizeTheme(themeName, THEMES, DEFAULT_THEME);
+    const unlockedThemes = Array.isArray(lessonProfile?.unlockedThemes) ? lessonProfile.unlockedThemes : [];
+    return unlockedThemes.includes(normalizedTheme);
+}
+
+function unlockLessonTheme(themeName = "", { spend = true } = {}) {
+    const normalizedTheme = normalizeTheme(themeName, THEMES, DEFAULT_THEME);
+    if (isThemeUnlocked(normalizedTheme)) return true;
+    const cost = getThemeByteCost(normalizedTheme);
+    const currentBytes = Math.max(0, Number(lessonProfile.bytes) || 0);
+    if (spend && currentBytes < cost) return false;
+    if (spend && cost > 0) {
+        lessonProfile.bytes = Math.max(0, currentBytes - cost);
+    }
+    const nextUnlockedThemes = new Set(Array.isArray(lessonProfile.unlockedThemes) ? lessonProfile.unlockedThemes : [DEFAULT_THEME]);
+    nextUnlockedThemes.add(DEFAULT_THEME);
+    nextUnlockedThemes.add(normalizedTheme);
+    lessonProfile.unlockedThemes = [...nextUnlockedThemes];
+    persistLessonProfile({ force: true });
+    return true;
+}
+
+function buildThemeShopSnapshot() {
+    const currentBytes = Math.max(0, Number(lessonProfile.bytes) || 0);
+    return THEMES.map((themeName) => {
+        const cost = getThemeByteCost(themeName);
+        const unlocked = isThemeUnlocked(themeName);
+        return {
+            id: themeName,
+            label: getThemeDisplayLabel(themeName),
+            cost,
+            unlocked,
+            active: currentTheme === themeName,
+            affordable: currentBytes >= cost,
+            bytes: currentBytes,
+        };
+    });
+}
+
+function setLessonShopNotice(message = "") {
+    lessonShopNotice = String(message || "").trim();
+    if (el.lessonStatsShopHint) {
+        setNodeText(el.lessonStatsShopHint, lessonShopNotice || "Buy themes using Bytes earned from lessons.");
+    }
+}
+
+function setLessonStatsView(view = "overview") {
+    const normalizedView = view === "shop" ? "shop" : "overview";
+    lessonStatsView = normalizedView;
+    if (el.lessonStatsOverview) {
+        el.lessonStatsOverview.hidden = normalizedView !== "overview";
+        el.lessonStatsOverview.setAttribute("aria-hidden", normalizedView === "overview" ? "false" : "true");
+    }
+    if (el.lessonStatsShop) {
+        el.lessonStatsShop.hidden = normalizedView !== "shop";
+        el.lessonStatsShop.setAttribute("aria-hidden", normalizedView === "shop" ? "false" : "true");
+    }
+    if (el.lessonStatsOverviewTab) {
+        el.lessonStatsOverviewTab.setAttribute("data-active", normalizedView === "overview" ? "true" : "false");
+        el.lessonStatsOverviewTab.setAttribute("aria-pressed", normalizedView === "overview" ? "true" : "false");
+    }
+    if (el.lessonStatsShopTab) {
+        el.lessonStatsShopTab.setAttribute("data-active", normalizedView === "shop" ? "true" : "false");
+        el.lessonStatsShopTab.setAttribute("aria-pressed", normalizedView === "shop" ? "true" : "false");
+    }
+}
+
+function updateLessonShopUi({ force = false } = {}) {
+    if (el.lessonShopBytes) {
+        setNodeText(el.lessonShopBytes, `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`);
+    }
+    setLessonShopNotice(lessonShopNotice);
+    if (!el.lessonStatsShopList) return;
+    if (!force && (!lessonStatsOpen || lessonStatsView !== "shop")) {
+        return;
+    }
+    const fragment = document.createDocumentFragment();
+    const themeEntries = buildThemeShopSnapshot();
+    const renderKey = themeEntries
+        .map((entry) => `${entry.id}:${entry.unlocked ? "1" : "0"}:${entry.active ? "1" : "0"}:${entry.affordable ? "1" : "0"}:${entry.cost}`)
+        .join("|");
+    if (!force && renderKey === lessonShopRenderKey) {
+        return;
+    }
+    lessonShopRenderKey = renderKey;
+    themeEntries.forEach((entry) => {
+        const row = document.createElement("li");
+        row.className = "lesson-shop-item";
+        row.setAttribute("data-theme", entry.id);
+
+        const meta = document.createElement("div");
+        meta.className = "lesson-shop-meta";
+        const title = document.createElement("strong");
+        title.textContent = entry.label;
+        const subtitle = document.createElement("span");
+        subtitle.textContent = entry.unlocked
+            ? (entry.active ? "Owned • Active" : "Owned")
+            : `${entry.cost} Bytes`;
+        meta.append(title, subtitle);
+
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = "lesson-shop-action";
+        action.dataset.lessonShopTheme = entry.id;
+
+        if (entry.active) {
+            action.textContent = "Active";
+            action.disabled = true;
+        } else if (entry.unlocked) {
+            action.textContent = "Apply";
+            action.dataset.lessonShopAction = "apply";
+        } else {
+            action.textContent = `Buy ${entry.cost}`;
+            action.dataset.lessonShopAction = "buy";
+            action.disabled = !entry.affordable;
+        }
+
+        row.append(meta, action);
+        fragment.appendChild(row);
+    });
+    el.lessonStatsShopList.innerHTML = "";
+    el.lessonStatsShopList.appendChild(fragment);
 }
 
 function setNodeText(node, text = "") {
@@ -8768,6 +9004,10 @@ function setNodeText(node, text = "") {
 
 function animateLessonHudPulse(kind = "soft") {
     if (!el.lessonHud || typeof el.lessonHud.animate !== "function") return;
+    const now = Date.now();
+    const minGap = kind === "intense" ? 170 : 110;
+    if (now - lessonHudPulseLastAt < minGap) return;
+    lessonHudPulseLastAt = now;
     const keyframes = kind === "intense"
         ? [
             { transform: "translateY(0) scale(1)", filter: "saturate(1)", offset: 0 },
@@ -8789,10 +9029,198 @@ function animateLessonHudPulse(kind = "soft") {
 
 function triggerLessonHaptic(duration = 8) {
     if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return;
+    const now = Date.now();
+    const requested = Math.max(0, Math.min(24, Number(duration) || 0));
+    const minGap = requested >= 10 ? 90 : 130;
+    if (now - lessonHapticLastAt < minGap) return;
+    lessonHapticLastAt = now;
     try {
-        navigator.vibrate(Math.max(0, Math.min(24, Number(duration) || 0)));
+        navigator.vibrate(requested);
     } catch {
     }
+}
+
+function triggerLessonEditorLevelUp(level = 1) {
+    const editorPane = document.querySelector("#editorPanel .editor-pane");
+    if (!(editorPane instanceof HTMLElement)) return;
+
+    const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
+    editorPane.setAttribute("data-lesson-levelup", "true");
+    editorPane.setAttribute("data-lesson-level-label", `LEVEL UP • LV ${safeLevel}`);
+
+    const prefersReducedMotion = typeof window !== "undefined"
+        && typeof window.matchMedia === "function"
+        && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (!prefersReducedMotion) {
+        const codeSurface = editor.type === "codemirror"
+            ? document.querySelector("#editorPanel .CodeMirror")
+            : el.editor;
+
+        if (codeSurface && typeof codeSurface.animate === "function") {
+            codeSurface.animate([
+                { transform: "translateY(0) scale(1)", filter: "saturate(1)", offset: 0 },
+                { transform: "translateY(-2px) scale(1.008)", filter: "saturate(1.28)", offset: 0.28 },
+                { transform: "translateY(0) scale(1)", filter: "saturate(1)", offset: 1 },
+            ], {
+                duration: 720,
+                easing: "cubic-bezier(0.2, 0.85, 0.22, 1)",
+                iterations: 1,
+            });
+        }
+    }
+
+    if (lessonEditorLevelUpTimer) {
+        clearTimeout(lessonEditorLevelUpTimer);
+    }
+    lessonEditorLevelUpTimer = setTimeout(() => {
+        const node = document.querySelector("#editorPanel .editor-pane");
+        if (node instanceof HTMLElement) {
+            node.removeAttribute("data-lesson-levelup");
+            node.removeAttribute("data-lesson-level-label");
+        }
+        lessonEditorLevelUpTimer = 0;
+    }, 980);
+}
+
+function getLessonSessionMetrics(session = lessonSession) {
+    if (!session) {
+        return { accuracy: 100, wpm: 0, typedChars: 0, correctChars: 0, elapsedMs: 0 };
+    }
+    const typedChars = Math.max(0, Number(session.typedChars) || 0);
+    const correctChars = Math.max(0, Number(session.correctChars) || 0);
+    const accuracy = typedChars > 0
+        ? clamp(Math.round((correctChars / typedChars) * 100), 0, 100)
+        : 100;
+    const elapsedMs = Math.max(1, Date.now() - (Math.max(0, Number(session.startedAt) || 0) || Date.now()));
+    const minutes = elapsedMs / 60000;
+    const wpm = correctChars > 0
+        ? clamp(Math.round((correctChars / 5) / Math.max(1 / 600, minutes)), 0, 999)
+        : 0;
+    return { accuracy, wpm, typedChars, correctChars, elapsedMs };
+}
+
+function formatLessonElapsedMs(elapsedMs = 0) {
+    const safe = Math.max(0, Math.floor(Number(elapsedMs) || 0));
+    const seconds = Math.floor(safe / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const remainSeconds = seconds % 60;
+    const remainMinutes = minutes % 60;
+    if (hours > 0) {
+        return `${hours}h ${String(remainMinutes).padStart(2, "0")}m`;
+    }
+    if (minutes > 0) {
+        return `${minutes}m ${String(remainSeconds).padStart(2, "0")}s`;
+    }
+    return `${remainSeconds}s`;
+}
+
+function getLessonMomentumTitle({ completed = 0, bestStreak = 0, accuracy = 100 } = {}) {
+    if (completed >= 25 || bestStreak >= 60) return "Legend Builder";
+    if (completed >= 12 || bestStreak >= 35) return "Flow Architect";
+    if (completed >= 5 || bestStreak >= 15 || accuracy >= 96) return "Rhythm Runner";
+    return "Code Cadet";
+}
+
+function updateLessonHeaderStats({ force = false } = {}) {
+    if (!el.lessonHeaderStats) return;
+    const now = Date.now();
+    if (!lessonStatsOpen && !force && now - lessonHeaderStatsLastSyncAt < 900) {
+        return;
+    }
+
+    const metrics = getLessonSessionMetrics(lessonSession);
+    const state = getLessonStateSnapshot({ metrics });
+    const levelText = `Lv ${Math.max(1, Number(lessonProfile.level) || 1)}`;
+    const xpText = `XP ${Math.max(0, Number(lessonProfile.xp) || 0)}`;
+    const bytesText = `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`;
+    const completedText = `Done ${Math.max(0, Number(lessonProfile.lessonsCompleted) || 0)}`;
+    const bestText = `Best ${Math.max(0, Number(lessonProfile.bestStreak) || 0)}`;
+    const dailyText = `Daily ${Math.max(0, Number(lessonProfile.dailyStreak) || 0)}`;
+    const accuracyText = `Acc ${metrics.accuracy}%`;
+    const wpmText = `WPM ${metrics.wpm}`;
+    const currentXp = Math.max(0, Number(lessonProfile.xp) || 0);
+    const xpIntoLevel = currentXp % 250;
+    const xpToNext = Math.max(1, 250 - xpIntoLevel);
+    const nextLevelProgress = clamp(Math.round((xpIntoLevel / 250) * 100), 0, 100);
+    const momentumTitle = getLessonMomentumTitle({
+        completed: Math.max(0, Number(lessonProfile.lessonsCompleted) || 0),
+        bestStreak: Math.max(0, Number(lessonProfile.bestStreak) || 0),
+        accuracy: metrics.accuracy,
+    });
+    const heroSubtitle = state?.active
+        ? `Active lesson pressure: ${metrics.accuracy}% accuracy at ${metrics.wpm} WPM.`
+        : "Build rhythm with clean, steady reps.";
+    const nextLabel = `Next level in ${xpToNext} XP`;
+    const lastActive = String(lessonProfile.lastActiveDay || "").trim() || "--";
+    const sessionStateText = state?.active
+        ? `Active: ${String(state.fileName || "Lesson")} (${state.completed ? "completed" : "in progress"})`
+        : "No active lesson session";
+    const stepText = state?.active ? String(state.stepId || "--") : "--";
+    const progressText = state?.active ? `${Math.max(0, Number(state.progress) || 0)}/${Math.max(0, Number(state.expectedLength) || 0)}` : "0/0";
+    const sessionXpText = String(Math.max(0, Number(state?.sessionXp) || 0));
+    const mistakesText = String(Math.max(0, Number(state?.mistakes) || 0));
+    const streakText = String(Math.max(0, Number(state?.streak) || 0));
+    const typedText = String(metrics.typedChars);
+    const correctText = String(metrics.correctChars);
+    const elapsedText = formatLessonElapsedMs(metrics.elapsedMs);
+    const renderKey = `${levelText}|${xpText}|${bytesText}|${completedText}|${bestText}|${dailyText}|${accuracyText}|${wpmText}|${momentumTitle}|${heroSubtitle}|${nextLabel}|${nextLevelProgress}|${lastActive}|${sessionStateText}|${stepText}|${progressText}|${sessionXpText}|${mistakesText}|${streakText}|${typedText}|${correctText}|${elapsedText}`;
+    if (renderKey !== lessonHeaderStatsRenderKey) {
+        lessonHeaderStatsRenderKey = renderKey;
+        setNodeText(el.lessonHeaderLevel, levelText);
+        setNodeText(el.lessonHeaderXp, xpText);
+        setNodeText(el.lessonHeaderCoins, bytesText);
+        setNodeText(el.lessonHeaderCompleted, completedText);
+        setNodeText(el.lessonHeaderBest, bestText);
+        setNodeText(el.lessonHeaderDaily, dailyText);
+        setNodeText(el.lessonHeaderAccuracy, accuracyText);
+        setNodeText(el.lessonHeaderWpm, wpmText);
+        setNodeText(el.lessonStatsHeroTitle, momentumTitle);
+        setNodeText(el.lessonStatsHeroSubtitle, heroSubtitle);
+        setNodeText(el.lessonStatsNextLabel, nextLabel);
+        setNodeText(el.lessonStatsLastActive, lastActive);
+        setNodeText(el.lessonStatsSessionState, sessionStateText);
+        setNodeText(el.lessonStatsStep, stepText);
+        setNodeText(el.lessonStatsProgress, progressText);
+        setNodeText(el.lessonStatsSessionXp, sessionXpText);
+        setNodeText(el.lessonStatsMistakes, mistakesText);
+        setNodeText(el.lessonStatsStreak, streakText);
+        setNodeText(el.lessonStatsTyped, typedText);
+        setNodeText(el.lessonStatsCorrect, correctText);
+        setNodeText(el.lessonStatsElapsed, elapsedText);
+        setNodeText(el.lessonStatsSafety, "Privacy-safe: all lesson stats stay local in your browser.");
+        if (el.lessonStatsNextFill) {
+            el.lessonStatsNextFill.style.setProperty("--lesson-next-progress", `${nextLevelProgress}%`);
+        }
+    }
+
+    el.lessonHeaderStats.setAttribute(
+        "aria-label",
+        `Lesson stats: level ${Math.max(1, Number(lessonProfile.level) || 1)}, XP ${Math.max(0, Number(lessonProfile.xp) || 0)}, bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}, lessons completed ${Math.max(0, Number(lessonProfile.lessonsCompleted) || 0)}, best streak ${Math.max(0, Number(lessonProfile.bestStreak) || 0)}, daily streak ${Math.max(0, Number(lessonProfile.dailyStreak) || 0)}, accuracy ${metrics.accuracy} percent, pace ${metrics.wpm} WPM, next level in ${xpToNext} XP. Privacy-safe local storage only`
+    );
+    if (lessonStatsOpen && lessonStatsView === "shop") {
+        updateLessonShopUi();
+    }
+    lessonHeaderStatsLastSyncAt = now;
+}
+
+function setLessonStatsLivePolling(active) {
+    const shouldRun = Boolean(active);
+    if (!shouldRun) {
+        if (lessonStatsLiveTimer) {
+            clearInterval(lessonStatsLiveTimer);
+            lessonStatsLiveTimer = 0;
+        }
+        return;
+    }
+
+    if (lessonStatsLiveTimer) return;
+    lessonStatsLiveTimer = setInterval(() => {
+        if (!lessonStatsOpen) return;
+        if (!lessonSession || lessonSession.completed) return;
+        updateLessonHeaderStats({ force: true });
+    }, 1000);
 }
 
 function updateLessonHud() {
@@ -8800,14 +9228,39 @@ function updateLessonHud() {
     const active = isLessonSessionActiveForCurrentFile();
     el.lessonHud.setAttribute("data-active", active ? "true" : "false");
     el.lessonHud.hidden = !active;
-    el.lessonHud.dataset.streakTier = "none";
-    el.lessonHud.dataset.mood = "focus";
-    el.lessonHud.style.setProperty("--lesson-progress", "0%");
-    if (el.lessonHudFill) {
-        el.lessonHudFill.style.setProperty("--lesson-progress", "0%");
+    if (!active) {
+        lessonHudWasActive = false;
+        lessonHudLastRenderKey = "";
+        lessonHudLastStepKey = "";
+        lessonHudLastProgressBucket = -1;
+        lessonHudLastTier = "none";
+        lessonHudLastMood = "focus";
+        el.lessonHud.dataset.streakTier = "none";
+        el.lessonHud.dataset.mood = "focus";
+        el.lessonHud.style.setProperty("--lesson-progress", "0%");
+        el.lessonHud.style.setProperty("--lesson-combo-progress", "0%");
+        if (el.lessonHudFill) {
+            el.lessonHudFill.style.setProperty("--lesson-progress", "0%");
+        }
+        if (lessonHudBurstTimer) {
+            clearTimeout(lessonHudBurstTimer);
+            lessonHudBurstTimer = 0;
+        }
+        el.lessonHud.setAttribute("data-burst", "false");
+        setNodeText(el.lessonHudMood, "Calm rhythm. Ready when you are.");
+        setNodeText(el.lessonHudPace, "WPM 0");
+        setNodeText(el.lessonHudCoins, `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`);
+        updateLessonHeaderStats();
+        return;
     }
-    setNodeText(el.lessonHudMood, "Lock in and build momentum ✨");
-    if (!active) return;
+    if (!lessonHudWasActive) {
+        lessonHudWasActive = true;
+        lessonHudLastRenderKey = "";
+        lessonHudLastStepKey = "";
+        lessonHudLastProgressBucket = -1;
+        lessonHudLastTier = "none";
+        lessonHudLastMood = "focus";
+    }
 
     const step = getLessonCurrentStep();
     const stepId = step?.id || "lesson";
@@ -8817,9 +9270,14 @@ function updateLessonHud() {
     const total = Math.max(1, Number(step?.expected?.length) || 1);
     const progressPercent = clamp(Math.round((progress / total) * 100), 0, 100);
     const mistakes = Math.max(0, Number(lessonSession?.mistakes) || 0);
-    const accuracy = progress > 0 ? Math.round((progress / Math.max(1, progress + mistakes)) * 100) : 100;
+    const metrics = getLessonSessionMetrics(lessonSession);
+    const accuracy = metrics.accuracy;
+    const paceText = `WPM ${metrics.wpm}`;
     const activeStreak = Math.max(0, Number(lessonSession?.streak) || lessonProfile.currentStreak || 0);
     const streakTier = activeStreak >= 25 ? "fire" : activeStreak >= 12 ? "hot" : activeStreak >= 5 ? "warm" : "none";
+    const comboProgress = activeStreak > 0
+        ? ((activeStreak % 10) === 0 ? 100 : clamp((activeStreak % 10) * 10, 0, 100))
+        : 0;
     const stepKey = `${stepId}:${stepIndex}/${stepCount}`;
     if (stepKey !== lessonHudLastStepKey) {
         lessonHudLastStepKey = stepKey;
@@ -8827,10 +9285,10 @@ function updateLessonHud() {
     }
     el.lessonHud.dataset.streakTier = streakTier;
     el.lessonHud.style.setProperty("--lesson-progress", `${progressPercent}%`);
+    el.lessonHud.style.setProperty("--lesson-combo-progress", `${comboProgress}%`);
     if (el.lessonHudFill) {
         el.lessonHudFill.style.setProperty("--lesson-progress", `${progressPercent}%`);
     }
-    const stepPrefix = streakTier === "fire" ? "🔥" : streakTier === "hot" ? "⚡" : streakTier === "warm" ? "✨" : "•";
     const mood = accuracy >= 98 && progressPercent >= 65
         ? "perfect"
         : accuracy >= 90
@@ -8839,26 +9297,29 @@ function updateLessonHud() {
                 ? "recovery"
                 : "focus";
     el.lessonHud.dataset.mood = mood;
-    const stepText = `${stepPrefix} ${stepId} ${stepIndex}/${stepCount}`;
+    const stepText = `${stepId} ${stepIndex}/${stepCount}`;
     const progressText = `${progress}/${total} (${progressPercent}%)`;
     const levelText = `Lv ${lessonProfile.level}`;
     const xpText = `XP ${lessonProfile.xp}`;
+    const bytesText = `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`;
     const streakText = `Streak ${activeStreak} • ${accuracy}%`;
     const moodText = mood === "perfect"
-        ? "Perfect chain — you’re absolutely flying 🚀"
+        ? "Locked in. Precision and pace are aligned."
         : mood === "strong"
-            ? "Strong tempo — keep the pressure on ⚡"
+            ? "Solid flow. Keep your cadence steady."
             : mood === "recovery"
-                ? "One miss? Reset and dominate the next line 🎯"
-                : "Lock in and build momentum ✨";
-    const renderKey = `${stepText}|${progressText}|${levelText}|${xpText}|${streakText}|${moodText}|${streakTier}|${mood}`;
+                ? "Quick reset. Clean next keystroke."
+                : "Smooth rhythm. Build confidence key by key.";
+    const renderKey = `${stepText}|${progressText}|${levelText}|${xpText}|${bytesText}|${streakText}|${paceText}|${moodText}|${streakTier}|${mood}`;
     if (renderKey !== lessonHudLastRenderKey) {
         lessonHudLastRenderKey = renderKey;
         setNodeText(el.lessonHudStep, stepText);
         setNodeText(el.lessonHudProgress, progressText);
         setNodeText(el.lessonHudLevel, levelText);
         setNodeText(el.lessonHudXp, xpText);
+        setNodeText(el.lessonHudCoins, bytesText);
         setNodeText(el.lessonHudStreak, streakText);
+        setNodeText(el.lessonHudPace, paceText);
         setNodeText(el.lessonHudMood, moodText);
     }
 
@@ -8871,13 +9332,14 @@ function updateLessonHud() {
     const progressBucket = Math.floor(progressPercent / 25);
     if (progressBucket > lessonHudLastProgressBucket && progressBucket > 0 && progressPercent < 100) {
         lessonHudLastProgressBucket = progressBucket;
-        triggerLessonHudBurst(`${progressBucket * 25}% locked`);
+        triggerLessonHudBurst(`Checkpoint ${progressBucket * 25}%`);
     }
 
     el.lessonHud.setAttribute(
         "aria-label",
-        `Lesson ${stepId}, step ${stepIndex} of ${stepCount}, progress ${progress} of ${total} (${progressPercent} percent), streak ${activeStreak}, accuracy ${accuracy} percent`
+        `Lesson ${stepId}, step ${stepIndex} of ${stepCount}, progress ${progress} of ${total} (${progressPercent} percent), streak ${activeStreak}, accuracy ${accuracy} percent, pace ${metrics.wpm} WPM`
     );
+    updateLessonHeaderStats();
 }
 
 function triggerLessonHudBurst(message = "") {
@@ -8896,20 +9358,32 @@ function triggerLessonHudBurst(message = "") {
     }, 620);
 }
 
-function awardLessonXp(amount = 0, { typedChar = false } = {}) {
+function awardLessonXp(amount = 0, { typedChars = 0 } = {}) {
     const delta = Math.max(0, Math.floor(Number(amount) || 0));
     if (!delta) return;
     const previousLevel = lessonProfile.level;
     lessonProfile.xp += delta;
     lessonProfile.level = computeLessonLevel(lessonProfile.xp);
-    if (typedChar) {
-        lessonProfile.totalTypedChars += 1;
+    const typedCount = Math.max(0, Math.floor(Number(typedChars) || 0));
+    if (typedCount > 0) {
+        lessonProfile.totalTypedChars += typedCount;
     }
     if (lessonProfile.level > previousLevel) {
         status.set(`Level up! Lv ${lessonProfile.level}`);
         logger.append("system", [`Lesson level up: ${previousLevel} → ${lessonProfile.level}`]);
-        triggerLessonHudBurst(`Level ${lessonProfile.level}!`);
+        triggerLessonHudBurst(`Level ${lessonProfile.level}`);
+        triggerLessonEditorLevelUp(lessonProfile.level);
         triggerLessonHaptic(12);
+    }
+    persistLessonProfile();
+}
+
+function awardLessonBytes(amount = 0, { burst = "" } = {}) {
+    const delta = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!delta) return;
+    lessonProfile.bytes = Math.max(0, Number(lessonProfile.bytes) || 0) + delta;
+    if (burst) {
+        triggerLessonHudBurst(String(burst));
     }
     persistLessonProfile();
 }
@@ -9049,8 +9523,11 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
         progress: 0,
         completed: false,
         startedAt: Date.now(),
+        typedChars: 0,
+        correctChars: 0,
         streak: 0,
         bestStreak: 0,
+        coinMilestoneIndex: 0,
         mistakes: 0,
         sessionXp: 0,
     };
@@ -9071,9 +9548,12 @@ function advanceLessonStep({ announce = true } = {}) {
     if (!lessonSession || lessonSession.completed) return false;
     const nextIndex = lessonSession.stepIndex + 1;
     if (nextIndex >= lessonSession.steps.length) {
+        const metrics = getLessonSessionMetrics(lessonSession);
         const completionBonus = LESSON_XP_LESSON_COMPLETE + (lessonSession.mistakes === 0 ? LESSON_XP_PERFECT_BONUS : 0);
+        const completionBytes = LESSON_BYTES_LESSON_COMPLETE + (lessonSession.mistakes === 0 ? LESSON_BYTES_PERFECT_BONUS : 0);
         lessonSession.sessionXp += completionBonus;
-        awardLessonXp(completionBonus, { typedChar: false });
+        awardLessonXp(completionBonus);
+        awardLessonBytes(completionBytes, { burst: `+${completionBytes} Bytes` });
         lessonProfile.lessonsCompleted += 1;
         lessonProfile.currentStreak = lessonSession.streak;
         lessonProfile.bestStreak = Math.max(lessonProfile.bestStreak, lessonSession.bestStreak);
@@ -9103,7 +9583,7 @@ function advanceLessonStep({ announce = true } = {}) {
         updateLessonHud();
         status.set("Lesson complete. Running...");
         logger.append("system", [
-            `Lesson complete: ${lessonSession.fileName} • +${completionBonus} XP • session XP ${lessonSession.sessionXp} • daily streak ${lessonProfile.dailyStreak}`,
+            `Lesson complete: ${lessonSession.fileName} • +${completionBonus} XP • +${completionBytes} Bytes • session XP ${lessonSession.sessionXp} • ${metrics.accuracy}% acc • ${metrics.wpm} WPM • daily streak ${lessonProfile.dailyStreak}`,
         ]);
         run();
         return true;
@@ -9111,7 +9591,8 @@ function advanceLessonStep({ announce = true } = {}) {
     lessonSession.stepIndex = nextIndex;
     lessonSession.progress = 0;
     lessonSession.sessionXp += LESSON_XP_STEP_COMPLETE;
-    awardLessonXp(LESSON_XP_STEP_COMPLETE, { typedChar: false });
+    awardLessonXp(LESSON_XP_STEP_COMPLETE);
+    awardLessonBytes(LESSON_BYTES_STEP_COMPLETE);
     persistLessonSession();
     syncLessonGhostMarks();
     setLessonCursorToProgress();
@@ -9143,6 +9624,30 @@ function updateLessonProgressStatus({ prefix = "Lesson" } = {}) {
     const hint = needsHint ? ` • next ${describeLessonExpectedChar(nextExpected)}` : "";
     status.set(`${prefix}: ${step.id} (${stepNumber}/${stepTotal}) ${progress}/${total}${hint}`);
     updateLessonHud();
+}
+
+function resolveLessonInputSequence(inputChar = "", step = null, progress = 0) {
+    const value = String(inputChar || "");
+    if (!value || !step) return "";
+    const expectedText = String(step?.expected || "");
+    if (!expectedText) return "";
+    if (value !== "\t") return value;
+
+    const expectedNow = String(expectedText[progress] || "");
+    if (expectedNow === "\t") return "\t";
+    if (expectedNow !== " ") return "\t";
+
+    const lineStart = Math.max(0, expectedText.lastIndexOf("\n", Math.max(0, progress - 1)) + 1);
+    const linePrefix = expectedText.slice(lineStart, progress);
+    if (/[^ \t]/.test(linePrefix)) return "\t";
+
+    const tabSize = clamp(Math.floor(Number(editorSettings?.tabSize) || 2), 2, 8);
+    let count = 0;
+    while ((progress + count) < expectedText.length && expectedText[progress + count] === " " && count < tabSize) {
+        count += 1;
+    }
+    if (count <= 0) return "\t";
+    return " ".repeat(count);
 }
 
 function applyLessonInputChar(inputChar = "") {
@@ -9180,26 +9685,42 @@ function applyLessonInputChar(inputChar = "") {
         return { ok: true, reason: "step-complete", progress: lessonSession.progress };
     }
 
-    if (value !== expected) {
+    const inputSequence = resolveLessonInputSequence(value, step, lessonSession.progress) || value;
+    const expectedText = String(step.expected || "");
+    const expectedSequence = expectedText.slice(lessonSession.progress, lessonSession.progress + inputSequence.length);
+
+    if (inputSequence !== expectedSequence) {
+        lessonSession.typedChars += 1;
         lessonSession.mistakes += 1;
         lessonSession.streak = 0;
         lessonProfile.currentStreak = 0;
         persistLessonProfile({ force: true });
         persistLessonSession();
+        triggerLessonHaptic(4);
         status.set(`Lesson: expected ${describeLessonExpectedChar(expected)}`);
         updateLessonHud();
         return { ok: false, reason: "mismatch", expected, received: value, progress: lessonSession.progress };
     }
 
-    lessonSession.progress += 1;
-    lessonSession.streak += 1;
+    const matchedLength = Math.max(1, inputSequence.length);
+    lessonSession.typedChars += matchedLength;
+    lessonSession.correctChars += matchedLength;
+    lessonSession.progress += matchedLength;
+    lessonSession.streak += matchedLength;
     lessonSession.bestStreak = Math.max(lessonSession.bestStreak, lessonSession.streak);
-    lessonSession.sessionXp += LESSON_XP_PER_CHAR;
+    lessonSession.sessionXp += LESSON_XP_PER_CHAR * matchedLength;
     lessonProfile.currentStreak = lessonSession.streak;
     lessonProfile.bestStreak = Math.max(lessonProfile.bestStreak, lessonSession.bestStreak);
-    awardLessonXp(LESSON_XP_PER_CHAR, { typedChar: true });
+    awardLessonXp(LESSON_XP_PER_CHAR * matchedLength, { typedChars: matchedLength });
+    const milestoneIndex = Math.floor(lessonSession.streak / LESSON_BYTES_STREAK_INTERVAL);
+    const previousMilestoneIndex = Math.max(0, Number(lessonSession.coinMilestoneIndex) || 0);
+    if (milestoneIndex > previousMilestoneIndex) {
+        lessonSession.coinMilestoneIndex = milestoneIndex;
+        const streakBytes = LESSON_BYTES_STREAK_MILESTONE * (milestoneIndex - previousMilestoneIndex);
+        awardLessonBytes(streakBytes, { burst: `+${streakBytes} Bytes` });
+    }
     if (lessonSession.streak > 0 && lessonSession.streak % 10 === 0) {
-        triggerLessonHudBurst(`${lessonSession.streak} streak!`);
+        triggerLessonHudBurst(`Streak ${lessonSession.streak}`);
         triggerLessonHaptic(8);
     }
     persistLessonSession();
@@ -9267,11 +9788,12 @@ function typeLessonInputText(value = "") {
     return applied;
 }
 
-function getLessonStateSnapshot() {
+function getLessonStateSnapshot({ metrics = null } = {}) {
     if (!lessonSession) return null;
     const step = getLessonCurrentStep();
     const progress = Number(lessonSession.progress) || 0;
     const expectedNext = String(step?.expected?.[progress] || "");
+    const sessionMetrics = metrics || getLessonSessionMetrics(lessonSession);
     return {
         active: isLessonSessionActiveForCurrentFile(),
         completed: Boolean(lessonSession.completed),
@@ -9287,6 +9809,11 @@ function getLessonStateSnapshot() {
         streak: Number(lessonSession.streak) || 0,
         bestStreak: Number(lessonSession.bestStreak) || 0,
         mistakes: Number(lessonSession.mistakes) || 0,
+        typedChars: sessionMetrics.typedChars,
+        correctChars: sessionMetrics.correctChars,
+        accuracy: sessionMetrics.accuracy,
+        wpm: sessionMetrics.wpm,
+        elapsedMs: sessionMetrics.elapsedMs,
         sessionXp: Number(lessonSession.sessionXp) || 0,
         totalXp: Number(lessonProfile.xp) || 0,
         level: Number(lessonProfile.level) || 1,
@@ -9297,6 +9824,9 @@ function getLessonProfileSnapshot() {
     return {
         xp: Number(lessonProfile.xp) || 0,
         level: Number(lessonProfile.level) || 1,
+        bytes: Number(lessonProfile.bytes) || 0,
+        coins: Number(lessonProfile.bytes) || 0,
+        unlockedThemes: Array.isArray(lessonProfile.unlockedThemes) ? [...lessonProfile.unlockedThemes] : [...THEMES],
         totalTypedChars: Number(lessonProfile.totalTypedChars) || 0,
         lessonsCompleted: Number(lessonProfile.lessonsCompleted) || 0,
         bestStreak: Number(lessonProfile.bestStreak) || 0,
@@ -9556,6 +10086,7 @@ function openPromptDialog(config = {}) {
     closeQuickOpen({ focusEditor: false });
     closeCommandPalette({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
     closeEditorSearch({ focusEditor: false });
     closeSymbolPalette({ focusEditor: false });
     closeProjectSearch({ focusEditor: false });
@@ -10410,6 +10941,7 @@ function openQuickOpen() {
     }
     closeCommandPalette({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
     closeEditorSearch({ focusEditor: false });
     closeSymbolPalette({ focusEditor: false });
     closeProjectSearch({ focusEditor: false });
@@ -10493,6 +11025,30 @@ function setShortcutHelpOpen(open) {
     }
 }
 
+function setLessonStatsOpen(open) {
+    lessonStatsOpen = Boolean(open);
+    if (!el.lessonStatsPanel || !el.lessonStatsBackdrop) return;
+    el.lessonStatsPanel.setAttribute("data-open", lessonStatsOpen ? "true" : "false");
+    el.lessonStatsPanel.setAttribute("aria-hidden", lessonStatsOpen ? "false" : "true");
+    el.lessonStatsBackdrop.setAttribute("data-open", lessonStatsOpen ? "true" : "false");
+    el.lessonStatsBackdrop.setAttribute("aria-hidden", lessonStatsOpen ? "false" : "true");
+    if (el.btnLessonStats) {
+        el.btnLessonStats.setAttribute("aria-expanded", lessonStatsOpen ? "true" : "false");
+    }
+    if (lessonStatsOpen) {
+        setLessonStatsView(lessonStatsView || "overview");
+        updateLessonHeaderStats({ force: true });
+        updateLessonShopUi({ force: true });
+        setLessonStatsLivePolling(true);
+        requestAnimationFrame(() => {
+            if (el.lessonStatsClose) el.lessonStatsClose.focus();
+        });
+    } else {
+        lessonShopRenderKey = "";
+        setLessonStatsLivePolling(false);
+    }
+}
+
 function openShortcutHelp() {
     closeFileMenus();
     closeQuickOpen({ focusEditor: false });
@@ -10502,12 +11058,34 @@ function openShortcutHelp() {
     closeProjectSearch({ focusEditor: false });
     closeEditorHistory({ focusEditor: false });
     closeEditorSettings({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
     setShortcutHelpOpen(true);
 }
 
 function closeShortcutHelp({ focusEditor = true } = {}) {
     if (!shortcutHelpOpen) return;
     setShortcutHelpOpen(false);
+    if (focusEditor) editor.focus();
+}
+
+function openLessonStats({ view = "overview" } = {}) {
+    closeFileMenus();
+    closeQuickOpen({ focusEditor: false });
+    closeCommandPalette({ focusEditor: false });
+    closeEditorSearch({ focusEditor: false });
+    closeSymbolPalette({ focusEditor: false });
+    closeProjectSearch({ focusEditor: false });
+    closeEditorHistory({ focusEditor: false });
+    closeEditorSettings({ focusEditor: false });
+    closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
+    setLessonStatsView(view);
+    setLessonStatsOpen(true);
+}
+
+function closeLessonStats({ focusEditor = true } = {}) {
+    if (!lessonStatsOpen) return;
+    setLessonStatsOpen(false);
     if (focusEditor) editor.focus();
 }
 
@@ -11307,6 +11885,7 @@ function closeEditorHistory({ focusEditor = true } = {}) {
 }
 
 function scheduleEditorAutosave(reason = "autosave-edit") {
+    if (persistenceWritesLocked) return;
     if (editorAutosaveTimer) {
         clearTimeout(editorAutosaveTimer);
         editorAutosaveTimer = null;
@@ -11320,9 +11899,11 @@ function scheduleEditorAutosave(reason = "autosave-edit") {
 }
 
 function flushEditorAutosave() {
-    if (!editorAutosaveTimer) return;
-    clearTimeout(editorAutosaveTimer);
-    editorAutosaveTimer = null;
+    if (editorAutosaveTimer) {
+        clearTimeout(editorAutosaveTimer);
+        editorAutosaveTimer = null;
+    }
+    if (persistenceWritesLocked) return;
     persistFiles("autosave-flush");
     recordActiveCodeSnapshot("autosave-flush", { force: false });
 }
@@ -11814,6 +12395,7 @@ function openEditorSearch({ replaceMode = false } = {}) {
     closeQuickOpen({ focusEditor: false });
     closeCommandPalette({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
     closeSymbolPalette({ focusEditor: false });
     closeProjectSearch({ focusEditor: false });
     closeEditorHistory({ focusEditor: false });
@@ -12075,6 +12657,7 @@ function openProjectSearch() {
     closeQuickOpen({ focusEditor: false });
     closeCommandPalette({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
     closeEditorSearch({ focusEditor: false });
     closeSymbolPalette({ focusEditor: false });
     closeEditorHistory({ focusEditor: false });
@@ -12741,6 +13324,7 @@ function openSymbolPalette() {
     closeQuickOpen({ focusEditor: false });
     closeCommandPalette({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
     closeEditorSearch({ focusEditor: false });
     closeProjectSearch({ focusEditor: false });
     closeEditorHistory({ focusEditor: false });
@@ -16088,8 +16672,16 @@ function getCommandPaletteEntries() {
             label: `Theme: Switch to ${theme.charAt(0).toUpperCase()}${theme.slice(1)}`,
             keywords: `theme color style ${theme}`,
             shortcut: "",
-            enabled: currentTheme !== theme,
-            run: () => applyTheme(theme),
+            enabled: currentTheme !== theme || !isThemeUnlocked(theme),
+            run: () => {
+                if (!isThemeUnlocked(theme)) {
+                    const cost = getThemeByteCost(theme);
+                    setLessonShopNotice(`${getThemeDisplayLabel(theme)} requires ${cost} Bytes.`);
+                    openLessonStats({ view: "shop" });
+                    return;
+                }
+                applyTheme(theme, { source: "command" });
+            },
         })),
     ];
     return [...coreEntries, ...getRegisteredCommandEntries()];
@@ -16303,6 +16895,7 @@ function openCommandPalette({ query = "", focusInput = true } = {}) {
     closeQuickOpen({ focusEditor: false });
     closeFileMenus();
     closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
     closeEditorSearch({ focusEditor: false });
     closeSymbolPalette({ focusEditor: false });
     closeProjectSearch({ focusEditor: false });
@@ -16437,6 +17030,61 @@ function wireShortcutHelp() {
     }
     if (el.shortcutHelpBackdrop) {
         el.shortcutHelpBackdrop.addEventListener("click", () => closeShortcutHelp({ focusEditor: false }));
+    }
+}
+
+function wireLessonStats() {
+    if (el.btnLessonStats) {
+        el.btnLessonStats.addEventListener("click", () => openLessonStats({ view: "overview" }));
+    }
+    if (el.lessonStatsClose) {
+        el.lessonStatsClose.addEventListener("click", () => closeLessonStats({ focusEditor: true }));
+    }
+    if (el.lessonStatsBackdrop) {
+        el.lessonStatsBackdrop.addEventListener("click", () => closeLessonStats({ focusEditor: false }));
+    }
+    if (el.lessonStatsOverviewTab) {
+        el.lessonStatsOverviewTab.addEventListener("click", () => setLessonStatsView("overview"));
+    }
+    if (el.lessonStatsShopTab) {
+        el.lessonStatsShopTab.addEventListener("click", () => {
+            setLessonStatsView("shop");
+            updateLessonShopUi({ force: true });
+        });
+    }
+    if (el.lessonStatsShopList) {
+        el.lessonStatsShopList.addEventListener("click", (event) => {
+            const button = event.target?.closest?.("button[data-lesson-shop-theme]");
+            if (!(button instanceof HTMLElement)) return;
+            const themeName = normalizeTheme(button.dataset.lessonShopTheme, THEMES, "");
+            const action = String(button.dataset.lessonShopAction || "").trim().toLowerCase();
+            if (!themeName) return;
+
+            if (action === "buy") {
+                const cost = getThemeByteCost(themeName);
+                const bought = unlockLessonTheme(themeName, { spend: true });
+                if (!bought) {
+                    setLessonShopNotice(`Not enough Bytes for ${getThemeDisplayLabel(themeName)}.`);
+                    status.set("Not enough Bytes");
+                    updateLessonShopUi();
+                    return;
+                }
+                setLessonShopNotice(`Unlocked ${getThemeDisplayLabel(themeName)} for ${cost} Bytes.`);
+                logger.append("system", [`Theme unlocked: ${getThemeDisplayLabel(themeName)} (${cost} Bytes)`]);
+                renderHeaderThemeSelectOptions();
+                applyTheme(themeName, { source: "shop" });
+                updateLessonHeaderStats({ force: true });
+                updateLessonHud();
+                updateLessonShopUi({ force: true });
+                return;
+            }
+
+            if (action === "apply") {
+                applyTheme(themeName, { source: "shop" });
+                setLessonShopNotice(`Applied ${getThemeDisplayLabel(themeName)}.`);
+                updateLessonShopUi({ force: true });
+            }
+        });
     }
 }
 
@@ -16576,6 +17224,7 @@ async function hydrateFileState() {
 }
 
 function persistFiles(reason = "autosave") {
+    if (persistenceWritesLocked) return;
     if (!files.length || !activeFileId) return;
     openTabIds = normalizeOpenTabIds(openTabIds);
     pruneTrashEntries();
@@ -19942,6 +20591,19 @@ function exposeDebug() {
         getLessonProfile() {
             return getLessonProfileSnapshot();
         },
+        listThemeShop() {
+            return buildThemeShopSnapshot();
+        },
+        unlockTheme(theme, { spend = true } = {}) {
+            const ok = unlockLessonTheme(theme, { spend: Boolean(spend) });
+            if (ok) {
+                renderHeaderThemeSelectOptions();
+                updateLessonShopUi();
+                updateLessonHeaderStats({ force: true });
+                updateLessonHud();
+            }
+            return ok;
+        },
         listFilesSectionOrder() {
             return getFilesSectionOrder();
         },
@@ -19958,7 +20620,7 @@ function exposeDebug() {
             updateActiveFileCode(editor.get());
         },
         setTheme(theme) {
-            applyTheme(theme);
+            applyTheme(theme, { source: "api" });
             return currentTheme;
         },
         getTheme() {
@@ -20574,15 +21236,17 @@ async function boot() {
     setDiagnosticsVerbose(false);
     renderHeaderThemeSelectOptions();
     const storedTheme = load(STORAGE.THEME);
-    applyTheme(storedTheme || "dark", { persist: false });
+    applyTheme(storedTheme || "dark", { persist: false, source: "boot" });
     loadUiZoom();
     initDocking();
     initSplitters();
     window.addEventListener("beforeunload", () => {
+        if (persistenceWritesLocked) return;
         persistLessonProfile({ force: true });
         persistLessonSession({ force: true });
     });
     document.addEventListener("visibilitychange", () => {
+        if (persistenceWritesLocked) return;
         if (document.visibilityState === "hidden") {
             persistLessonProfile({ force: true });
             persistLessonSession({ force: true });
@@ -20592,6 +21256,7 @@ async function boot() {
     wireQuickOpen();
     wireCommandPalette();
     wireShortcutHelp();
+    wireLessonStats();
     wirePromptDialog();
     wireEditorScopeTrail();
     wireEditorSearch();
@@ -20604,6 +21269,7 @@ async function boot() {
     wireFooterMiddleMouseScroll();
     setLayoutPanelOpen(false);
     setShortcutHelpOpen(false);
+    setLessonStatsOpen(false);
     setEditorSearchOpen(false);
     setSymbolPaletteOpen(false);
     setProjectSearchOpen(false);
@@ -21397,7 +22063,7 @@ async function boot() {
     }
     if (el.themeSelect) {
         el.themeSelect.addEventListener("change", (event) => {
-            applyTheme(event.target.value);
+            applyTheme(event.target.value, { source: "header" });
         });
     }
     el.btnClearDiagnostics.addEventListener("click", () => {
@@ -21774,6 +22440,11 @@ async function boot() {
             closeShortcutHelp({ focusEditor: true });
             return;
         }
+        if (e.key === "Escape" && lessonStatsOpen) {
+            e.preventDefault();
+            closeLessonStats({ focusEditor: true });
+            return;
+        }
         if (e.key === "Escape" && editorSearchOpen) {
             e.preventDefault();
             closeEditorSearch({ focusEditor: true });
@@ -21826,6 +22497,7 @@ async function boot() {
         queueLayoutResizeSync();
     });
     window.addEventListener("beforeunload", (event) => {
+        if (persistenceWritesLocked) return;
         flushEditorAutosave();
         if (hasDirtyFiles()) {
             event.preventDefault();
@@ -21833,6 +22505,7 @@ async function boot() {
         }
     });
     window.addEventListener("pagehide", () => {
+        if (persistenceWritesLocked) return;
         flushEditorAutosave();
         setSessionState(false);
     });

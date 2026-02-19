@@ -14,6 +14,7 @@ const doctorRequiredScripts = [
   "test:memory",
   "test:frank:safety",
   "test:integrity",
+  "test:css",
   "test:privacy",
   "test:desktop:icon",
   "test:desktop:pack",
@@ -33,6 +34,7 @@ const fullGateSteps = [
   { script: "test:memory", label: "Validate AI memory docs" },
   { script: "test:frank:safety", label: "Validate Franklin safety" },
   { script: "test:integrity", label: "Validate test integrity rules" },
+  { script: "test:css", label: "Validate CSS safety contracts" },
   { script: "test", label: "Run Playwright E2E suite" },
   { script: "test:desktop:icon", label: "Build desktop icons" },
   { script: "test:desktop:pack", label: "Pack desktop app" },
@@ -1619,7 +1621,10 @@ async function runParallelMode() {
   const stageResults = [];
   const logRun = createStageLogRun("parallel-gate");
 
-  const sequentialHead = fullGateSteps.slice(0, 7);
+  const testStepIndex = fullGateSteps.findIndex((step) => step.script === "test");
+  const sequentialHead = testStepIndex >= 0
+    ? fullGateSteps.slice(0, testStepIndex + 1)
+    : [...fullGateSteps];
   console.log(styleText("FRANKLEEN PARALLEL MODE", ansiStyles.bold, ansiStyles.cyan));
   console.log(styleText("Phase 1: sequential core gate", ansiStyles.dim));
 
@@ -1653,7 +1658,9 @@ async function runParallelMode() {
 
   console.log(styleText("Phase 2: parallel release tail", ansiStyles.dim));
   const branchDesktop = async () => {
-    const branch = [fullGateSteps[7], fullGateSteps[8], fullGateSteps[9]];
+    const branch = ["test:desktop:icon", "test:desktop:pack", "test:desktop:dist"]
+      .map((scriptName) => fullGateSteps.find((step) => step.script === scriptName))
+      .filter(Boolean);
     const results = [];
     for (const step of branch) {
       const stepStartedAt = Date.now();
@@ -1679,7 +1686,9 @@ async function runParallelMode() {
   };
 
   const branchDeploy = async () => {
-    const branch = [fullGateSteps[10], fullGateSteps[11], fullGateSteps[12]];
+    const branch = ["deploy:siteground", "verify:siteground", "test:privacy"]
+      .map((scriptName) => fullGateSteps.find((step) => step.script === scriptName))
+      .filter(Boolean);
     const results = [];
     for (const step of branch) {
       const stepStartedAt = Date.now();

@@ -12,11 +12,26 @@
         <head>
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>FAZ IDE</title>
-            <meta name="description" content="FAZ IDE: a tiny in-browser IDE for JavaScript experiments." />
+            <title>FAZ IDE — Local-First Web IDE for JavaScript, HTML, and CSS</title>
+            <meta name="description" content="FAZ IDE is a local-first web IDE with files, sandbox, diagnostics, and lesson workflows for JavaScript, HTML, and CSS." />
+            <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+            <meta name="theme-color" content="#0f1117" />
+            <link rel="canonical" href="./" />
+            <meta property="og:type" content="website" />
+            <meta property="og:site_name" content="FAZ IDE" />
+            <meta property="og:title" content="FAZ IDE — Local-First Web IDE" />
+            <meta property="og:description" content="Local-first JavaScript, HTML, and CSS IDE with sandbox execution, diagnostics, and lesson workflows." />
+            <meta property="og:url" content="./" />
+            <meta property="og:image" content="./assets/icons/faz-512.png" />
+            <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:title" content="FAZ IDE — Local-First Web IDE" />
+            <meta name="twitter:description" content="Local-first JavaScript, HTML, and CSS IDE with sandbox execution, diagnostics, and lesson workflows." />
+            <meta name="twitter:image" content="./assets/icons/faz-512.png" />
             <link rel="manifest" href="./manifest.webmanifest" />
             <link rel="icon" href="./favicon.ico" sizes="any" />
-            <link rel="apple-touch-icon" href="./assets/icons/faz-192.svg" />
+            <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/faz-192.png" />
+            <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/faz-512.png" />
+            <link rel="apple-touch-icon" sizes="192x192" href="./assets/icons/faz-192.png" />
             <link rel="preconnect" href="https://fonts.googleapis.com" />
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
             <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Inconsolata:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Ubuntu+Mono:wght@400;700&display=swap" />
@@ -48,7 +63,7 @@
                     <header class="top strip" aria-label="Top bar">
                         <div class="strip-left">
                             <div class="brand">
-                                <h1 aria-label="Project by Faz (FazyBear)"></h1>
+                                <h1 aria-label="Project by Faz (FazyBear)">FAZ IDE</h1>
                             </div>
                             <div class="strip-group" aria-label="Panel toggles">
                                 <button id="toggleLog" type="button" data-panel-toggle="true" aria-controls="logPanel" aria-expanded="true">Console</button>
@@ -69,6 +84,7 @@
                                 >
                                     ?
                                 </button>
+                                <button id="lessonStatsBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="lessonStatsPanel">Lessons</button>
                             </div>
                             <div id="themeMenuGroup" class="strip-group strip-theme-group" aria-label="Theme">
                                 <label class="sr-only" for="themeSelect">Theme</label>
@@ -317,7 +333,9 @@
                                             <span id="lessonHudProgress" class="lesson-hud-chip">0/0</span>
                                             <span id="lessonHudLevel" class="lesson-hud-chip">Lv 1</span>
                                             <span id="lessonHudXp" class="lesson-hud-chip">XP 0</span>
+                                            <span id="lessonHudCoins" class="lesson-hud-chip">Coins 0</span>
                                             <span id="lessonHudStreak" class="lesson-hud-chip">Streak 0</span>
+                                            <span id="lessonHudPace" class="lesson-hud-chip">WPM 0</span>
                                         </div>
                                         <div class="lesson-hud-rail" aria-hidden="true">
                                             <span id="lessonHudFill" class="lesson-hud-fill"></span>
@@ -853,6 +871,73 @@
                             <li><span>Trash file/selection (Files panel focus)</span><kbd>Delete</kbd></li>
                             <li><span>Open file menu (Files panel focus)</span><kbd>Shift + F10</kbd></li>
                         </ul>
+                    </div>
+                </div>
+            </section>
+
+            <div id="lessonStatsBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="lessonStatsPanel" class="layout-panel lesson-stats-panel" data-open="false" aria-hidden="true" aria-label="Lessons" role="dialog" aria-modal="true">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Lessons</p>
+                        <p class="layout-sub">Progress, live stats, and theme shop</p>
+                    </div>
+                    <button id="lessonStatsClose" type="button">Close</button>
+                </header>
+                <div class="layout-body lesson-stats-body" id="lessonHeaderStats" aria-live="polite" aria-label="Lesson stats summary">
+                    <div class="lesson-stats-tabs" role="group" aria-label="Lessons panel views">
+                        <button id="lessonStatsOverviewTab" type="button" class="lesson-stats-tab" data-active="true" aria-pressed="true">Overview</button>
+                        <button id="lessonStatsShopTab" type="button" class="lesson-stats-tab" data-active="false" aria-pressed="false">Shop</button>
+                    </div>
+
+                    <div id="lessonStatsOverview" class="lesson-stats-view" aria-hidden="false">
+                        <div class="lesson-stats-hero">
+                            <p id="lessonStatsHeroTitle" class="lesson-stats-hero-title">Code Cadet</p>
+                            <p id="lessonStatsHeroSubtitle" class="lesson-stats-hero-sub">Build rhythm with clean, steady reps.</p>
+                            <div class="lesson-stats-next" aria-label="Progress to next level">
+                                <span id="lessonStatsNextLabel" class="lesson-stats-next-label">Next level in 250 XP</span>
+                                <div class="lesson-stats-next-rail" aria-hidden="true">
+                                    <span id="lessonStatsNextFill" class="lesson-stats-next-fill"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lesson-stats-grid" role="list">
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Level</span><strong id="lessonHeaderLevel">Lv 1</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">XP</span><strong id="lessonHeaderXp">XP 0</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Bytes</span><strong id="lessonHeaderCoins">Bytes 0</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Lessons</span><strong id="lessonHeaderCompleted">Done 0</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Best Streak</span><strong id="lessonHeaderBest">Best 0</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Daily Streak</span><strong id="lessonHeaderDaily">Daily 0</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Accuracy</span><strong id="lessonHeaderAccuracy">Acc 100%</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Pace</span><strong id="lessonHeaderWpm">WPM 0</strong></div>
+                            <div class="lesson-stats-card" role="listitem"><span class="lesson-stats-label">Last Active</span><strong id="lessonStatsLastActive">--</strong></div>
+                        </div>
+
+                        <div class="lesson-stats-session">
+                            <p id="lessonStatsSessionState" class="lesson-stats-session-title">No active lesson session</p>
+                            <div class="lesson-stats-session-grid" role="list">
+                                <div class="lesson-stats-line" role="listitem"><span>Step</span><strong id="lessonStatsStep">--</strong></div>
+                                <div class="lesson-stats-line" role="listitem"><span>Progress</span><strong id="lessonStatsProgress">0/0</strong></div>
+                                <div class="lesson-stats-line" role="listitem"><span>Session XP</span><strong id="lessonStatsSessionXp">0</strong></div>
+                                <div class="lesson-stats-line" role="listitem"><span>Mistakes</span><strong id="lessonStatsMistakes">0</strong></div>
+                                <div class="lesson-stats-line" role="listitem"><span>Streak</span><strong id="lessonStatsStreak">0</strong></div>
+                                <div class="lesson-stats-line" role="listitem"><span>Typed</span><strong id="lessonStatsTyped">0</strong></div>
+                                <div class="lesson-stats-line" role="listitem"><span>Correct</span><strong id="lessonStatsCorrect">0</strong></div>
+                                <div class="lesson-stats-line" role="listitem"><span>Elapsed</span><strong id="lessonStatsElapsed">0s</strong></div>
+                            </div>
+                        </div>
+
+                        <p id="lessonStatsSafety" class="lesson-stats-safety">Privacy-safe: all lesson stats stay local in your browser.</p>
+                    </div>
+
+                    <div id="lessonStatsShop" class="lesson-stats-view lesson-stats-shop" hidden aria-hidden="true">
+                        <div class="lesson-shop-header">
+                            <strong id="lessonShopBytes">Bytes 0</strong>
+                            <span>Unlock and apply themes</span>
+                        </div>
+                        <ul id="lessonStatsShopList" class="lesson-shop-list" role="list"></ul>
+                        <p id="lessonStatsShopHint" class="lesson-stats-safety">Buy themes using Bytes earned from lessons.</p>
                     </div>
                 </div>
             </section>

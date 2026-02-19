@@ -71,6 +71,7 @@ Do not end session until all are true:
 - Open risks are explicit and actionable.
 - Rollback direction is documented for risky changes.
 - No contradictory statements across memory files.
+- If release packaging was touched, confirm `SITE_URL` deployment step is documented and verified (`deploy:siteground` output files).
 
 ## Fast Command Set
 

@@ -16,3 +16,5 @@ This folder contains the Electron wrapper for running FAZ IDE as a desktop app.
 ## Notes
 - Keep `dist_site/` up to date before packaging.
 - Desktop mode does not require starting `scripts/serve.js`.
+- Web release uploads are prepared from `release/siteground/public_html` using `npm run deploy:siteground`.
+- For production web deploys, set `SITE_URL` first so packaged canonical/OG/sitemap URLs are stamped correctly.

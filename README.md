@@ -107,6 +107,11 @@ Master product direction and phased implementation plan:
 
 See `docs/RELEASE_CHECKLIST.md` for the safe pre-upload and deployment flow.
 
+Production domain stamping note:
+
+- Before `npm run deploy:siteground`, set `SITE_URL` in PowerShell so packaged canonical/OG/sitemap URLs are correct.
+- Example: `$env:SITE_URL = "https://yourdomain.com"`
+
 ## Desktop App (Safe Path)
 
 Run FAZ IDE as a desktop app without changing the web runtime:
@@ -126,6 +131,7 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run test` runs the full Playwright E2E suite.
 - `npm run test:quick` runs sync check + AI memory check + test integrity check + full E2E suite.
 - `npm run test:all` runs sync check + E2E + desktop icon + desktop pack + desktop dist checks + SiteGround package prep/verification (full safe release gate).
+- `npm run deploy:siteground` supports optional `SITE_URL` rewrite for packaged `canonical`, `og:url`, and `sitemap.xml` `<loc>` entries.
 - `npm run test:desktop:icon` validates desktop icon generation.
 - `npm run test:desktop:pack` validates desktop unpacked build generation.
 - `npm run test:desktop:dist` validates desktop installer generation.

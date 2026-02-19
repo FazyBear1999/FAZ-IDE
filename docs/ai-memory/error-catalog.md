@@ -29,6 +29,10 @@
   - Meaning: Required file/dir missing in package output.
   - Fix: Run `npm run deploy:siteground`, then `npm run verify:siteground`, inspect missing path report.
 
+- Error: `Packaged canonical/og/sitemap URLs still use default or placeholder domain`
+  - Meaning: SiteGround package was prepared without production `SITE_URL`.
+  - Fix: Set `SITE_URL` (PowerShell: `$env:SITE_URL = "https://yourdomain.com"`), rerun `npm run deploy:siteground`, then re-check `release/siteground/public_html/index.html` and `release/siteground/public_html/sitemap.xml`.
+
 - Error: `Missing source directory: assets/apps`
   - Meaning: `sync:dist-site` map expects `assets/apps` but source directory was missing.
   - Fix: Restore or recreate `assets/apps` (and expected app files), then rerun `npm run sync:dist-site`.

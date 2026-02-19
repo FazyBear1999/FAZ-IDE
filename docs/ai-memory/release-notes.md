@@ -15,6 +15,13 @@ Entries should make it easy to understand what changed and why validation gates 
 ## Entries
 
 - Version: 0.2.0
+- Date (UTC): 2026-02-19
+- Summary: Final release-readiness hardening pass completed for SEO metadata and SiteGround domain packaging.
+- Notable safety/infra updates: Added canonical/`og:url` defaults in source HTML, added optional `SITE_URL` rewrite support in SiteGround package prep for canonical/`og:url` and sitemap `<loc>`, and expanded `docs/RELEASE_CHECKLIST.md` to include domain input, SEO/icon verification, and crawl sanity checks.
+- Validation status: `npm run frank:full` passed (14/14), `npm run test -- tests/release.spec.js` passed (10/10), `npm run test:memory` passed, and package rewrite verified by `deploy:siteground` + file assertions.
+- Follow-up actions: During production cutover, set `SITE_URL` before `npm run deploy:siteground` to stamp final canonical/social/sitemap URLs in upload package output.
+
+- Version: 0.2.0
 - Date (UTC): 2026-02-17
 - Summary: Hardened panel resizing behavior with a row-aware 3-column bounds model.
 - Notable safety/infra updates: Width clamping now stays consistent across splitters, layout controls, and public API setters; improved max-width flexibility while preserving minimum width safeguards.
@@ -804,3 +811,45 @@ Entries should make it easy to understand what changed and why validation gates 
 - Notable safety/infra updates: `scripts/ai-command-center.js` now infers `C5/C7` for architecture-spine and layout-engine/docking surfaces, and roadmap-memory target linking now includes `C5/C6/C7` (not just `C4`).
 - Validation status: `npm run ai:command-center -- --json` now reports `C5` and `C7` for the current working tree; `npm run test:integrity` passed after the script update.
 - Follow-up actions: Add a focused scripts contract for checkpoint inference mapping to prevent silent drift when checkpoint definitions evolve.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Upgraded Lesson Stats modal to be more memorable while preserving strict local-only safety behavior.
+- Notable safety/infra updates: Added a performance hero, next-level XP progress rail, richer session insight fields, and explicit local-only privacy copy; hardened modal centering + overflow behavior for tight viewport conditions.
+- Validation status: Targeted modal/lesson tests in `tests/ide.spec.js` passed (including center+scroll and live-stats modal contracts), and diagnostics remained clean for edited files.
+- Follow-up actions: Keep modal engagement features behavior-safe (no external telemetry) and require viewport-stress regressions for future modal layout changes.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Optimized lesson runtime smoothness while keeping behavior stable.
+- Notable safety/infra updates: Reduced redundant lesson stats computation by reusing session metrics snapshots, constrained stats-modal live polling to active lesson sessions, and added throttled HUD pulse/haptic pacing for rapid typing bursts (including mismatch feedback) to avoid effect spam.
+- Validation status: Focused lesson regressions in `tests/ide.spec.js` passed (`5 passed, 0 failed`), including new haptic-throttle burst contract and live elapsed modal-update contract.
+- Follow-up actions: Keep lesson feedback throttles tuned for responsiveness and treat burst-input regressions as blocker-level for future lesson UX changes.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-19
+- Summary: Started lesson economy phase 1 with local-only coin rewards and coin HUD/stats visibility.
+- Notable safety/infra updates: Added `coins` to lesson profile sanitization/persistence with backward-safe defaults; awarded coins on step completion, lesson completion/perfect completion, and streak milestones; exposed coin totals in lesson HUD and Lesson Stats modal without adding telemetry/network paths.
+- Validation status: Focused Playwright lesson regressions in `tests/ide.spec.js` passed for updated XP+HUD contracts, stats modal coin rendering, and streak coin milestone behavior (`3 passed, 0 failed`).
+- Follow-up actions: Add unlock/shop gating in a separate wave with anti-farm and spend-contract tests before enabling theme purchases.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Deep lessons audit + performance optimization for HUD/Stats/Shop update path.
+- Notable safety/infra updates: Optimized `updateLessonShopUi` to be visibility-aware and render-key cached, preventing repeated shop-list DOM rebuilds during live typing/stats updates when Shop is hidden; reset shop render cache only on modal close; kept local-only lesson safety behavior unchanged.
+- Validation status: Focused lesson/HUD modal regressions in `tests/ide.spec.js` passed (`5 passed, 0 failed`) after optimization and compact HUD polish.
+- Follow-up actions: Add strict-bytes shop gating checkpoint tests before changing default unlocked-theme compatibility behavior.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Lessons modal runtime overhead reduced further with shop-tab-aware refresh gating.
+- Notable safety/infra updates: `updateLessonHeaderStats` now refreshes shop UI only when the Lessons modal is open on the Shop tab, removing needless per-update shop refresh calls during Overview/live typing; added regression contract that shop list DOM is not rebuilt while Overview remains active.
+- Validation status: Focused lesson regressions in `tests/ide.spec.js` passed (`5 passed, 0 failed`), including new "lesson shop list does not re-render while overview tab is active" test.
+- Follow-up actions: Continue prioritizing hidden-work elimination and keep strict-bytes unlock-policy coverage as the next policy wave.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-18
+- Summary: Hardened release gate parity and upgraded website SEO/icon packaging for production uploads.
+- Notable safety/infra updates: `frank:full` now runs `test:css` in its full gate and parallel flow is now script-name-driven (safer against step-order changes); added web crawler artifacts (`robots.txt`, `sitemap.xml`) and expanded head metadata (`robots`, `theme-color`, Open Graph, Twitter), plus PNG web icons (`assets/icons/faz-192.png`, `assets/icons/faz-512.png`) wired into `index.html` and `manifest.webmanifest`; dist/siteground sync+verify now include the new SEO files.
+- Validation status: `npm run frank:full` passed all 14 stages; focused release contracts in `tests/release.spec.js` passed (`10 passed`), including new Franklin full-gate CSS and SEO metadata/file presence contracts.
+- Follow-up actions: Use `SITE_URL` during `npm run deploy:siteground` so packaged canonical/OG/sitemap URLs are stamped with the live production domain.
