@@ -16,13 +16,6 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
-- Summary: Added a square-themed startup loading screen with short boot checks and safe handoff to IDE shell.
-- Notable safety/infra updates: Added `#bootScreen` startup overlay in `index.html`, square-token styles in `assets/css/layout.css`, and bounded boot controller in `assets/js/app.js` with quick checks (`dom`, `storage`, `editor`, `runtime`) plus automation bypass (`navigator.webdriver`) to keep CI stable.
-- Validation status: `npm run test:quick` passed, and release contract `startup loading screen is wired and automation-safe` passed via `tests/release.spec.js`.
-- Follow-up actions: Keep splash duration short and check list lightweight; retain automation-safe bypass for deterministic test execution.
-
-- Version: 0.2.0
-- Date (UTC): 2026-02-19
 - Summary: Closed C2 sandbox runtime status determinism gap with explicit JS/HTML/CSS status-marker pairing contract.
 - Notable safety/infra updates: Added focused runtime test in `tests/ide.spec.js` that executes runtime JS/HTML/CSS applications, asserts run-status health, and verifies deterministic per-template markers across console/sandbox outputs.
 - Validation status: `npx playwright test --config config/playwright.config.js --grep 'sandbox runtime status and markers remain deterministic for JS HTML and CSS templates' tests/ide.spec.js` passed, `npm run test:integrity` passed, `npm run test:memory` passed, and full project check `npm run test:all` passed.

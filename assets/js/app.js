@@ -127,68 +127,6 @@ const commandRegistry = createCommandRegistry({
 const formatter = createFormatter({ fallbackFormat: formatBasic });
 const astClient = createAstClient();
 
-const BOOT_SCREEN_MIN_MS = 3200;
-const BOOT_SCREEN_MAX_MS = 4200;
-const BOOT_SCREEN_FADE_MS = 220;
-
-function createBootScreenController() {
-    const root = typeof document !== "undefined" ? document.getElementById("bootScreen") : null;
-    const statusNode = typeof document !== "undefined" ? document.getElementById("bootScreenStatus") : null;
-    const startedAt = Date.now();
-    const automation = typeof navigator !== "undefined" && Boolean(navigator.webdriver);
-
-    if (!root || automation) {
-        if (root) root.hidden = true;
-        return {
-            mark() {},
-            async finish() {},
-            async fail() {},
-        };
-    }
-
-    if (typeof document !== "undefined" && document.body) {
-        document.body.setAttribute("data-boot-screen", "true");
-    }
-
-    function mark(checkId, state = "pass", message = "") {
-        const item = root.querySelector(`[data-check="${String(checkId || "")}"]`);
-        if (item) item.setAttribute("data-state", String(state || "pending"));
-        if (statusNode && message) statusNode.textContent = String(message || "");
-    }
-
-    async function finish({ status = "ready", message = "Startup checks complete." } = {}) {
-        if (statusNode && message) statusNode.textContent = message;
-        const elapsed = Date.now() - startedAt;
-        const minRemaining = Math.max(0, BOOT_SCREEN_MIN_MS - elapsed);
-        const maxRemaining = Math.max(0, BOOT_SCREEN_MAX_MS - elapsed);
-        const delay = maxRemaining > 0 ? Math.min(minRemaining, maxRemaining) : minRemaining;
-        if (delay > 0) {
-            await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-        root.dataset.state = status;
-        root.classList.add("is-hiding");
-        if (typeof document !== "undefined" && document.body) {
-            document.body.removeAttribute("data-boot-screen");
-        }
-        await new Promise((resolve) => setTimeout(resolve, BOOT_SCREEN_FADE_MS));
-        root.hidden = true;
-    }
-
-    async function fail(message = "Startup checks failed. Continuing in safe mode...") {
-        mark("runtime", "warn", message);
-        await finish({ status: "warn", message });
-    }
-
-    return {
-        mark,
-        finish,
-        fail,
-    };
-}
-
-const bootScreen = createBootScreenController();
-bootScreen.mark("dom", "pass", "UI shell ready. Running startup checks...");
-
 const health = {
     editor: el.healthEditor,
     sandbox: el.healthSandbox,
@@ -21110,18 +21048,6 @@ function exitRunnerFullscreen() {
 }
 
 async function boot() {
-    const storageBootCheck = (() => {
-        try {
-            const key = "__fazide_boot_check__";
-            localStorage.setItem(key, "1");
-            localStorage.removeItem(key);
-            return true;
-        } catch {
-            return false;
-        }
-    })();
-    bootScreen.mark("storage", storageBootCheck ? "pass" : "warn", storageBootCheck ? "Storage check passed." : "Storage check limited.");
-
     const recoveredStorageJournal = recoverStorageJournal();
     loadLessonProfile();
     loadEditorSettings();
@@ -21192,7 +21118,6 @@ async function boot() {
     const editorLabel = editor.type === "codemirror" ? "CodeMirror" : "Textarea";
     const editorState = editor.type === "codemirror" ? "ok" : "warn";
     setHealth(health.editor, editorState, `Editor: ${editorLabel}`);
-    bootScreen.mark("editor", editor.type === "codemirror" ? "pass" : "warn", `Editor ready: ${editorLabel}.`);
     setHealth(health.sandbox, "idle", "Sandbox: Idle");
     if (editor.type !== "codemirror") {
         pushDiag("warn", "CodeMirror not detected. Falling back to textarea.");
@@ -21270,10 +21195,6 @@ async function boot() {
         logger.append("system", ["Recovered workspace from snapshot backup."]);
         status.set("Recovered snapshot");
     }
-
-    const runtimeReady = typeof Worker !== "undefined";
-    bootScreen.mark("runtime", runtimeReady ? "pass" : "warn", runtimeReady ? "Runtime checks passed." : "Runtime checks passed with limits.");
-    await bootScreen.finish({ status: "ready", message: "FAZ IDE ready." });
 
     // Autosave on edit
     // Notes:
@@ -22661,5 +22582,4 @@ boot().catch((err) => {
     console.error("FAZ IDE boot failed:", err);
     status.set("Boot failed");
     logger.append("error", [`Boot failed: ${String(err?.message || err)}`]);
-    void bootScreen.fail("Startup checks failed. Boot logs captured.");
 });
