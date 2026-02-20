@@ -3600,6 +3600,7 @@ function applyLayout({ animatePanels = false } = {}) {
     if (header) setAriaHidden(header, !layoutState.headerOpen);
     const footer = document.querySelector(".foot");
     if (footer) setAriaHidden(footer, !layoutState.footerOpen);
+    applySystemFontFamily();
     if (document.documentElement) {
         document.documentElement.style.setProperty("--radius", `${layoutState.panelRadius}px`);
         document.documentElement.style.setProperty("--radius-sm", `${Math.max(0, Math.round(layoutState.panelRadius * 0.8))}px`);
@@ -4293,6 +4294,7 @@ function sanitizeLayoutState(state = {}) {
     next.panelReflowAnimation = state.panelReflowAnimation !== undefined
         ? Boolean(state.panelReflowAnimation)
         : layoutState.panelReflowAnimation;
+    next.systemFontFamily = normalizeSystemFontFamily(state.systemFontFamily ?? layoutState.systemFontFamily ?? "default");
     return next;
 }
 
@@ -4429,6 +4431,9 @@ function syncLayoutControls() {
     if (el.layoutHeaderOpen) el.layoutHeaderOpen.checked = layoutState.headerOpen;
     if (el.layoutFooterOpen) el.layoutFooterOpen.checked = layoutState.footerOpen;
     if (el.layoutPreset) el.layoutPreset.value = "";
+    if (el.layoutSystemFontSelect) {
+        el.layoutSystemFontSelect.value = normalizeSystemFontFamily(layoutState.systemFontFamily);
+    }
 
     if (el.layoutLogWidth) {
         el.layoutLogWidth.min = logBounds.min;
@@ -12690,6 +12695,10 @@ function normalizeEditorFontFamily(value) {
     return "default";
 }
 
+function normalizeSystemFontFamily(value) {
+    return normalizeEditorFontFamily(value);
+}
+
 function normalizeEditorSyntaxTheme(value) {
     const raw = String(value || "").trim().toLowerCase();
     const normalized = EDITOR_SYNTAX_THEME_ALIASES[raw] || raw;
@@ -12795,6 +12804,18 @@ function applyEditorFontFamily() {
     document.documentElement.style.setProperty("--editor-font-family", fontStack);
     editor.setFontFamily?.(fontStack);
     editor.refresh?.();
+}
+
+function applySystemFontFamily() {
+    const systemFontFamily = normalizeSystemFontFamily(layoutState?.systemFontFamily);
+    const root = document?.documentElement;
+    if (!root) return;
+    if (systemFontFamily === "default") {
+        root.style.removeProperty("--font");
+        return;
+    }
+    const fontStack = EDITOR_FONT_FAMILY_OPTIONS[systemFontFamily] || EDITOR_FONT_FAMILY_OPTIONS.default;
+    root.style.setProperty("--font", fontStack);
 }
 
 function getEditorCompletionMaxItems() {
@@ -23758,6 +23779,15 @@ async function boot() {
             if (!value) return;
             applyLayoutPreset(value);
             event.target.value = "";
+        });
+    }
+    if (el.layoutSystemFontSelect) {
+        el.layoutSystemFontSelect.addEventListener("change", (event) => {
+            layoutState.systemFontFamily = normalizeSystemFontFamily(event.target.value);
+            applySystemFontFamily();
+            persistLayout();
+            syncLayoutControls();
+            status.set(`System font: ${layoutState.systemFontFamily === "default" ? "Default UI Font" : event.target.options[event.target.selectedIndex]?.textContent || "Custom"}`);
         });
     }
     if (el.layoutOrderLog) {

@@ -238,35 +238,65 @@
     --control-size-sm: 26px;
     --control-size-md: 28px;
     --control-size-lg: 30px;
-    --field-pad-y: 7px;
-    --field-pad-x: 10px;
+    --space-0: 0px;
+    --space-1: 1px;
+    --space-2: 2px;
+    --space-3: 3px;
+    --space-4: 4px;
+    --space-5: 5px;
+    --space-6: 6px;
+    --space-7: 7px;
+    --space-8: 8px;
+    --space-9: 9px;
+    --space-10: 10px;
+    --space-12: 12px;
+    --space-14: 14px;
+    --space-24: 24px;
+    --space-22: 22px;
+    --field-pad-y: var(--space-7);
+    --field-pad-x: var(--space-10);
+    --text-size-6xs: 8px;
+    --text-size-6xs-plus: 8.5px;
+    --text-size-5xs: 9px;
+    --text-size-5xs-plus: 9.5px;
+    --text-size-4xs: 10px;
+    --text-size-4xs-quarter: 10.25px;
+    --text-size-4xs-plus: 10.5px;
+    --text-size-3xs: 11px;
+    --text-size-3xs-quarter: 11.25px;
+    --text-size-3xs-plus: 11.5px;
     --text-size-2xs: 12px;
+    --text-size-2xs-plus: 12.5px;
     --text-size-xs: 13px;
+    --text-size-sm: 14px;
+    --text-size-md: 15px;
+    --text-size-base: 16px;
+    --text-size-lg: 18px;
     --top-theme-width: 126px;
     --panel-min-width: 180px;
     --panel-min-width-editor: 240px;
     --panel-min-width-bottom: 140px;
     --top-height: 40px;
-    --top-pad-inline: 8px;
-    --footer-pad-block: 6px;
-    --footer-pad-inline: 10px;
-    --footer-chip-height: 22px;
-    --footer-gap: 6px;
-    --footer-cell-gap: 5px;
-    --footer-cluster-gap: 8px;
-    --footer-item-pad-inline: 2px;
+    --top-pad-inline: var(--space-8);
+    --footer-pad-block: var(--space-6);
+    --footer-pad-inline: var(--space-10);
+    --footer-chip-height: var(--space-22);
+    --footer-gap: var(--space-6);
+    --footer-cell-gap: var(--space-5);
+    --footer-cluster-gap: var(--space-8);
+    --footer-item-pad-inline: var(--space-2);
     --footer-line-height: 1.15;
     --footer-grid-status: max-content;
     --footer-grid-privacy: max-content;
     --footer-grid-editor: minmax(max-content, 1fr);
     --footer-grid-runtime: minmax(max-content, 1fr);
-    --lesson-hud-offset: 8px;
-    --lesson-hud-width: 14px;
-    --splitter-hit-area: 16px;
-    --splitter-overlap: 8px;
+    --lesson-hud-offset: var(--space-8);
+    --lesson-hud-width: var(--space-14);
+    --splitter-hit-area: var(--text-size-base);
+    --splitter-overlap: var(--space-8);
     --modal-radius: var(--radius-sm);
-    --modal-padding: 10px;
-    --modal-gap: 8px;
+    --modal-padding: var(--space-10);
+    --modal-gap: var(--space-8);
     --modal-border-color: var(--border-control);
     --modal-surface: var(--menu-bg);
     --modal-shadow: var(--menu-shadow);
@@ -281,21 +311,32 @@
     --modal-width-lg: min(700px, calc(100vw - 24px));
 
     /* Scrollbars */
-    --scrollbar-size: 4px;
-    --scrollbar-thumb-border: 1px;
+    --scrollbar-size: var(--space-4);
+    --scrollbar-thumb-border: var(--space-1);
     --scrollbar-thumb: rgba(148, 163, 184, 0.28);
     --scrollbar-thumb-hover: rgba(148, 163, 184, 0.45);
 
     /* Tools panel layout tokens */
-    --tools-gap: 6px;
-    --tools-pad: 6px;
-    --tools-section-pad: 8px;
-    --tools-section-gap: 6px;
-    --tools-header-gap: 6px;
-    --tools-action-gap: 6px;
+    --tools-gap: var(--space-6);
+    --tools-pad: var(--space-6);
+    --tools-section-pad: var(--space-8);
+    --tools-section-gap: var(--space-6);
+    --tools-header-gap: var(--space-6);
+    --tools-action-gap: var(--space-6);
     --tools-action-min-height: var(--control-height-sm);
     --tools-action-font-size: var(--text-size-2xs);
     --tools-section-min-height: 110px;
+
+    /* Micro primitives (consistency + safer refactors) */
+    --stroke-1: var(--space-1);
+    --stroke-2: var(--space-2);
+    --stroke-3: var(--space-3);
+    --ring-size-sm: var(--space-1);
+    --ring-size-md: var(--space-2);
+    --letter-spacing-tight: 0.2px;
+    --letter-spacing-ui: 0.3px;
+    --letter-spacing-ui-plus: 0.35px;
+    --letter-spacing-ui-strong: 0.4px;
 
     /* Radius + shadow */
     --radius: 0px;
@@ -315,7 +356,7 @@
     --font: "Inter", "Segoe UI Variable", "Segoe UI", "Noto Sans", Roboto, system-ui, -apple-system, sans-serif;
     --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --editor-font-family: var(--mono);
-    --app-font-size: 16px;
+    --app-font-size: var(--text-size-base);
 }
 
 /* Reset */

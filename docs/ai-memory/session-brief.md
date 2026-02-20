@@ -31,6 +31,7 @@
 - Reliable workspace import/export and persistence.
 - Strong release gating (`npm run test:all`).
 - Domain-accurate SiteGround packaging (`SITE_URL`) for canonical/OG/sitemap output.
+- CSS maintainability hardening via shared micro-primitives and token-first styling updates.
 
 ## Open Issues Snapshot
 - (none)
@@ -44,11 +45,14 @@
 - README.md
 - docs/CHANGELOG.md
 - docs/RELEASE_CHECKLIST.md
-- docs/ai-memory/README.md
+- docs/ai-memory/release-notes.md
 - docs/ai-memory/decisions.md
+- assets/css/base.css
+- assets/css/layout.css
+- assets/css/components.css
+- docs/ai-memory/README.md
 - docs/ai-memory/handoff-checklist.md
 - docs/ai-memory/project-context.md
-- docs/ai-memory/release-notes.md
 - docs/ai-memory/session-brief.md
 - docs/ai-memory/session-command-center.md
 

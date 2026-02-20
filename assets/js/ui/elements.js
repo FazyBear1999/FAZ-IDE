@@ -260,6 +260,7 @@ export function getRequiredElements() {
         layoutTutorial: $("#layoutTutorial"),
         layoutReset: $("#layoutReset"),
         layoutPreset: $("#layoutPreset"),
+        layoutSystemFontSelect: $("#layoutSystemFontSelect"),
         layoutOrderLog: $("#layoutOrderLog"),
         layoutRowLog: $("#layoutRowLog"),
         layoutOrderEditor: $("#layoutOrderEditor"),

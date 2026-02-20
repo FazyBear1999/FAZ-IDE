@@ -15,6 +15,13 @@ Entries should make it easy to understand what changed and why validation gates 
 ## Entries
 
 - Version: 0.2.0
+- Date (UTC): 2026-02-20
+- Summary: Completed CSS maintainability Phase 2 by consolidating repeated letter-spacing values and high-churn UI primitives into shared tokens.
+- Notable safety/infra updates: Added shared micro-primitives in `assets/css/base.css` (`--stroke-*`, `--ring-size-*`, `--letter-spacing-*`), refactored high-churn rules in `assets/css/layout.css` and `assets/css/components.css` to consume those primitives, and removed remaining repeated `letter-spacing: 0.2/0.3/0.35/0.4px` literals from `components.css`.
+- Validation status: Focused contracts passed after refactor batches (`css-token-contract`, `layout-micro`, `ui-contract`, `theme-readability-contract`), with no CSS diagnostics in touched files.
+- Follow-up actions: Keep future CSS additions bound to shared micro-primitives first, then promote any new repeated values into base tokens before broad selector rollout.
+
+- Version: 0.2.0
 - Date (UTC): 2026-02-19
 - Summary: Completed tutorial system interference-hardening pass with extensible registry architecture and fallback operating doc.
 - Notable safety/infra updates: Reworked tutorial engine in `assets/js/app.js` to registry-based definitions with per-track seen state, optional tutorial IDs in Dev Terminal/API (`tutorial list`, `tutorial start/reset [id]`), and centralized keydown gating while tutorial is active to prevent shortcut/modal collisions; added fallback runbook `docs/TUTORIAL_SYSTEM.md`.

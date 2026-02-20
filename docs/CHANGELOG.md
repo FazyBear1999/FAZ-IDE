@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-02-20
+- Completed CSS maintainability hardening pass with shared micro-primitives for stroke/ring/letter-spacing tokens in `assets/css/base.css`.
+- Ran Phase 2 typography consistency refactor by replacing repeated `letter-spacing` literals in `assets/css/components.css` with shared token variables.
+- Refined high-churn layout/component interaction styling to consume shared primitives without visual behavior drift.
+- Re-ran focused CSS/UI/layout/theme contract suites after each safe batch and kept results green.
+- Synchronized AI memory markdown logs for release traceability.
+
 ## 2026-02-18 (v0.2.0)
 - Hardened Franklin full release orchestration (`frank:full`) and verified full stage parity, including CSS safety gate coverage.
 - Expanded web SEO/release readiness: canonical + Open Graph URL metadata, crawler assets, and web icon coverage.

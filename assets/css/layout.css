@@ -9,16 +9,16 @@
     --sandbox-width: 360px;
     --tools-width: 320px;
     --panel-header-height: 46px;
-    --panel-header-content-height: 32px;
-    --panel-header-pad-x: 10px;
-    --panel-title-size: 13px;
-    --panel-pad-y: 6px;
-    --panel-pad-x: 8px;
-    --panel-section-pad: 10px;
-    --panel-gap: 0px;
+    --panel-header-content-height: var(--control-height-md);
+    --panel-header-pad-x: var(--space-10);
+    --panel-title-size: var(--text-size-xs);
+    --panel-pad-y: var(--space-6);
+    --panel-pad-x: var(--space-8);
+    --panel-section-pad: var(--space-10);
+    --panel-gap: var(--space-0);
     --bottom-height: 240px;
-    --shell-pad-y: 0px;
-    --shell-pad-x: 0px;
+    --shell-pad-y: var(--space-0);
+    --shell-pad-x: var(--space-0);
     --panel-transition: var(--motion-layout) var(--motion-ease);
     --splitter-transition: var(--motion-fast) var(--motion-ease);
     --resize-guide-transition: var(--motion-fast) var(--motion-ease);
@@ -68,13 +68,13 @@ body[data-tutorial-active="true"] {
 
 .tutorial-intro-highlight {
     position: fixed;
-    border: 3px solid var(--accent-info);
-    border-radius: 3px;
-    outline: 1px solid var(--ring-focus);
-    outline-offset: 1px;
+    border: var(--stroke-3) solid var(--accent-info);
+    border-radius: var(--stroke-3);
+    outline: var(--stroke-1) solid var(--ring-focus);
+    outline-offset: var(--stroke-1);
     box-shadow:
         0 0 0 9999px color-mix(in srgb, var(--overlay-backdrop) 92%, transparent),
-        0 0 0 2px var(--ring-focus),
+        0 0 0 var(--ring-size-md) var(--ring-focus),
         0 0 0 6px color-mix(in srgb, var(--accent-info) 52%, transparent),
         0 0 18px color-mix(in srgb, var(--accent-info) 90%, transparent);
     pointer-events: none;
@@ -94,14 +94,14 @@ body[data-tutorial-active="true"] {
     border: 1px solid var(--border-strong);
     background: var(--surface-panel);
     border-radius: 0;
-    padding: 14px;
+    padding: var(--space-14);
     box-shadow: var(--menu-shadow);
     transition: left var(--motion-fast) var(--motion-ease), top var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .tutorial-intro-eyebrow {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--text-size-3xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-muted-quiet);
@@ -109,14 +109,14 @@ body[data-tutorial-active="true"] {
 }
 
 .tutorial-intro-title {
-    margin: 6px 0;
-    font-size: 18px;
+    margin: var(--space-6) 0;
+    font-size: var(--text-size-lg);
     font-family: var(--font);
     letter-spacing: 0.02em;
 }
 
 .tutorial-intro-body {
-    margin: 0 0 10px;
+    margin: 0 0 var(--space-10);
     color: var(--text-muted-soft);
     min-height: 2.5em;
     font-family: var(--font);
@@ -130,9 +130,9 @@ body[data-tutorial-active="true"] {
 }
 
 .tutorial-intro-progress {
-    margin: 0 0 10px;
+    margin: 0 0 var(--space-10);
     color: var(--muted);
-    font-size: 12px;
+    font-size: var(--text-size-2xs);
     font-family: var(--font);
 }
 
@@ -140,7 +140,7 @@ body[data-tutorial-active="true"] {
     position: relative;
     width: 100%;
     height: 6px;
-    margin: -2px 0 12px;
+    margin: calc(var(--space-2) * -1) 0 var(--space-12);
     border: 1px solid var(--border);
     background: var(--surface-menu);
     overflow: hidden;
@@ -156,7 +156,7 @@ body[data-tutorial-active="true"] {
 
 .tutorial-intro-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--space-8);
 }
 
 .tutorial-intro-actions button {
@@ -250,8 +250,8 @@ body[data-resize] .splitter::before {
 
 body[data-resize] .card[data-resize-active="true"],
 body[data-resize] .side[data-resize-active="true"] {
-    outline: 1px solid var(--ring-focus);
-    outline-offset: -1px;
+    outline: var(--stroke-1) solid var(--ring-focus);
+    outline-offset: calc(var(--stroke-1) * -1);
 }
 
 body[data-resize] .log-panel,
@@ -262,8 +262,8 @@ body[data-resize] .tools-panel {
 }
 
 body[data-resize="row"] .workspace-row[data-resize-active="true"] {
-    outline: 1px solid var(--ring-focus-soft);
-    outline-offset: -1px;
+    outline: var(--stroke-1) solid var(--ring-focus-soft);
+    outline-offset: calc(var(--stroke-1) * -1);
 }
 
 /* Panels (log / editor / files / sandbox) */
@@ -379,7 +379,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     container-type: inline-size;
     align-items: center;
     justify-content: stretch;
-    gap: 8px;
+    gap: var(--space-8);
     padding-top: 0;
     padding-bottom: 0;
     padding-left: max(var(--top-pad-inline), env(safe-area-inset-left));
@@ -390,8 +390,8 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     border-radius: var(--radius);
     background: var(--surface-panel);
     box-shadow: none;
-    column-gap: 12px;
-    font-size: 13px;
+    column-gap: var(--space-12);
+    font-size: var(--text-size-xs);
     overflow-x: auto;
     overflow-y: hidden;
 }
@@ -417,7 +417,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 .strip-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-8);
     flex-wrap: nowrap;
     min-width: max-content;
 }
@@ -448,7 +448,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     display: inline-flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 5px;
+    gap: var(--space-5);
     flex-wrap: nowrap;
 }
 
@@ -471,14 +471,14 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .brand h1 {
     margin: 0;
-    font-size: 13px;
-    letter-spacing: 0.32px;
+    font-size: var(--text-size-xs);
+    letter-spacing: var(--letter-spacing-ui);
     line-height: 1;
     text-transform: uppercase;
 }
 
 .brand p {
-    margin: 6px 0 0;
+    margin: var(--space-6) 0 0;
     color: var(--muted);
     font-size: var(--text-size-xs);
 }
@@ -571,7 +571,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--space-12);
     border-bottom: 1px solid var(--border-soft);
     background: var(--surface-panel);
     height: var(--panel-header-height);
@@ -609,7 +609,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 }
 
 .card-title p {
-    margin: 6px 0 0;
+    margin: var(--space-6) 0 0;
     color: var(--muted);
     font-size: var(--text-size-xs);
     line-height: 1.35;
@@ -626,7 +626,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 .row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--space-8);
     align-items: center;
     justify-content: flex-end;
 }
@@ -637,7 +637,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .log-panel .card-hd {
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--space-8);
 }
 
 .foot {

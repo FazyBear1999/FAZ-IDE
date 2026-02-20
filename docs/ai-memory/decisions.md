@@ -19,6 +19,20 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-20T00:00:00Z - CSS Phase 2 micro-primitives and letter-spacing normalization
+
+- Date (UTC):
+- 2026-02-20T00:00:00Z
+- Area:
+- CSS maintainability, consistency safety, and low-risk refactorability
+- Decision:
+- Added shared micro-primitives in `assets/css/base.css` for stroke, ring width, and letter-spacing (`--stroke-*`, `--ring-size-*`, `--letter-spacing-*`) and refactored high-churn selectors in `assets/css/layout.css` + `assets/css/components.css` to use those tokens.
+- Completed Phase 2 by replacing repeated `letter-spacing` literals (`0.2px`, `0.3px`, `0.35px`, `0.4px`) across `assets/css/components.css` with shared token references.
+- Why:
+- Repeated micro-literals in hot-change UI selectors increase drift risk and make extensions fragile; consolidating them into primitives keeps future edits faster and safer without changing runtime behavior.
+- Follow-up:
+- For all upcoming CSS changes, introduce/extend base micro-primitives before repeating literal values across components; keep CSS token + UI/layout/theme contracts mandatory after each tokenization batch.
+
 ## 2026-02-19T17:45:00Z - Tutorial registry hardening + interference isolation pass
 
 - Date (UTC):
