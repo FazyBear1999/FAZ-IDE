@@ -2871,6 +2871,7 @@ const commandPaletteResultsTask = createDebouncedTask((query) => {
 }, 72);
 let shortcutHelpOpen = false;
 let lessonStatsOpen = false;
+let accountModalOpen = false;
 let editorSearchOpen = false;
 let symbolPaletteOpen = false;
 let projectSearchOpen = false;
@@ -3009,6 +3010,14 @@ let selectedApplicationId = applications[0]?.id ?? "";
 let applicationsSelectorOpen = false;
 let selectedLessonId = lessons[0]?.id ?? "";
 let lessonsSelectorOpen = false;
+const ACCOUNT_TYPES = Object.freeze(["test", "sandbox"]);
+const DEFAULT_ACCOUNT_PROFILE = Object.freeze({
+    displayName: "",
+    email: "",
+    accountType: "test",
+    signedIn: false,
+    updatedAt: 0,
+});
 let lessonSession = null;
 let lessonProfileDirtyWrites = 0;
 let lessonSessionDirtyWrites = 0;
@@ -3047,6 +3056,9 @@ let lessonProfile = {
     currentStreak: 0,
     dailyStreak: 0,
     lastActiveDay: "",
+};
+let accountProfile = {
+    ...DEFAULT_ACCOUNT_PROFILE,
 };
 let openFileMenu = null;
 let folderMenuTargetPath = null;
@@ -4385,6 +4397,9 @@ function commitLayoutResize() {
 
 function setLayoutPanelOpen(open) {
     if (!el.layoutPanel || !el.layoutBackdrop) return;
+    if (open) {
+        closeAccountModal({ focusEditor: false });
+    }
     setOpenStateAttributes(el.layoutPanel, open);
     setOpenStateAttributes(el.layoutBackdrop, open);
     if (el.layoutToggle) {
@@ -9988,6 +10003,61 @@ function parseStoredJson(raw) {
     }
 }
 
+function sanitizeAccountProfile(raw = null) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const displayName = String(source.displayName || "").trim().slice(0, 48);
+    const email = String(source.email || "").trim().toLowerCase().slice(0, 120);
+    const accountType = ACCOUNT_TYPES.includes(String(source.accountType || "").trim().toLowerCase())
+        ? String(source.accountType || "").trim().toLowerCase()
+        : "test";
+    const signedIn = Boolean(source.signedIn) && Boolean(displayName || email);
+    const updatedAt = Math.max(0, Math.floor(Number(source.updatedAt) || 0));
+    return {
+        displayName,
+        email,
+        accountType,
+        signedIn,
+        updatedAt,
+    };
+}
+
+function formatAccountSummary(profile = accountProfile) {
+    if (!profile?.signedIn) return "Signed out";
+    const accountLabel = profile.accountType === "sandbox" ? "Sandbox Account" : "Test Account";
+    const identity = String(profile.displayName || profile.email || "Account").trim();
+    return `${identity} • ${accountLabel}`;
+}
+
+function renderAccountUi() {
+    const summary = formatAccountSummary(accountProfile);
+    if (el.btnAccount) {
+        el.btnAccount.textContent = accountProfile.signedIn
+            ? String(accountProfile.displayName || accountProfile.email || "Account")
+            : "Account";
+        el.btnAccount.setAttribute("title", summary);
+        el.btnAccount.setAttribute("aria-label", summary);
+    }
+    if (el.accountNameInput) el.accountNameInput.value = String(accountProfile.displayName || "");
+    if (el.accountEmailInput) el.accountEmailInput.value = String(accountProfile.email || "");
+    if (el.accountModeSelect) el.accountModeSelect.value = String(accountProfile.accountType || "test");
+    if (el.accountStatus) {
+        el.accountStatus.textContent = summary;
+    }
+    if (el.accountSignOut) {
+        el.accountSignOut.disabled = !accountProfile.signedIn;
+    }
+}
+
+function persistAccountProfile() {
+    if (persistenceWritesLocked) return;
+    save(STORAGE.ACCOUNT_PROFILE, JSON.stringify(accountProfile));
+}
+
+function loadAccountProfile() {
+    accountProfile = sanitizeAccountProfile(parseStoredJson(load(STORAGE.ACCOUNT_PROFILE)));
+    renderAccountUi();
+}
+
 function sanitizeStoredLessonSession(raw = null) {
     const source = raw && typeof raw === "object" ? raw : null;
     if (!source) return null;
@@ -12468,6 +12538,43 @@ function setLessonStatsOpen(open) {
     }
 }
 
+function setAccountModalOpen(open) {
+    accountModalOpen = Boolean(open);
+    if (!el.accountPanel || !el.accountBackdrop) return;
+    setOpenStateAttributes(el.accountPanel, accountModalOpen);
+    setOpenStateAttributes(el.accountBackdrop, accountModalOpen);
+    if (el.btnAccount) {
+        el.btnAccount.setAttribute("aria-expanded", accountModalOpen ? "true" : "false");
+    }
+    if (accountModalOpen) {
+        renderAccountUi();
+        requestAnimationFrame(() => {
+            if (el.accountNameInput) el.accountNameInput.focus();
+        });
+    }
+}
+
+function openAccountModal() {
+    closeFileMenus();
+    closeQuickOpen({ focusEditor: false });
+    closeCommandPalette({ focusEditor: false });
+    closeEditorSearch({ focusEditor: false });
+    closeSymbolPalette({ focusEditor: false });
+    closeProjectSearch({ focusEditor: false });
+    closeEditorHistory({ focusEditor: false });
+    closeEditorSettings({ focusEditor: false });
+    closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
+    setLayoutPanelOpen(false);
+    setAccountModalOpen(true);
+}
+
+function closeAccountModal({ focusEditor = true } = {}) {
+    if (!accountModalOpen) return;
+    setAccountModalOpen(false);
+    if (focusEditor) editor.focus();
+}
+
 function openShortcutHelp() {
     closeFileMenus();
     closeQuickOpen({ focusEditor: false });
@@ -12478,6 +12585,7 @@ function openShortcutHelp() {
     closeEditorHistory({ focusEditor: false });
     closeEditorSettings({ focusEditor: false });
     closeLessonStats({ focusEditor: false });
+    closeAccountModal({ focusEditor: false });
     setShortcutHelpOpen(true);
 }
 
@@ -12497,6 +12605,7 @@ function openLessonStats({ view = "overview" } = {}) {
     closeEditorHistory({ focusEditor: false });
     closeEditorSettings({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
+    closeAccountModal({ focusEditor: false });
     closeLessonStats({ focusEditor: false });
     setLessonStatsView(view);
     setLessonStatsOpen(true);
@@ -12975,6 +13084,7 @@ function openEditorSettings() {
     closeSymbolPalette({ focusEditor: false });
     closeProjectSearch({ focusEditor: false });
     closeEditorHistory({ focusEditor: false });
+    closeAccountModal({ focusEditor: false });
     setEditorSettingsOpen(true);
 }
 
@@ -18605,6 +18715,47 @@ function wireLessonStats() {
     }
 }
 
+function wireAccountModal() {
+    if (el.btnAccount) {
+        el.btnAccount.addEventListener("click", () => openAccountModal());
+    }
+    if (el.accountClose) {
+        el.accountClose.addEventListener("click", () => closeAccountModal({ focusEditor: true }));
+    }
+    if (el.accountBackdrop) {
+        el.accountBackdrop.addEventListener("click", () => closeAccountModal({ focusEditor: false }));
+    }
+    if (el.accountForm) {
+        el.accountForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const displayName = String(el.accountNameInput?.value || "").trim().slice(0, 48);
+            const email = String(el.accountEmailInput?.value || "").trim().toLowerCase().slice(0, 120);
+            const accountType = ACCOUNT_TYPES.includes(String(el.accountModeSelect?.value || "").trim().toLowerCase())
+                ? String(el.accountModeSelect?.value || "").trim().toLowerCase()
+                : "test";
+            const signedIn = Boolean(displayName || email);
+            accountProfile = sanitizeAccountProfile({
+                displayName,
+                email,
+                accountType,
+                signedIn,
+                updatedAt: Date.now(),
+            });
+            persistAccountProfile();
+            renderAccountUi();
+            status.set(accountProfile.signedIn ? "Test account saved" : "Account cleared");
+        });
+    }
+    if (el.accountSignOut) {
+        el.accountSignOut.addEventListener("click", () => {
+            accountProfile = { ...DEFAULT_ACCOUNT_PROFILE };
+            persistAccountProfile();
+            renderAccountUi();
+            status.set("Signed out");
+        });
+    }
+}
+
 function wirePromptDialog() {
     setPromptDialogOpen(false);
     clearPromptDialogError();
@@ -22837,6 +22988,7 @@ function exitRunnerFullscreen() {
 async function boot() {
     const recoveredStorageJournal = recoverStorageJournal();
     wireTutorialIntro();
+    loadAccountProfile();
     loadLessonProfile();
     loadEditorSettings();
     renderEditorSyntaxThemeSelectOptions();
@@ -22875,6 +23027,7 @@ async function boot() {
     wireCommandPalette();
     wireShortcutHelp();
     wireLessonStats();
+    wireAccountModal();
     wirePromptDialog();
     wireEditorScopeTrail();
     wireEditorSearch();
@@ -22888,6 +23041,7 @@ async function boot() {
     setLayoutPanelOpen(false);
     setShortcutHelpOpen(false);
     setLessonStatsOpen(false);
+    setAccountModalOpen(false);
     setEditorSearchOpen(false);
     setSymbolPaletteOpen(false);
     setProjectSearchOpen(false);
@@ -24131,6 +24285,11 @@ async function boot() {
         if (e.key === "Escape" && lessonStatsOpen) {
             e.preventDefault();
             closeLessonStats({ focusEditor: true });
+            return;
+        }
+        if (e.key === "Escape" && accountModalOpen) {
+            e.preventDefault();
+            closeAccountModal({ focusEditor: true });
             return;
         }
         if (e.key === "Escape" && editorSearchOpen) {

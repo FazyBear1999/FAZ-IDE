@@ -221,6 +221,7 @@
                                 <span id="lessonHudXp" class="top-lesson-stat">XP 0</span>
                                 <span id="lessonHudCoins" class="top-lesson-stat">Bytes 0</span>
                             </div>
+                            <button id="accountBtn" class="top-account-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="accountPanel">Account</button>
                         </div>
                     </header>
 
@@ -1039,6 +1040,39 @@
                         <p id="lessonStatsShopHint" class="lesson-stats-safety">Buy themes using Bytes earned from lessons.</p>
                     </div>
                 </div>
+            </section>
+
+            <div id="accountBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="accountPanel" class="layout-panel account-panel" data-open="false" aria-hidden="true" aria-label="Test account" role="dialog" aria-modal="true">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Test Account</p>
+                        <p class="layout-sub">Local-only starter account system</p>
+                    </div>
+                    <button id="accountClose" type="button">Close</button>
+                </header>
+                <form id="accountForm" class="layout-body account-form" novalidate>
+                    <div class="layout-group">
+                        <label class="layout-label" for="accountNameInput">Display Name</label>
+                        <input id="accountNameInput" type="text" maxlength="48" autocomplete="name" placeholder="FAZ Tester" />
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-label" for="accountEmailInput">Email</label>
+                        <input id="accountEmailInput" type="email" maxlength="120" autocomplete="email" placeholder="tester@faz.local" />
+                    </div>
+                    <div class="layout-group">
+                        <label class="layout-label" for="accountModeSelect">Account Type</label>
+                        <select id="accountModeSelect" class="layout-select">
+                            <option value="test">Test Account</option>
+                            <option value="sandbox">Sandbox Account</option>
+                        </select>
+                    </div>
+                    <p id="accountStatus" class="account-status" aria-live="polite">Signed out</p>
+                    <div class="layout-actions account-actions">
+                        <button id="accountSave" type="submit">Save Account</button>
+                        <button id="accountSignOut" type="button" class="danger">Sign Out</button>
+                    </div>
+                </form>
             </section>
 
             <div id="promptDialogBackdrop" class="quick-open-backdrop" aria-hidden="true"></div>

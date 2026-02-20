@@ -33,6 +33,7 @@ export const STORAGE = {
     EDITOR_SETTINGS: "fazide.editor-settings.v1",
     EDITOR_HISTORY: "fazide.editor-history.v1",
     SNIPPETS: "fazide.snippets.v1",
+    ACCOUNT_PROFILE: "fazide.account-profile.v1",
     LESSON_PROFILE: "fazide.lesson-profile.v1",
     LESSON_SESSION: "fazide.lesson-session.v1",
     DEV_TERMINAL_SECRET_HASH: "fazide.dev-terminal-secret-hash.v1",
