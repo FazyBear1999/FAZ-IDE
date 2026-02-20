@@ -30,16 +30,28 @@ test("fresh start opens welcome project in editor", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
+    const api = window.fazide;
     const automation = Boolean(navigator.webdriver);
     const cm = document.querySelector(".CodeMirror");
     const cmValue = cm?.CodeMirror?.getValue?.() || "";
     const textValue = String(document.querySelector("#editor")?.value || "");
     const code = String(cmValue || textValue || "");
+    const allFiles = Array.isArray(api?.listFiles?.()) ? api.listFiles() : [];
+    const welcomeNames = allFiles
+      .map((entry) => String(entry?.name || "").toLowerCase())
+      .filter((name) => name.startsWith("welcome/"));
+    const openEditors = Array.from(document.querySelectorAll(".editor-tab-label"))
+      .map((node) => String(node?.textContent || "").trim().toLowerCase())
+      .filter(Boolean);
     return {
       automation,
       hasWelcomeTitle: code.includes("<title>Welcome to FAZ IDE</title>"),
       hasWelcomeScript: code.includes("<script src=\"app.js\"></script>"),
       hasWelcomeLog: code.includes("WELCOME TO FAZ IDE! Welcome project animation is running."),
+      hasWelcomeFolderIndex: welcomeNames.includes("welcome/index.html"),
+      hasWelcomeFolderCss: welcomeNames.includes("welcome/styles.css"),
+      hasWelcomeFolderJs: welcomeNames.includes("welcome/app.js"),
+      openEditors,
     };
   });
 
@@ -49,6 +61,12 @@ test("fresh start opens welcome project in editor", async ({ page }) => {
     expect(result.hasWelcomeTitle).toBeTruthy();
     expect(result.hasWelcomeScript).toBeTruthy();
   }
+  expect(result.hasWelcomeFolderIndex).toBeTruthy();
+  expect(result.hasWelcomeFolderCss).toBeTruthy();
+  expect(result.hasWelcomeFolderJs).toBeTruthy();
+  expect(result.openEditors).toContain("index.html");
+  expect(result.openEditors).toContain("styles.css");
+  expect(result.openEditors).toContain("app.js");
 });
 
 test("boot exposes core fazide api surface", async ({ page }) => {
@@ -5022,6 +5040,8 @@ test("sandbox blocks browser-interfering APIs and reports safe warnings", async 
       + `    .then(() => "ok")\n`
       + `    .catch((err) => String(err && err.message ? err.message : err));\n`
       + `  console.log("${marker}:fetch", fetchResult);\n`
+      + `  const ws = new WebSocket("wss://example.com/socket");\n`
+      + `  console.log("${marker}:ws", String(ws && ws.readyState));\n`
       + `})();`
     );
     runBtn.click();
@@ -5033,9 +5053,11 @@ test("sandbox blocks browser-interfering APIs and reports safe warnings", async 
       startSeen: logText.includes(`${marker}:start`),
       openSeen: logText.includes(`${marker}:open null`),
       fetchSeen: logText.includes(`${marker}:fetch fetch blocked by FAZ IDE sandbox policy`),
+      websocketSeen: logText.includes(`${marker}:ws 3`),
       alertBlockedSeen: logText.includes("Sandbox security: blocked API alert"),
       openBlockedSeen: logText.includes("Sandbox security: blocked API window.open"),
       fetchBlockedSeen: logText.includes("Sandbox security: blocked API fetch"),
+      websocketBlockedSeen: logText.includes("Sandbox security: blocked API WebSocket"),
     };
   });
 
@@ -5043,9 +5065,11 @@ test("sandbox blocks browser-interfering APIs and reports safe warnings", async 
   expect(result.startSeen).toBeTruthy();
   expect(result.openSeen).toBeTruthy();
   expect(result.fetchSeen).toBeTruthy();
+  expect(result.websocketSeen).toBeTruthy();
   expect(result.alertBlockedSeen).toBeTruthy();
   expect(result.openBlockedSeen).toBeTruthy();
   expect(result.fetchBlockedSeen).toBeTruthy();
+  expect(result.websocketBlockedSeen).toBeTruthy();
 });
 
 test("format button formats active editor content safely", async ({ page }) => {
@@ -6047,7 +6071,7 @@ test("lesson mode loads starter and advances through STEP typing markers", async
   expect(result.afterAll?.stepCount).toBe(result.initial?.stepCount);
 });
 
-test("quick 4-line lesson auto-runs connected html output when completed", async ({ page }) => {
+test("quick 1-line lesson auto-runs connected html output when completed", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
@@ -6095,7 +6119,7 @@ test("quick 4-line lesson auto-runs connected html output when completed", async
   expect(result.ready).toBeTruthy();
   expect(result.hasLesson).toBeTruthy();
   expect(result.loaded).toBeTruthy();
-  expect(result.typedChars).toBeGreaterThan(20);
+  expect(result.typedChars).toBeGreaterThan(3);
   expect(result.completed).toBeTruthy();
   expect(result.logText).toContain("Quick lesson output ready.");
   expect(result.statusText.toLowerCase()).toContain("ran");

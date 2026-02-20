@@ -3022,6 +3022,9 @@ let lessonHudLastAriaLabel = "";
 let lessonHudLastProgressPercent = -1;
 let lessonHudLastComboProgress = -1;
 let lessonHudWasActive = false;
+let lessonHudLastActiveState = null;
+let lessonHeaderHudLastActiveState = null;
+let lessonHudInactiveResetDone = false;
 let lessonShopRenderKey = "";
 let lessonHeaderStatsRenderKey = "";
 let lessonEditorLevelUpTimer = 0;
@@ -10468,12 +10471,11 @@ function updateLessonHeaderStats({ force = false } = {}) {
         if (el.lessonStatsNextFill) {
             el.lessonStatsNextFill.style.setProperty("--lesson-next-progress", `${nextLevelProgress}%`);
         }
+        el.lessonHeaderStats.setAttribute(
+            "aria-label",
+            `Lesson stats: level ${Math.max(1, Number(lessonProfile.level) || 1)}, XP ${Math.max(0, Number(lessonProfile.xp) || 0)}, bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}, lessons completed ${Math.max(0, Number(lessonProfile.lessonsCompleted) || 0)}, best streak ${Math.max(0, Number(lessonProfile.bestStreak) || 0)}, daily streak ${Math.max(0, Number(lessonProfile.dailyStreak) || 0)}, accuracy ${metrics.accuracy} percent, pace ${metrics.wpm} WPM, next level in ${xpToNext} XP. Privacy-safe local storage only`
+        );
     }
-
-    el.lessonHeaderStats.setAttribute(
-        "aria-label",
-        `Lesson stats: level ${Math.max(1, Number(lessonProfile.level) || 1)}, XP ${Math.max(0, Number(lessonProfile.xp) || 0)}, bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}, lessons completed ${Math.max(0, Number(lessonProfile.lessonsCompleted) || 0)}, best streak ${Math.max(0, Number(lessonProfile.bestStreak) || 0)}, daily streak ${Math.max(0, Number(lessonProfile.dailyStreak) || 0)}, accuracy ${metrics.accuracy} percent, pace ${metrics.wpm} WPM, next level in ${xpToNext} XP. Privacy-safe local storage only`
-    );
     if (lessonStatsOpen && lessonStatsView === "shop") {
         updateLessonShopUi();
     }
@@ -10516,12 +10518,18 @@ function updateLessonHud() {
     const activeFile = getActiveFile();
     const active = isLessonSessionActiveForCurrentFile();
     const headerActive = isLessonFamilyFile(activeFile);
-    setDataActive(el.lessonHud, active);
-    el.lessonHud.hidden = !active;
+    if (lessonHudLastActiveState !== active) {
+        setDataActive(el.lessonHud, active);
+        el.lessonHud.hidden = !active;
+        lessonHudLastActiveState = active;
+    }
     if (el.lessonHeaderHud) {
-        setDataActive(el.lessonHeaderHud, headerActive);
-        el.lessonHeaderHud.hidden = !headerActive;
-        el.lessonHeaderHud.setAttribute("aria-hidden", headerActive ? "false" : "true");
+        if (lessonHeaderHudLastActiveState !== headerActive) {
+            setDataActive(el.lessonHeaderHud, headerActive);
+            el.lessonHeaderHud.hidden = !headerActive;
+            el.lessonHeaderHud.setAttribute("aria-hidden", headerActive ? "false" : "true");
+            lessonHeaderHudLastActiveState = headerActive;
+        }
     }
     if (!active) {
         lessonHudWasActive = false;
@@ -10533,21 +10541,24 @@ function updateLessonHud() {
         lessonHudLastProgressBucket = -1;
         lessonHudLastTier = "none";
         lessonHudLastMood = "focus";
-        el.lessonHud.dataset.streakTier = "none";
-        el.lessonHud.dataset.mood = "focus";
-        el.lessonHud.style.setProperty("--lesson-progress", "0%");
-        el.lessonHud.style.setProperty("--lesson-combo-progress", "0%");
-        if (el.lessonHudFill) {
-            el.lessonHudFill.style.setProperty("--lesson-progress", "0%");
+        if (!lessonHudInactiveResetDone) {
+            el.lessonHud.dataset.streakTier = "none";
+            el.lessonHud.dataset.mood = "focus";
+            el.lessonHud.style.setProperty("--lesson-progress", "0%");
+            el.lessonHud.style.setProperty("--lesson-combo-progress", "0%");
+            if (el.lessonHudFill) {
+                el.lessonHudFill.style.setProperty("--lesson-progress", "0%");
+            }
+            if (el.lessonHudStreakFill) {
+                el.lessonHudStreakFill.style.setProperty("--lesson-combo-progress", "0%");
+            }
+            if (lessonHudBurstTimer) {
+                clearTimeout(lessonHudBurstTimer);
+                lessonHudBurstTimer = 0;
+            }
+            el.lessonHud.setAttribute("data-burst", "false");
+            lessonHudInactiveResetDone = true;
         }
-        if (el.lessonHudStreakFill) {
-            el.lessonHudStreakFill.style.setProperty("--lesson-combo-progress", "0%");
-        }
-        if (lessonHudBurstTimer) {
-            clearTimeout(lessonHudBurstTimer);
-            lessonHudBurstTimer = 0;
-        }
-        el.lessonHud.setAttribute("data-burst", "false");
         setNodeText(el.lessonHudLevel, `Lv ${Math.max(1, Number(lessonProfile.level) || 1)}`);
         setNodeText(el.lessonHudXp, `XP ${Math.max(0, Number(lessonProfile.xp) || 0)}`);
         setNodeText(el.lessonHudPace, "WPM 0");
@@ -10557,6 +10568,7 @@ function updateLessonHud() {
     }
     if (!lessonHudWasActive) {
         lessonHudWasActive = true;
+        lessonHudInactiveResetDone = false;
         lessonHudLastRenderKey = "";
         lessonHudLastStepKey = "";
         lessonHudLastAriaLabel = "";
@@ -18663,13 +18675,30 @@ async function hydrateFileState() {
 
     if (welcomeFiles.length) {
         const automation = isAutomationEnvironment();
+        let welcomeIndex = null;
+        let welcomeStyles = null;
+        let welcomeApp = null;
+        for (const file of welcomeFiles) {
+            const lowerName = String(file?.name || "").toLowerCase();
+            if (!welcomeIndex && lowerName.endsWith("/index.html")) {
+                welcomeIndex = file;
+                continue;
+            }
+            if (!welcomeStyles && lowerName.endsWith("/styles.css")) {
+                welcomeStyles = file;
+                continue;
+            }
+            if (!welcomeApp && lowerName.endsWith("/app.js")) {
+                welcomeApp = file;
+            }
+        }
         const preferredActive =
-            (automation
-                ? welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/app.js"))
-                : null) ||
-            welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/index.html")) ||
-            welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/app.js")) ||
+            (automation ? welcomeApp : null) ||
+            welcomeIndex ||
+            welcomeApp ||
             welcomeFiles[0];
+        const preferredOpen = [welcomeIndex, welcomeStyles, welcomeApp].filter(Boolean);
+        const preferredOpenIds = [...new Set(preferredOpen.map((file) => file.id))];
         const derivedFolders = normalizeFolderList(
             welcomeFiles
                 .map((file) => getFileDirectory(file.name))
@@ -18679,7 +18708,7 @@ async function hydrateFileState() {
             files: welcomeFiles,
             folders: derivedFolders,
             activeId: preferredActive.id,
-            openIds: [preferredActive.id],
+            openIds: preferredOpenIds.length ? preferredOpenIds : [preferredActive.id],
             trash: [],
             source: "welcome-default",
         };

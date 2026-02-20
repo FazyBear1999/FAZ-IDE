@@ -178,7 +178,21 @@ const SANDBOX_SECURITY_LOCK_SCRIPT =
     `defineBlocked(window,"open",function(url){warn("window.open",url);return null;});` +
     `defineBlocked(window,"fetch",function(){warn("fetch");return Promise.reject(blockedError("fetch"));});` +
     `defineBlocked(window,"XMLHttpRequest",function(){warn("XMLHttpRequest");throw blockedError("XMLHttpRequest");});` +
-    `defineBlocked(window,"WebSocket",function(){warn("WebSocket");throw blockedError("WebSocket");});` +
+    `const blockedWebSocket=function(url){` +
+    `warn("WebSocket",url);` +
+    `const safeUrl=url==null?"":String(url);` +
+    `return {` +
+    `url:safeUrl,readyState:3,protocol:"",extensions:"",bufferedAmount:0,binaryType:"blob",` +
+    `onopen:null,onmessage:null,onerror:null,onclose:null,` +
+    `send:function(){warn("WebSocket.send",safeUrl);return undefined;},` +
+    `close:function(){return undefined;},` +
+    `addEventListener:function(){return undefined;},` +
+    `removeEventListener:function(){return undefined;},` +
+    `dispatchEvent:function(){return false;}` +
+    `};` +
+    `};` +
+    `blockedWebSocket.CONNECTING=0;blockedWebSocket.OPEN=1;blockedWebSocket.CLOSING=2;blockedWebSocket.CLOSED=3;` +
+    `defineBlocked(window,"WebSocket",blockedWebSocket);` +
     `defineBlocked(window,"EventSource",function(){warn("EventSource");throw blockedError("EventSource");});` +
     `defineBlocked(window,"Worker",function(){warn("Worker");throw blockedError("Worker");});` +
     `defineBlocked(window,"SharedWorker",function(){warn("SharedWorker");throw blockedError("SharedWorker");});` +

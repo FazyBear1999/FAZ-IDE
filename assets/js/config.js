@@ -216,7 +216,7 @@ export const LESSONS = [
     },
     {
         id: "quick-output-4line",
-        name: "Lesson: Quick Output Test (4 lines)",
+        name: "Lesson: Quick Output Test (1 line)",
         icon: buildThemedIcon("2615"),
         files: [
             { path: "index.html", src: "./assets/lessons/quick-output-4line/index.html" },
@@ -230,9 +230,13 @@ export const DEFAULT_CODE = `/* Welcome to FAZ IDE My first big personal project
 console.log("Hello from FazyBear!");
 `;
 
+const DEFAULT_WELCOME_HEADLINE = "WELCOME TO FAZ IDE THIS WEBSITE IS BUILT OFF OF JAVASCRIPT CSS AND HTML";
+const DEFAULT_WELCOME_BOOT_MESSAGE = "Typing animation booting…";
+const DEFAULT_WELCOME_LOG = "WELCOME TO FAZ IDE! Welcome project animation is running.";
+
 export const DEFAULT_WELCOME_FILES = [
         {
-                name: "Welcome/index.html",
+        name: "welcome/index.html",
                 code: `<!doctype html>
 <html lang="en">
 <head>
@@ -244,8 +248,8 @@ export const DEFAULT_WELCOME_FILES = [
 <body>
     <main class="hero" aria-label="Welcome animation">
         <p class="kicker">WELCOME PROJECT</p>
-        <h1 class="title" id="title" aria-live="polite">WELCOME TO FAZ IDE!</h1>
-        <p class="subtitle" id="message">Local-first, free forever, and ready to build.</p>
+        <h1 class="title" id="title" aria-live="polite">${DEFAULT_WELCOME_HEADLINE}</h1>
+        <p class="subtitle" id="message">${DEFAULT_WELCOME_BOOT_MESSAGE}</p>
         <div class="pulse-wrap" aria-hidden="true">
             <span class="pulse pulse-a"></span>
             <span class="pulse pulse-b"></span>
@@ -258,7 +262,7 @@ export const DEFAULT_WELCOME_FILES = [
 `,
         },
         {
-                name: "Welcome/styles.css",
+            name: "welcome/styles.css",
                 code: `:root {
     color-scheme: dark;
 }
@@ -301,8 +305,8 @@ body {
 
 .title {
     margin: 0;
-    font-size: clamp(2.1rem, 8vw, 5.8rem);
-    line-height: 0.95;
+    font-size: clamp(1.15rem, 3.2vw, 2.7rem);
+    line-height: 1.15;
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: #f8fafc;
@@ -392,12 +396,12 @@ body {
 `,
         },
         {
-                name: "Welcome/app.js",
+                name: "welcome/app.js",
                 code: `const title = document.getElementById("title");
 const message = document.getElementById("message");
 
 if (title) {
-    const text = "WELCOME TO FAZ IDE!";
+    const text = ${JSON.stringify(DEFAULT_WELCOME_HEADLINE)};
     let index = 0;
     title.textContent = "";
     const timer = setInterval(() => {
@@ -411,11 +415,11 @@ if (title) {
 
 if (message) {
     setTimeout(() => {
-        message.textContent = "Your Welcome project is live. Start editing and make it yours.";
+        message.textContent = ${JSON.stringify(DEFAULT_WELCOME_HEADLINE)};
     }, 1400);
 }
 
-console.log("WELCOME TO FAZ IDE! Welcome project animation is running.");
+console.log(${JSON.stringify(DEFAULT_WELCOME_LOG)});
 `,
         },
 ];

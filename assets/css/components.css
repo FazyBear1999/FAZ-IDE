@@ -791,8 +791,10 @@ button:focus-visible {
     color: var(--text-top-control);
     font-size: var(--text-size-xs);
     font-weight: 600;
+    font-family: var(--font);
     line-height: 1;
     letter-spacing: 0.1px;
+    -webkit-font-smoothing: antialiased;
     white-space: nowrap;
 }
 
@@ -863,8 +865,10 @@ button:focus-visible {
     );
     color: var(--text-muted-soft);
     font-size: var(--lesson-hud-chip-font-size);
+    font-family: var(--font);
     line-height: 1.22;
     letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -1076,6 +1080,8 @@ button:focus-visible {
 #lessonHudStreak,
 #lessonHudPace {
     color: var(--text-top-control);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
 }
 
 @media (max-width: 960px) {
@@ -4197,6 +4203,30 @@ body[data-resize="row"] {
     gap: 10px;
     overflow-x: hidden;
     overflow-y: auto;
+}
+
+#lessonStatsPanel :is(
+    .lesson-stats-tab,
+    .lesson-shop-header,
+    .lesson-shop-meta strong,
+    .lesson-shop-meta span,
+    .lesson-stats-hero-title,
+    .lesson-stats-hero-sub,
+    .lesson-stats-next-label,
+    .lesson-stats-safety,
+    .lesson-stats-label,
+    .lesson-stats-card strong,
+    .lesson-stats-session-title,
+    .lesson-stats-line,
+    .lesson-stats-line strong
+) {
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+}
+
+#lessonStatsPanel :is(.lesson-stats-next-label, .lesson-stats-card strong, .lesson-stats-line strong) {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
 }
 
 .lesson-stats-tabs {

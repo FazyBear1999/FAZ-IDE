@@ -11,15 +11,9 @@ function getLineOffsets(source = "") {
     return offsets;
 }
 
-function getLineRange(text = "", lineIndex = 0, offsets = []) {
-    const start = offsets[Math.max(0, lineIndex)] ?? 0;
-    const nextLineOffset = offsets[Math.max(0, lineIndex + 1)];
-    const end = Number.isFinite(nextLineOffset) ? nextLineOffset - 1 : text.length;
-    return { start, end };
-}
-
 export function parseLessonSteps(source = "") {
     const text = String(source || "").replace(/\r\n?/g, "\n");
+    if (!text || text.indexOf("[STEP:") === -1) return [];
     const lines = text.split("\n");
     const offsets = getLineOffsets(text);
     const openById = new Map();
@@ -28,6 +22,7 @@ export function parseLessonSteps(source = "") {
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const line = String(lines[lineIndex] || "");
+        if (line.indexOf("[STEP:") === -1) continue;
         const match = line.match(STEP_MARKER);
         if (!match) continue;
         const id = String(match[1] || "").trim();
@@ -48,8 +43,7 @@ export function parseLessonSteps(source = "") {
             const open = openById.get(id);
             if (!open || !Number.isFinite(open.startLine)) continue;
             const startIndex = offsets[open.startLine] ?? text.length;
-            const endLineRange = getLineRange(text, lineIndex, offsets);
-            const endIndex = Math.max(startIndex, endLineRange.start);
+            const endIndex = Math.max(startIndex, offsets[lineIndex] ?? text.length);
             const expected = text.slice(startIndex, endIndex);
             if (expected.length > 0) {
                 parsed.push({
