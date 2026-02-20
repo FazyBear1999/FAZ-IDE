@@ -316,6 +316,11 @@
                                         <button class="danger" id="clear" type="button" title="Clear editor contents">Clear</button>
                                         <button id="format" type="button" title="Format active file">Format</button>
                                         <button class="danger" id="stop" type="button" title="Stop sandbox run">Stop</button>
+                                        <div id="lessonHeaderHud" class="lesson-header-hud" data-active="false" aria-hidden="true" aria-label="Lesson level and XP" hidden>
+                                            <span id="lessonHudLevel" class="lesson-header-chip">Lv 1</span>
+                                            <span id="lessonHudXp" class="lesson-header-chip">XP 0</span>
+                                            <span id="lessonHudCoins" class="lesson-header-chip">Bytes 0</span>
+                                        </div>
                                     </div>
                                     <div class="editor-pro-buttons" aria-label="Editor tools">
                                         <button id="editorFindBtn" type="button" title="Find and replace">Find</button>
@@ -338,20 +343,20 @@
                                 </div>
                                 <div class="editor-pane">
                                     <div id="lessonHud" class="lesson-hud" data-active="false" aria-live="polite" aria-label="Lesson progress" hidden>
-                                        <div class="lesson-hud-row" aria-hidden="true">
-                                            <span id="lessonHudStep" class="lesson-hud-chip lesson-hud-chip-step">Lesson</span>
-                                            <span id="lessonHudProgress" class="lesson-hud-chip">0/0</span>
-                                            <span id="lessonHudLevel" class="lesson-hud-chip">Lv 1</span>
-                                            <span id="lessonHudXp" class="lesson-hud-chip">XP 0</span>
-                                            <span id="lessonHudCoins" class="lesson-hud-chip">Coins 0</span>
+                                        <div class="lesson-hud-main" aria-hidden="true">
+                                            <span id="lessonHudProgress" class="lesson-hud-chip">Progress 0%</span>
                                             <span id="lessonHudStreak" class="lesson-hud-chip">Streak 0</span>
                                             <span id="lessonHudPace" class="lesson-hud-chip">WPM 0</span>
                                         </div>
-                                        <div class="lesson-hud-rail" aria-hidden="true">
+                                        <div class="lesson-hud-rail lesson-hud-rail-vertical" aria-hidden="true">
                                             <span id="lessonHudFill" class="lesson-hud-fill"></span>
                                         </div>
-                                        <div id="lessonHudMood" class="lesson-hud-mood" aria-hidden="true">Find your flow ✨</div>
-                                        <div id="lessonHudBurst" class="lesson-hud-burst" aria-hidden="true"></div>
+                                        <div class="lesson-hud-rail lesson-hud-rail-bottom" aria-hidden="true">
+                                            <span id="lessonHudStreakFill" class="lesson-hud-streak-fill"></span>
+                                        </div>
+                                        <span id="lessonHudStep" class="lesson-hud-legacy" hidden>Lesson</span>
+                                        <div id="lessonHudMood" class="lesson-hud-legacy" aria-hidden="true" hidden></div>
+                                        <div id="lessonHudBurst" class="lesson-hud-legacy" aria-hidden="true" hidden></div>
                                     </div>
                                     <textarea id="editor" spellcheck="false" aria-label="Code editor"></textarea>
                                     <pre id="editorMirror" class="editor-mirror" aria-label="Saved version preview"></pre>

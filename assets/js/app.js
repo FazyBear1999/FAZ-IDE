@@ -2899,6 +2899,9 @@ let lessonHudLastMood = "focus";
 let lessonHudLastProgressBucket = -1;
 let lessonHudLastStepKey = "";
 let lessonHudLastRenderKey = "";
+let lessonHudLastAriaLabel = "";
+let lessonHudLastProgressPercent = -1;
+let lessonHudLastComboProgress = -1;
 let lessonHudWasActive = false;
 let lessonShopRenderKey = "";
 let lessonHeaderStatsRenderKey = "";
@@ -10279,13 +10282,23 @@ function setLessonStatsLivePolling(active) {
 
 function updateLessonHud() {
     if (!el.lessonHud) return;
+    const activeFile = getActiveFile();
     const active = isLessonSessionActiveForCurrentFile();
+    const headerActive = isLessonFamilyFile(activeFile);
     setDataActive(el.lessonHud, active);
     el.lessonHud.hidden = !active;
+    if (el.lessonHeaderHud) {
+        setDataActive(el.lessonHeaderHud, headerActive);
+        el.lessonHeaderHud.hidden = !headerActive;
+        el.lessonHeaderHud.setAttribute("aria-hidden", headerActive ? "false" : "true");
+    }
     if (!active) {
         lessonHudWasActive = false;
         lessonHudLastRenderKey = "";
         lessonHudLastStepKey = "";
+        lessonHudLastAriaLabel = "";
+        lessonHudLastProgressPercent = -1;
+        lessonHudLastComboProgress = -1;
         lessonHudLastProgressBucket = -1;
         lessonHudLastTier = "none";
         lessonHudLastMood = "focus";
@@ -10296,21 +10309,28 @@ function updateLessonHud() {
         if (el.lessonHudFill) {
             el.lessonHudFill.style.setProperty("--lesson-progress", "0%");
         }
+        if (el.lessonHudStreakFill) {
+            el.lessonHudStreakFill.style.setProperty("--lesson-combo-progress", "0%");
+        }
         if (lessonHudBurstTimer) {
             clearTimeout(lessonHudBurstTimer);
             lessonHudBurstTimer = 0;
         }
         el.lessonHud.setAttribute("data-burst", "false");
-        setNodeText(el.lessonHudMood, "Calm rhythm. Ready when you are.");
+        setNodeText(el.lessonHudLevel, `Lv ${Math.max(1, Number(lessonProfile.level) || 1)}`);
+        setNodeText(el.lessonHudXp, `XP ${Math.max(0, Number(lessonProfile.xp) || 0)}`);
         setNodeText(el.lessonHudPace, "WPM 0");
         setNodeText(el.lessonHudCoins, `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`);
-        queueLessonHeaderStatsUpdate();
+        queueLessonHeaderStatsUpdate({ force: lessonStatsOpen });
         return;
     }
     if (!lessonHudWasActive) {
         lessonHudWasActive = true;
         lessonHudLastRenderKey = "";
         lessonHudLastStepKey = "";
+        lessonHudLastAriaLabel = "";
+        lessonHudLastProgressPercent = -1;
+        lessonHudLastComboProgress = -1;
         lessonHudLastProgressBucket = -1;
         lessonHudLastTier = "none";
         lessonHudLastMood = "focus";
@@ -10337,11 +10357,22 @@ function updateLessonHud() {
         lessonHudLastStepKey = stepKey;
         lessonHudLastProgressBucket = -1;
     }
-    el.lessonHud.dataset.streakTier = streakTier;
-    el.lessonHud.style.setProperty("--lesson-progress", `${progressPercent}%`);
-    el.lessonHud.style.setProperty("--lesson-combo-progress", `${comboProgress}%`);
-    if (el.lessonHudFill) {
-        el.lessonHudFill.style.setProperty("--lesson-progress", `${progressPercent}%`);
+    if (streakTier !== lessonHudLastTier) {
+        el.lessonHud.dataset.streakTier = streakTier;
+    }
+    if (progressPercent !== lessonHudLastProgressPercent) {
+        el.lessonHud.style.setProperty("--lesson-progress", `${progressPercent}%`);
+        if (el.lessonHudFill) {
+            el.lessonHudFill.style.setProperty("--lesson-progress", `${progressPercent}%`);
+        }
+        lessonHudLastProgressPercent = progressPercent;
+    }
+    if (comboProgress !== lessonHudLastComboProgress) {
+        el.lessonHud.style.setProperty("--lesson-combo-progress", `${comboProgress}%`);
+        if (el.lessonHudStreakFill) {
+            el.lessonHudStreakFill.style.setProperty("--lesson-combo-progress", `${comboProgress}%`);
+        }
+        lessonHudLastComboProgress = comboProgress;
     }
     const mood = accuracy >= 98 && progressPercent >= 65
         ? "perfect"
@@ -10350,13 +10381,15 @@ function updateLessonHud() {
             : mistakes > 0
                 ? "recovery"
                 : "focus";
-    el.lessonHud.dataset.mood = mood;
+    if (mood !== lessonHudLastMood) {
+        el.lessonHud.dataset.mood = mood;
+    }
     const stepText = `${stepId} ${stepIndex}/${stepCount}`;
-    const progressText = `${progress}/${total} (${progressPercent}%)`;
+    const progressText = `Progress ${progressPercent}%`;
     const levelText = `Lv ${lessonProfile.level}`;
     const xpText = `XP ${lessonProfile.xp}`;
     const bytesText = `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`;
-    const streakText = `Streak ${activeStreak} • ${accuracy}%`;
+    const streakText = `Streak ${activeStreak}`;
     const moodText = mood === "perfect"
         ? "Locked in. Precision and pace are aligned."
         : mood === "strong"
@@ -10389,11 +10422,12 @@ function updateLessonHud() {
         triggerLessonHudBurst(`Checkpoint ${progressBucket * 25}%`);
     }
 
-    el.lessonHud.setAttribute(
-        "aria-label",
-        `Lesson ${stepId}, step ${stepIndex} of ${stepCount}, progress ${progress} of ${total} (${progressPercent} percent), streak ${activeStreak}, accuracy ${accuracy} percent, pace ${metrics.wpm} WPM`
-    );
-    queueLessonHeaderStatsUpdate();
+    const ariaLabel = `Lesson ${stepId}, step ${stepIndex} of ${stepCount}, progress ${progress} of ${total} (${progressPercent} percent), streak ${activeStreak}, accuracy ${accuracy} percent, pace ${metrics.wpm} WPM`;
+    if (ariaLabel !== lessonHudLastAriaLabel) {
+        lessonHudLastAriaLabel = ariaLabel;
+        el.lessonHud.setAttribute("aria-label", ariaLabel);
+    }
+    queueLessonHeaderStatsUpdate({ force: lessonStatsOpen });
 }
 
 function triggerLessonHudBurst(message = "") {

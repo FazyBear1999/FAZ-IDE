@@ -767,26 +767,62 @@ button:focus-visible {
     color: var(--text-top-control);
 }
 
+.lesson-header-hud {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 2px;
+    pointer-events: none;
+}
+
+.lesson-header-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: var(--radius-xxs);
+    border: 1px solid var(--border-soft);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface-panel) 92%, transparent),
+        color-mix(in srgb, var(--surface-raised) 88%, transparent)
+    );
+    color: var(--text-top-control);
+    font-size: var(--text-size-xs);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+}
+
 .lesson-hud {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 12px;
+    right: 12px;
     z-index: 8;
-    display: inline-grid;
-    gap: 4px;
-    min-height: 30px;
-    padding: 6px 7px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6px;
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+        "main rail"
+        "mood rail"
+        "streak rail"
+        "bottom bottom";
+    gap: 5px 7px;
+    min-height: 52px;
+    width: min(390px, calc(100% - 24px));
+    padding: 7px 8px 8px;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-sm);
     background:
-        radial-gradient(120% 140% at 100% -20%, color-mix(in srgb, var(--surface-selected-soft) 26%, transparent), transparent 52%),
-        linear-gradient(165deg, color-mix(in srgb, var(--surface-panel) 84%, transparent), color-mix(in srgb, var(--surface-raised) 88%, transparent));
+        radial-gradient(120% 140% at 100% -20%, color-mix(in srgb, var(--surface-selected-soft) 18%, transparent), transparent 58%),
+        linear-gradient(165deg, color-mix(in srgb, var(--surface-panel) 56%, transparent), color-mix(in srgb, var(--surface-raised) 62%, transparent));
     box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--surface-raised) 22%, transparent),
-        0 10px 20px color-mix(in srgb, var(--surface-bg) 68%, transparent);
+        0 0 0 1px color-mix(in srgb, var(--surface-raised) 14%, transparent),
+        0 8px 16px color-mix(in srgb, var(--surface-bg) 58%, transparent);
     backdrop-filter: blur(7px) saturate(1.14);
     pointer-events: none;
-    max-width: min(640px, calc(100% - 22px));
     --lesson-progress: 0%;
     --lesson-hud-chip-font-size: clamp(11px, 0.72rem, 12px);
     --lesson-hud-meta-font-size: clamp(11px, 0.7rem, 12px);
@@ -796,8 +832,9 @@ button:focus-visible {
     display: none;
 }
 
-.lesson-hud-row {
+.lesson-hud-main {
     display: inline-flex;
+    grid-area: main;
     align-items: center;
     flex-wrap: wrap;
     gap: 5px;
@@ -864,7 +901,7 @@ button:focus-visible {
 }
 
 .lesson-hud-chip-step {
-    max-width: 210px;
+    max-width: 180px;
     font-weight: 600;
     border-color: color-mix(in srgb, var(--border-focus-soft) 56%, var(--border-soft) 44%);
     background: linear-gradient(
@@ -874,33 +911,62 @@ button:focus-visible {
     );
 }
 
+.lesson-hud-legacy {
+    display: none;
+}
+
 .lesson-hud-rail {
     position: relative;
-    width: 100%;
-    height: 5px;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-xxs);
     background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
     overflow: hidden;
 }
 
+.lesson-hud-rail-vertical {
+    grid-area: rail;
+    width: 6px;
+    height: 100%;
+    min-height: 45px;
+}
+
+.lesson-hud-rail-bottom {
+    grid-area: bottom;
+    width: 100%;
+    height: 4px;
+}
+
 .lesson-hud-fill {
     position: absolute;
     top: 0;
     left: 0;
-    bottom: 0;
-    width: var(--lesson-progress, 0%);
+    right: 0;
+    height: var(--lesson-progress, 0%);
     border-radius: inherit;
     background: linear-gradient(
-        90deg,
+        180deg,
         color-mix(in srgb, var(--surface-selected-soft) 42%, transparent),
         color-mix(in srgb, var(--text) 88%, transparent)
     );
     box-shadow: 0 0 8px color-mix(in srgb, var(--text-top-control) 28%, transparent);
-    transition: width 140ms linear, filter var(--motion-ui) var(--motion-ease);
+    transition: height 140ms linear, filter var(--motion-ui) var(--motion-ease);
 }
 
-.lesson-hud-fill::after {
+.lesson-hud-streak-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--lesson-combo-progress, 0%);
+    border-radius: inherit;
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--surface-selected-soft) 64%, transparent),
+        color-mix(in srgb, var(--text-top-control) 88%, transparent)
+    );
+    transition: width var(--motion-ui) var(--motion-ease);
+}
+
+.lesson-hud-fill::after,
+.lesson-hud-streak-fill::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -917,67 +983,34 @@ button:focus-visible {
     pointer-events: none;
 }
 
-.lesson-hud-mood {
-    display: inline-flex;
-    align-items: center;
-    min-height: 19px;
-    padding: 0 8px;
-    border: 1px solid color-mix(in srgb, var(--border-soft) 88%, transparent);
-    border-radius: var(--radius-xxs);
-    background: color-mix(in srgb, var(--surface-panel) 82%, transparent);
-    color: var(--text-muted-soft);
-    font-size: var(--lesson-hud-meta-font-size);
-    line-height: 1.22;
-    letter-spacing: 0.1px;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-}
-
-.lesson-hud-burst {
-    position: absolute;
-    top: -20px;
-    right: 4px;
-    opacity: 0;
-    transform: translateY(6px) scale(0.96);
-    padding: 3px 8px;
-    border: 1px solid var(--border-focus-soft);
-    border-radius: var(--radius-xxs);
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--surface-selected-soft) 32%, var(--surface-raised) 68%),
-        color-mix(in srgb, var(--surface-raised) 88%, transparent)
-    );
-    color: var(--text-top-control);
-    font-size: var(--lesson-hud-meta-font-size);
-    line-height: 1.2;
-    letter-spacing: 0.12px;
-    pointer-events: none;
-}
-
-.lesson-hud[data-burst="true"] .lesson-hud-burst {
-    animation: lesson-hud-burst-in 500ms var(--motion-ease) 1;
-}
-
 .lesson-hud[data-streak-tier="warm"] .lesson-hud-fill,
 .lesson-hud[data-streak-tier="hot"] .lesson-hud-fill,
-.lesson-hud[data-streak-tier="fire"] .lesson-hud-fill {
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-fill,
+.lesson-hud[data-streak-tier="warm"] .lesson-hud-streak-fill,
+.lesson-hud[data-streak-tier="hot"] .lesson-hud-streak-fill,
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-streak-fill {
     animation: lesson-hud-energy 1.6s ease-in-out infinite alternate;
 }
 
 .lesson-hud[data-streak-tier="warm"] .lesson-hud-fill::after,
 .lesson-hud[data-streak-tier="hot"] .lesson-hud-fill::after,
-.lesson-hud[data-streak-tier="fire"] .lesson-hud-fill::after {
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-fill::after,
+.lesson-hud[data-streak-tier="warm"] .lesson-hud-streak-fill::after,
+.lesson-hud[data-streak-tier="hot"] .lesson-hud-streak-fill::after,
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-streak-fill::after {
     opacity: 0.44;
     animation: lesson-hud-fill-sweep 2.2s ease-in-out infinite;
 }
 
-.lesson-hud[data-streak-tier="warm"] .lesson-hud-chip-step {
+.lesson-hud[data-streak-tier="warm"] .lesson-hud-chip-step,
+.lesson-hud[data-streak-tier="warm"] .lesson-header-chip {
     border-color: color-mix(in srgb, var(--border-focus-soft) 65%, var(--border-soft) 35%);
 }
 
 .lesson-hud[data-streak-tier="hot"] .lesson-hud-chip-step,
-.lesson-hud[data-streak-tier="fire"] .lesson-hud-chip-step {
+.lesson-hud[data-streak-tier="fire"] .lesson-hud-chip-step,
+.lesson-hud[data-streak-tier="hot"] .lesson-header-chip,
+.lesson-hud[data-streak-tier="fire"] .lesson-header-chip {
     border-color: color-mix(in srgb, var(--border-focus-strong) 70%, var(--border-soft) 30%);
 }
 
@@ -1003,9 +1036,17 @@ button:focus-visible {
 
 .lesson-hud[data-mood="perfect"] .lesson-hud-fill {
     background: linear-gradient(
-        90deg,
+        180deg,
         color-mix(in srgb, var(--surface-selected-soft) 42%, transparent),
         color-mix(in srgb, var(--text) 92%, transparent)
+    );
+}
+
+.lesson-hud[data-mood="perfect"] .lesson-hud-streak-fill {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--surface-selected-soft) 58%, transparent),
+        color-mix(in srgb, var(--text-top-control) 96%, transparent)
     );
 }
 
@@ -1044,74 +1085,54 @@ button:focus-visible {
     }
 }
 
-#lessonHudStep,
-#lessonHudProgress,
 #lessonHudLevel,
 #lessonHudXp,
+#lessonHudCoins,
+#lessonHudStep,
+#lessonHudProgress,
 #lessonHudStreak,
 #lessonHudPace {
     color: var(--text-top-control);
 }
 
-#lessonHudStreak {
-    position: relative;
-    overflow: hidden;
-    padding-bottom: 2px;
-}
-
-#lessonHudStreak::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 2px;
-    background: color-mix(in srgb, var(--surface-panel) 72%, transparent);
-    pointer-events: none;
-}
-
-#lessonHudStreak::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    height: 2px;
-    width: var(--lesson-combo-progress, 0%);
-    background: linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--surface-selected-soft) 64%, transparent),
-        color-mix(in srgb, var(--text-top-control) 88%, transparent)
-    );
-    transition: width var(--motion-ui) var(--motion-ease);
-    pointer-events: none;
-}
-
 @media (max-width: 960px) {
     .lesson-hud {
-        max-width: min(500px, calc(100% - 18px));
+        width: min(330px, calc(100% - 18px));
         --lesson-hud-chip-font-size: clamp(11px, 0.68rem, 12px);
         --lesson-hud-meta-font-size: clamp(11px, 0.66rem, 12px);
     }
 
     .lesson-hud-chip-step {
-        max-width: 164px;
+        max-width: 140px;
+    }
+
+    .lesson-header-chip {
+        min-height: 24px;
+        padding: 0 8px;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .lesson-hud-fill {
+    .lesson-hud-fill,
+    .lesson-hud-streak-fill {
         transition: none;
     }
 
     .lesson-hud[data-streak-tier="warm"] .lesson-hud-fill,
     .lesson-hud[data-streak-tier="hot"] .lesson-hud-fill,
-    .lesson-hud[data-streak-tier="fire"] .lesson-hud-fill {
+    .lesson-hud[data-streak-tier="fire"] .lesson-hud-fill,
+    .lesson-hud[data-streak-tier="warm"] .lesson-hud-streak-fill,
+    .lesson-hud[data-streak-tier="hot"] .lesson-hud-streak-fill,
+    .lesson-hud[data-streak-tier="fire"] .lesson-hud-streak-fill {
         animation: none;
     }
 
     .lesson-hud[data-streak-tier="warm"] .lesson-hud-fill::after,
     .lesson-hud[data-streak-tier="hot"] .lesson-hud-fill::after,
-    .lesson-hud[data-streak-tier="fire"] .lesson-hud-fill::after {
+    .lesson-hud[data-streak-tier="fire"] .lesson-hud-fill::after,
+    .lesson-hud[data-streak-tier="warm"] .lesson-hud-streak-fill::after,
+    .lesson-hud[data-streak-tier="hot"] .lesson-hud-streak-fill::after,
+    .lesson-hud[data-streak-tier="fire"] .lesson-hud-streak-fill::after {
         animation: none;
         opacity: 0;
     }
