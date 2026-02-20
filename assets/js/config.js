@@ -204,6 +204,15 @@ export const APPLICATIONS = [
 
 export const LESSONS = [
     {
+        id: "quick-output-instant",
+        name: "Lesson: Instant Output Test (2 keys)",
+        icon: buildThemedIcon("26a1"),
+        files: [
+            { path: "index.html", src: "./assets/lessons/quick-output-instant/index.html" },
+        ],
+        entryFile: "index.html",
+    },
+    {
         id: "paddle-lesson-1",
         name: "Lesson: Paddle Intro (Typing)",
         icon: buildThemedIcon("1f3d3"),

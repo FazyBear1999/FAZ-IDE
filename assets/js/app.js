@@ -3034,6 +3034,7 @@ let lessonHeaderStatsSyncFrame = null;
 let lessonHeaderStatsForceQueued = false;
 let lessonHudPulseLastAt = 0;
 let lessonHapticLastAt = 0;
+let lessonCursorLockSyncing = false;
 let lessonStatsView = "overview";
 let lessonShopNotice = "";
 let lessonProfile = {
@@ -9618,7 +9619,7 @@ function normalizeTemplate(entry, index = 0, { fallbackLabel = "Template" } = {}
     const preferred = files.find((file) => file.path.toLowerCase() === preferredKey);
     const firstScript = files.find((file) => getFileBaseName(file.path).toLowerCase().endsWith(".js"));
     const entryFile = preferred?.path || firstScript?.path || files[0].path;
-    const iconSources = normalizeTemplateIconSources(entry);
+    const iconSources = [];
     return {
         id,
         name,
@@ -10737,13 +10738,39 @@ function syncLessonStateForActiveFile() {
 
 function setLessonCursorToProgress() {
     const step = getLessonCurrentStep();
-    if (!step) return;
+    if (!step) return false;
     normalizeLessonProgressToTypeable();
     const index = step.startIndex + Math.max(0, Number(lessonSession.progress) || 0);
     const pos = editor.posFromIndex?.(index);
-    if (!pos) return;
+    if (!pos) return false;
     editor.setCursor(pos);
     editor.scrollIntoView?.(pos, 80);
+    return true;
+}
+
+function lockLessonCursorToProgress({ defer = false } = {}) {
+    if (!isLessonSessionActiveForCurrentFile()) return false;
+    if (lessonCursorLockSyncing) return false;
+
+    const apply = () => {
+        if (!isLessonSessionActiveForCurrentFile()) return;
+        if (lessonCursorLockSyncing) return;
+        lessonCursorLockSyncing = true;
+        try {
+            editor.collapseSelectionsToPrimary?.();
+            setLessonCursorToProgress();
+        } finally {
+            lessonCursorLockSyncing = false;
+        }
+    };
+
+    if (defer) {
+        requestAnimationFrame(apply);
+        return true;
+    }
+
+    apply();
+    return true;
 }
 
 function isLessonIndentationWhitespace(expectedText = "", index = 0) {
@@ -22991,6 +23018,14 @@ async function boot() {
     });
 
     editor.onCursorActivity?.(() => {
+        if (isLessonSessionActiveForCurrentFile()) {
+            lockLessonCursorToProgress();
+            syncEditorStatusBar();
+            queueEditorScopeTrailSync();
+            queueEditorSignatureHintSync();
+            maintainEditorCursorComfort();
+            return;
+        }
         syncEditorStatusBar();
         queueEditorScopeTrailSync();
         queueEditorSignatureHintSync();
@@ -23017,6 +23052,10 @@ async function boot() {
     });
 
     editor.onMouseDown?.((event) => {
+        if (isLessonSessionActiveForCurrentFile()) {
+            lockLessonCursorToProgress({ defer: true });
+            return;
+        }
         if (!event?.altKey || !editor.supportsMultiCursor) return;
         event.preventDefault();
         const pos = editor.coordsChar?.({ left: event.clientX, top: event.clientY });
@@ -24271,6 +24310,15 @@ function onSandboxMessage(event) {
             maxArgs: SANDBOX_CONSOLE_MAX_ARGS,
             argMaxChars: SANDBOX_CONSOLE_ARG_MAX_CHARS,
         });
+        const joinedConsole = String((safeConsole.args || []).join(" ") || "").toLowerCase();
+        const isSrcdocLiveReloadWarn = safeConsole.level === "warn"
+            && joinedConsole.includes("sandbox security: blocked api websocket")
+            && joinedConsole.includes("srcdoc/ws");
+        const isSrcdocLiveReloadInfo = safeConsole.level === "info"
+            && joinedConsole.includes("live reload enabled.");
+        if (isSrcdocLiveReloadWarn || isSrcdocLiveReloadInfo) {
+            return;
+        }
         queueSandboxConsoleLog(safeConsole.level, safeConsole.args);
         return;
     }

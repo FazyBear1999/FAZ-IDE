@@ -6125,6 +6125,57 @@ test("quick 1-line lesson auto-runs connected html output when completed", async
   expect(result.statusText.toLowerCase()).toContain("ran");
 });
 
+test("instant lesson auto-runs connected html output with 2-key typing", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.listLessons || !api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const lessons = api.listLessons();
+    const hasLesson = lessons.some((entry) => entry.id === "quick-output-instant");
+    if (!hasLesson) {
+      return { ready: true, hasLesson: false };
+    }
+
+    const loaded = await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    let typedChars = 0;
+    const deadline = Date.now() + 1800;
+    while (Date.now() < deadline) {
+      const state = api.getLessonState();
+      if (!state || state.completed) break;
+      const expectedNext = String(state.expectedNext || "");
+      if (!expectedNext) break;
+      const typed = Number(api.typeLessonInput(expectedNext) || 0);
+      if (typed <= 0) break;
+      typedChars += typed;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 240));
+
+    const finalState = api.getLessonState();
+    const logText = String(document.querySelector("#log")?.textContent || "");
+
+    return {
+      ready: true,
+      hasLesson,
+      loaded,
+      typedChars,
+      completed: Boolean(finalState?.completed),
+      logText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.hasLesson).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.typedChars).toBeGreaterThan(1);
+  expect(result.completed).toBeTruthy();
+  expect(result.logText).toContain("Instant lesson output ready.");
+});
+
 test("lesson typing highlights typed text while keeping remaining text softly faded", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -6199,6 +6250,109 @@ test("loading a lesson from sidebar focuses editor for immediate typing", async 
   expect(result.ready).toBeTruthy();
   expect(result.active).toBeTruthy();
   expect(result.focused).toBeTruthy();
+});
+
+test("lesson mode keeps cursor locked to required next character after editor click", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const boot = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    for (let i = 0; i < 120; i += 1) {
+      const state = api.getLessonState();
+      const next = String(state?.expectedNext || "");
+      if (!next) break;
+      if (next !== " " && next !== "\t" && next !== "\n" && next !== "\r") {
+        break;
+      }
+      api.typeLessonInput(next);
+    }
+
+    return { ready: true, loaded: true };
+  });
+
+  expect(boot.ready).toBeTruthy();
+  expect(boot.loaded).toBeTruthy();
+
+  const clickTarget = await page.evaluate(() => {
+    const cm = document.querySelector("#editorPanel .CodeMirror")?.CodeMirror;
+    if (cm) {
+      const doc = cm.getDoc();
+      const line = Math.max(0, doc.lineCount() - 1);
+      const ch = Math.max(0, String(doc.getLine(line) || "").length);
+      const coords = cm.charCoords({ line, ch }, "page");
+      return {
+        x: Math.max(0, Math.round(Number(coords?.left || 0) + 4)),
+        y: Math.max(0, Math.round(Number(coords?.top || 0) + 4)),
+      };
+    }
+
+    const textarea = document.querySelector("#editor");
+    const rect = textarea?.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.round(Number(rect?.left || 0) + Math.max(6, Number(rect?.width || 0) - 6))),
+      y: Math.max(0, Math.round(Number(rect?.top || 0) + Math.max(6, Number(rect?.height || 0) - 6))),
+    };
+  });
+
+  const before = await page.evaluate(() => {
+    const cm = document.querySelector("#editorPanel .CodeMirror")?.CodeMirror;
+    if (cm) {
+      const cur = cm.getDoc().getCursor();
+      return { line: Number(cur?.line || 0), ch: Number(cur?.ch || 0) };
+    }
+    const textarea = document.querySelector("#editor");
+    const value = String(textarea?.value || "");
+    const idx = Math.max(0, Number(textarea?.selectionStart || 0));
+    const prefix = value.slice(0, idx);
+    const line = prefix.split("\n").length - 1;
+    const lastNl = prefix.lastIndexOf("\n");
+    const ch = lastNl >= 0 ? idx - lastNl - 1 : idx;
+    return { line: Number(line || 0), ch: Number(ch || 0) };
+  });
+
+  await page.mouse.click(clickTarget.x, clickTarget.y);
+
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const cm = document.querySelector("#editorPanel .CodeMirror")?.CodeMirror;
+      if (cm) {
+        const cur = cm.getDoc().getCursor();
+        return { line: Number(cur?.line || 0), ch: Number(cur?.ch || 0) };
+      }
+      const textarea = document.querySelector("#editor");
+      const value = String(textarea?.value || "");
+      const idx = Math.max(0, Number(textarea?.selectionStart || 0));
+      const prefix = value.slice(0, idx);
+      const line = prefix.split("\n").length - 1;
+      const lastNl = prefix.lastIndexOf("\n");
+      const ch = lastNl >= 0 ? idx - lastNl - 1 : idx;
+      return { line: Number(line || 0), ch: Number(ch || 0) };
+    });
+  }).toEqual(before);
+
+  const afterType = await page.evaluate(() => {
+    const api = window.fazide;
+    const stateBefore = api?.getLessonState?.();
+    const next = String(stateBefore?.expectedNext || "");
+    const typed = Number(api?.typeLessonInput?.(next) || 0);
+    const stateAfter = api?.getLessonState?.();
+    return {
+      beforeProgress: Number(stateBefore?.progress || 0),
+      afterProgress: Number(stateAfter?.progress || 0),
+      typed,
+    };
+  });
+
+  expect(afterType.typed).toBeGreaterThan(0);
+  expect(afterType.afterProgress).toBeGreaterThan(afterType.beforeProgress);
 });
 
 test("lesson mode accepts strict real keyboard typing on first line", async ({ page }) => {
