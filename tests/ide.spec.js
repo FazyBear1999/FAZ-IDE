@@ -6209,6 +6209,73 @@ test("lesson stats modal live-updates elapsed time while open", async ({ page })
   expect(result.beforeText).not.toBe(result.afterText);
 });
 
+test("lesson header stats refresh after burst typing frame sync", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.removeItem("fazide.lesson-profile.v1");
+    localStorage.removeItem("fazide.lesson-session.v1");
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    const parseXp = (text) => {
+      const match = /XP\s+([0-9]+)/.exec(String(text || ""));
+      return match ? Number(match[1]) : -1;
+    };
+
+    const beforeXpText = String(document.querySelector("#lessonHeaderXp")?.textContent || "");
+    const beforeXp = parseXp(beforeXpText);
+    const initialState = api.getLessonState();
+
+    let applied = 0;
+    let guard = 0;
+    while (applied < 10 && guard < 80) {
+      guard += 1;
+      const state = api.getLessonState();
+      const expectedNext = String(state?.expectedNext || "");
+      if (!expectedNext) break;
+      const typed = Number(api.typeLessonInput(expectedNext) || 0);
+      if (typed <= 0) break;
+      applied += typed;
+    }
+
+    const immediateXpText = String(document.querySelector("#lessonHeaderXp")?.textContent || "");
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const afterFrameXpText = String(document.querySelector("#lessonHeaderXp")?.textContent || "");
+    const afterFrameWpm = String(document.querySelector("#lessonHeaderWpm")?.textContent || "");
+
+    return {
+      ready: true,
+      loaded: true,
+      stateActive: Boolean(initialState?.active),
+      applied,
+      beforeXp,
+      beforeXpText,
+      immediateXpText,
+      afterFrameXpText,
+      afterFrameXp: parseXp(afterFrameXpText),
+      afterFrameWpm,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.stateActive).toBeTruthy();
+  expect(result.beforeXp).toBeGreaterThanOrEqual(0);
+  expect(result.afterFrameXp).toBeGreaterThanOrEqual(result.beforeXp);
+  expect(result.afterFrameXpText).toContain("XP ");
+  expect(result.afterFrameWpm).toContain("WPM ");
+});
+
 test("lesson shop list does not re-render while overview tab is active", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

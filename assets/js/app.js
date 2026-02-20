@@ -2905,6 +2905,8 @@ let lessonHeaderStatsRenderKey = "";
 let lessonEditorLevelUpTimer = 0;
 let lessonStatsLiveTimer = 0;
 let lessonHeaderStatsLastSyncAt = 0;
+let lessonHeaderStatsSyncFrame = null;
+let lessonHeaderStatsForceQueued = false;
 let lessonHudPulseLastAt = 0;
 let lessonHapticLastAt = 0;
 let lessonStatsView = "overview";
@@ -10244,6 +10246,19 @@ function updateLessonHeaderStats({ force = false } = {}) {
     lessonHeaderStatsLastSyncAt = now;
 }
 
+function queueLessonHeaderStatsUpdate({ force = false } = {}) {
+    if (force) {
+        lessonHeaderStatsForceQueued = true;
+    }
+    if (lessonHeaderStatsSyncFrame != null) return;
+    lessonHeaderStatsSyncFrame = requestAnimationFrame(() => {
+        lessonHeaderStatsSyncFrame = null;
+        const shouldForce = lessonHeaderStatsForceQueued;
+        lessonHeaderStatsForceQueued = false;
+        updateLessonHeaderStats({ force: shouldForce });
+    });
+}
+
 function setLessonStatsLivePolling(active) {
     const shouldRun = Boolean(active);
     if (!shouldRun) {
@@ -10289,7 +10304,7 @@ function updateLessonHud() {
         setNodeText(el.lessonHudMood, "Calm rhythm. Ready when you are.");
         setNodeText(el.lessonHudPace, "WPM 0");
         setNodeText(el.lessonHudCoins, `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`);
-        updateLessonHeaderStats();
+        queueLessonHeaderStatsUpdate();
         return;
     }
     if (!lessonHudWasActive) {
@@ -10378,7 +10393,7 @@ function updateLessonHud() {
         "aria-label",
         `Lesson ${stepId}, step ${stepIndex} of ${stepCount}, progress ${progress} of ${total} (${progressPercent} percent), streak ${activeStreak}, accuracy ${accuracy} percent, pace ${metrics.wpm} WPM`
     );
-    updateLessonHeaderStats();
+    queueLessonHeaderStatsUpdate();
 }
 
 function triggerLessonHudBurst(message = "") {
