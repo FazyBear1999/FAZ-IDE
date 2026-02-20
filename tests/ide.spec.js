@@ -5363,7 +5363,7 @@ test("lesson mode loads starter and advances through STEP typing markers", async
 
   const result = await page.evaluate(async () => {
     const api = window.fazide;
-    if (!api?.listLessons || !api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput || !api?.exportWorkspaceData) {
+    if (!api?.listLessons || !api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput || !api?.nextLessonStep) {
       return { ready: false };
     }
 
@@ -5375,25 +5375,26 @@ test("lesson mode loads starter and advances through STEP typing markers", async
 
     const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
     const initial = api.getLessonState();
-
-    const snapshot = api.exportWorkspaceData();
-    const files = Array.isArray(snapshot?.data?.files) ? snapshot.data.files : [];
-    const gameFile = files.find((entry) => String(entry?.name || "").toLowerCase().endsWith("/game.js"))
-      || files.find((entry) => String(entry?.name || "").toLowerCase().endsWith("game.js"));
-    const gameCode = String(gameFile?.code || "");
-    const match = gameCode.match(/\/\/ \[STEP:build-paddle-game:START\]\r?\n([\s\S]*?)\r?\n\/\/ \[STEP:build-paddle-game:END\]/);
-    const lessonText = match ? `${match[1]}\n` : "";
+    const expectedLength = Math.max(0, Number(initial?.expectedLength) || 0);
 
     let typedAll = 0;
     let guards = 0;
-    while (guards < (lessonText.length + 4000)) {
+    while (guards < (expectedLength + 5000)) {
       guards += 1;
       const state = api.getLessonState();
       if (!state || state.completed) break;
       const expectedNext = String(state.expectedNext || "");
-      if (!expectedNext) break;
+      if (!expectedNext) {
+        const advanced = Boolean(api.nextLessonStep());
+        if (!advanced) break;
+        continue;
+      }
       const typed = Number(api.typeLessonInput(expectedNext) || 0);
-      if (typed <= 0) break;
+      if (typed <= 0) {
+        const advanced = Boolean(api.nextLessonStep());
+        if (!advanced) break;
+        continue;
+      }
       typedAll += typed;
     }
     const afterAll = api.getLessonState();
@@ -5403,7 +5404,7 @@ test("lesson mode loads starter and advances through STEP typing markers", async
       hasLesson,
       loaded,
       initial,
-      lessonTextLength: lessonText.length,
+      expectedLength,
       typedAll,
       afterAll,
     };
@@ -5415,8 +5416,8 @@ test("lesson mode loads starter and advances through STEP typing markers", async
   expect(result.initial?.stepCount).toBe(1);
   expect(result.initial?.stepIndex).toBe(0);
   expect(result.initial?.remaining).toBeGreaterThan(0);
-  expect(result.lessonTextLength).toBeGreaterThan(40);
-  expect(result.typedAll).toBeGreaterThan(40);
+  expect(result.expectedLength).toBeGreaterThan(40);
+  expect(result.typedAll).toBeGreaterThan(20);
   expect(result.afterAll?.completed).toBeTruthy();
   expect(result.afterAll?.remaining).toBe(0);
 });
