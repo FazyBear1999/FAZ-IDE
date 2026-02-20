@@ -102,3 +102,4 @@ For each system:
 - run focused validation,
 - run `test:integrity` + `test:memory`,
 - checkpoint evidence before moving to next slice.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

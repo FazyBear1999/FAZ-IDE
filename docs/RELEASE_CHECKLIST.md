@@ -96,3 +96,4 @@ Do not upload dist_site directly for final production release.
 - Verify package only: npm run verify:siteground
 - Franklin full orchestration: npm run frank:full
 - Full QA + upload package verification (web + desktop + SiteGround): npm run test:all
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

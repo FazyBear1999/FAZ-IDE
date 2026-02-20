@@ -72,3 +72,4 @@ Use this exact operating mode:
 - Implement code changes directly.
 - Run targeted tests first, then npm run test:quick.
 - Update docs/ai-memory/decisions.md and docs/ai-memory/release-notes.md if behavior changed.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

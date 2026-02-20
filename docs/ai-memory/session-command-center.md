@@ -88,3 +88,4 @@ Do not end session until all are true:
 - Safety and testability beat speed.
 - Root-cause fixes beat cosmetic patches.
 - No behavior change ships without focused validation.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

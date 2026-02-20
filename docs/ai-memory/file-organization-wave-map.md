@@ -47,3 +47,4 @@ This map turns large repository organization into reversible waves.
 - Revert only the latest failing major change.
 - Keep earlier validated waves intact.
 - Log failure signature and recovery step in memory docs.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

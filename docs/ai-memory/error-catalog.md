@@ -74,3 +74,4 @@
 - 2026-02-17: Guardian rollback restored snapshot 1771287502515-guardian-preflight after gate failure
 
 - 2026-02-17: Guardian failure generated docs/ai-memory/franklin-fix-request.md for npm run test
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

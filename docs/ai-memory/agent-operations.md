@@ -50,3 +50,4 @@
 - Remaining risks and next actions are explicit.
 - Decision and recovery notes are updated when behavior or failure modes changed.
 - Roadmap checkpoints touched in-session include decision ref + validation evidence.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

@@ -87,3 +87,4 @@ The release wave passed the project’s safety and release contracts:
 - No secrets or telemetry paths were introduced in this release.
 - Lessons progression and profile state remain local-only.
 - Contracts and guardrails were expanded; run `npm run test:memory` and `npm run test:integrity` for docs/policy-sensitive changes.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

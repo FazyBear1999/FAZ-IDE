@@ -92,3 +92,4 @@ No checkpoint is complete without all five fields.
 - `test-gaps.md`: every open gap must include a checkpoint ID.
 - `known-issues.md`: every open issue tied to roadmap work must include checkpoint + validation command.
 - `error-catalog.md`: new significant failures should carry checkpoint ID when applicable.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

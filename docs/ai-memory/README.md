@@ -74,3 +74,4 @@ Treat it as a lightweight runbook for daily development and emergency fixes.
 - `roadmap-decision-map.md` for binding roadmap checkpoints to decisions and validation gates.
 - `session-command-center.md` for a one-page, start-to-finish AI operating loop each session.
 
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

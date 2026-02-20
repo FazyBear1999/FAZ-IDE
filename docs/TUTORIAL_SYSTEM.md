@@ -137,3 +137,4 @@ Primary coverage lives in `tests/ide.spec.js`:
 - tutorial reset/start determinism
 - centered panel + visible ring
 - fresh-start clears tutorial seen state
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

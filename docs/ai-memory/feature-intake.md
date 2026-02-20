@@ -63,3 +63,4 @@
 
 - Gate Level (`test:memory` / `test:integrity` / `frank:full`)
 - `test:integrity` minimum per checkpoint; `frank:full` at phase boundary merges.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

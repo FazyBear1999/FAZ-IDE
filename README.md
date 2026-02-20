@@ -207,3 +207,4 @@ Notes:
 - `npm run frank:status` shows Franklin memory/check status.
 
 Details are in `desktop/README.md`.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

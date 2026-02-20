@@ -1120,3 +1120,4 @@ Keep entries short, dated, and explicit about why the change was made.
 - User requested confirmation that Franklin does the complete release workflow and asked for SEO/icon perfection before production upload.
 - Follow-up:
 - Use `SITE_URL` before `npm run deploy:siteground` so packaged canonical/OG/sitemap URLs are stamped automatically with the live domain.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

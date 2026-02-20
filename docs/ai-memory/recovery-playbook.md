@@ -54,3 +54,4 @@ Focus on reproducibility first, then minimal safe correction.
 - Fix applied:
 - Validation commands re-run:
 - Final status:
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

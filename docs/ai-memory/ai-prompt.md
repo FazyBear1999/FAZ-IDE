@@ -108,3 +108,4 @@ No issue intake entry found. Run: npm run ai:issue -- "<summary>"
 - Code changes
 - Tests/validation output
 - Short risk summary
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

@@ -28,3 +28,4 @@ Some minified CSS files are NOT synced.
 2. Apply minimal fix.
 3. Re-run failing stage only.
 4. Re-run `npm run test:quick` or `npm run test:all`.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

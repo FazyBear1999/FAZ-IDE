@@ -47,3 +47,4 @@
 - Open follow-ups:
 - Risk tier:
 - Rollback note:
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

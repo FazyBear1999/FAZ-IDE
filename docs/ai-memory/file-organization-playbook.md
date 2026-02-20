@@ -54,3 +54,4 @@ Goal: improve structure without breaking release safety or runtime behavior.
 - Every major change: focused specs + `test:memory`.
 - Every 3 major changes: full gate.
 - Any high-risk script/release flow touch: immediate full gate (do not wait for count).
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

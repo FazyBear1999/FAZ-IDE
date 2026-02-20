@@ -60,3 +60,4 @@ Before shipping tutorial changes:
 2. Verify spotlight target selectors still exist.
 3. Verify header/footer-hidden start state still recovers correctly.
 4. Verify tutorial skip and completion both clean up state.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

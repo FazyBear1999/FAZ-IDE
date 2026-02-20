@@ -19,3 +19,4 @@ Use this app to prove every language path in FAZ IDE is working.
 
 - PASS: all language checks show their done/step markers.
 - FAIL: any marker is missing or run status is not `Ran`.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

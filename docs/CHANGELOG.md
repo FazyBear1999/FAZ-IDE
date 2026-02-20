@@ -21,3 +21,4 @@
 - Enhanced Files panel: menus, search/sort, games library, and compact UI.
 - Improved layout stability for top header and editor header.
 - Playwright test suite expanded and passing.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

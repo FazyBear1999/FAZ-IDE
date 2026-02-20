@@ -68,3 +68,4 @@ Use this file as the source of truth for script ownership and command-path refer
 - Use exact script filenames when referencing implementation ownership.
 - Use npm command aliases for operator workflows.
 - Update this inventory in the same session whenever script paths or ownership change.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

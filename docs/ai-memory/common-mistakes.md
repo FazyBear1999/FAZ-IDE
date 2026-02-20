@@ -31,3 +31,4 @@
 - Adding keyboard actions without focused regression tests for both positive and negative/edge cases.
 - Implementing smart typing behaviors that over-trigger (e.g., invalid auto-closing on void/declaration tags).
 - Introducing power features without shortcut discoverability updates (help panel/title/hints).
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

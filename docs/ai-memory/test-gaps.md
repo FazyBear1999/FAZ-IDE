@@ -44,3 +44,4 @@
 - Removed unsupported runtime branches and aligned tests to web-language-only execution.
 - Added lesson shop hidden-render regression (`overview` active should not rebuild shop list DOM during typing updates).
 - Added strict lesson theme-unlock policy contracts for fresh-profile lock gating and buy/apply byte-economy flow (`tests/ide.spec.js`).
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

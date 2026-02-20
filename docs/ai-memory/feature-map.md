@@ -48,3 +48,4 @@
 - Keep Files/Applications controls visually consistent and minimal.
 - Keep Lessons modal UX memorable but privacy-safe: local-only copy, token-aligned visuals, and viewport-safe modal behavior.
 - Keep theme unlock/shop flow behind explicit spend/rollback contracts before enabling strict Bytes sinks for all users.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

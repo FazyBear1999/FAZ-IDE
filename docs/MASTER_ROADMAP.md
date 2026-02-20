@@ -282,3 +282,4 @@ UI rule: keep tools available; reduce clutter through contextual actions and com
 - Power users can treat projects as real file trees with safe recovery.
 - Bugs can be reproduced from deterministic bundles.
 - Core flows remain fast, keyboard-first, and square/grid-consistent.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

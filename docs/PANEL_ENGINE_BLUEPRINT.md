@@ -119,3 +119,4 @@ Must pass before each slice lands:
 
 - Keep the solver integration feature-flagged by module boundary.
 - Preserve legacy `panelRows` compatibility until Slice D completes.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

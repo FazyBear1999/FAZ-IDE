@@ -35,3 +35,4 @@ Each issue should link to a checkpoint and decision context when applicable.
 - Repro steps:
 - Validation command:
 - Fix status:
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->

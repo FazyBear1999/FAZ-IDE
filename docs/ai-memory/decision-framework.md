@@ -64,3 +64,4 @@ For every meaningful behavior/safety change:
 2. Add validation evidence command.
 3. Add rollback trigger sentence.
 4. Cross-link to `decisions.md` and one supporting file.
+<!-- docs-sync: 2026-02-20 optimization + command-health pass -->
