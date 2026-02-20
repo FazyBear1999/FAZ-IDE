@@ -193,6 +193,7 @@ export function getRequiredElements() {
         btnRun: $("#run"),
         btnFormat: $("#format"),
         btnClear: $("#clear"),
+        btnStop: $("#stop"),
         btnEditorFind: $("#editorFindBtn"),
         btnEditorSymbols: $("#editorSymbolsBtn"),
         btnProjectSearch: $("#projectSearchBtn"),

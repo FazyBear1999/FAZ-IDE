@@ -128,6 +128,7 @@ const formatter = createFormatter({ fallbackFormat: formatBasic });
 const astClient = createAstClient();
 
 const DEFAULT_TUTORIAL_ID = "beginner";
+const TUTORIAL_FORCE_START_STORAGE_KEY = "fazide.tutorial.force-start-once.v1";
 const TUTORIAL_DEFINITIONS = Object.freeze({
     beginner: Object.freeze({
         id: "beginner",
@@ -136,26 +137,68 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
         completeMessage: "Beginner tutorial complete. Use 'tutorial start beginner' in Dev Terminal to view it again.",
         steps: Object.freeze([
             {
+                id: "welcome",
+                title: "Welcome to FAZ IDE",
+                body: "Welcome! If you're not used to an IDE, it's highly recommended to go through this tutorial first so you can learn the layout and workflow quickly.",
+                target: "#appShell",
+            },
+            {
                 id: "files",
                 title: "Files Panel",
-                body: "This is your project tree. Create, rename, organize, and manage files from here.",
+                body: "This is your project tree. Your Welcome folder is preloaded here so you can learn the IDE on a real starter project.",
                 target: "#filesPanel",
-                onEnter: () => setPanelOpen("files", true),
+                onEnter: () => {
+                    setPanelOpen("files", true);
+                    setFilesSectionOpen("files", true);
+                    focusWelcomeProjectInEditor();
+                },
             },
             {
-                id: "file-filter",
-                title: "File Filter",
-                body: "Use this filter to instantly narrow your workspace by file name while you type.",
-                target: "#fileSearch",
-                reveal: { filesFilters: true },
-                onEnter: () => setPanelOpen("files", true),
-            },
-            {
-                id: "file-actions",
+                id: "file-actions-menu",
                 title: "Files Actions",
-                body: "Open this menu for create, folder, import/export, undo/redo, trash, and selection operations.",
-                target: "#filesMenu",
-                reveal: { filesMenu: true },
+                body: "This opens the View section where you can enable or disable file-system tabs and tools you need (or hide what you do not).",
+                target: "#filesMenu [aria-label=\"View actions\"] .files-menu-grid",
+                reveal: { filesMenuView: true },
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
+                id: "files-tab-open-editors",
+                title: "Files Tab: Open Editors",
+                body: "Open Editors lists files currently open in the editor for quick switching.",
+                target: "#fileList [data-file-section=\"open-editors\"]",
+                reveal: { filesTabFocus: "open-editors" },
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
+                id: "files-tab-files",
+                title: "Files Tab: Files",
+                body: "Files is your main workspace tree. Next, we continue to the Editor where you'll write and run code.",
+                target: "#fileList [data-file-section=\"files\"]",
+                reveal: { filesTabFocus: "files" },
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
+                id: "files-tab-games",
+                title: "Files Tab: Games",
+                body: "This Games tab in the file system opens the game library section.",
+                target: "#filesGames",
+                reveal: { filesTabFocus: "games" },
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
+                id: "files-tab-apps",
+                title: "Files Tab: Applications",
+                body: "This Applications tab opens built-in app templates and runtime examples.",
+                target: "#filesApps",
+                reveal: { filesTabFocus: "applications" },
+                onEnter: () => setPanelOpen("files", true),
+            },
+            {
+                id: "files-tab-lessons",
+                title: "Files Tab: Lessons",
+                body: "This Lessons tab opens guided coding lessons with progress tracking.",
+                target: "#filesLessons",
+                reveal: { filesTabFocus: "lessons" },
                 onEnter: () => setPanelOpen("files", true),
             },
             {
@@ -163,7 +206,10 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
                 title: "Editor",
                 body: "Write and edit code here. Use shortcuts like Ctrl/Cmd+S to save and Ctrl/Cmd+Enter to run.",
                 target: "#editorPanel",
-                onEnter: () => setPanelOpen("editor", true),
+                onEnter: () => {
+                    setPanelOpen("editor", true);
+                    focusWelcomeProjectInEditor();
+                },
             },
             {
                 id: "editor-tabs",
@@ -196,15 +242,19 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
             {
                 id: "sandbox",
                 title: "Sandbox Preview",
-                body: "This is your live run result. Use it to validate UI and behavior immediately after each run.",
+                body: "Now the Welcome project runs in the sandbox so you can see your first live output in FAZ IDE.",
                 target: "#runnerShell",
-                onEnter: () => setPanelOpen("sandbox", true),
+                onEnter: () => {
+                    setPanelOpen("sandbox", true);
+                    runWelcomeProjectForTutorial();
+                },
             },
             {
                 id: "sandbox-actions",
                 title: "Sandbox Actions",
                 body: "Pop out for a separate window or expand for a larger local preview.",
                 target: "#popoutSandbox",
+                reveal: { sandboxActions: true },
                 onEnter: () => setPanelOpen("sandbox", true),
             },
             {
@@ -222,28 +272,6 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
                 onEnter: () => setPanelOpen("log", true),
             },
             {
-                id: "tools",
-                title: "Tools",
-                body: "Tools include diagnostics, debugger, inspector, and task controls for deeper workflows.",
-                target: "#toolsPanel",
-                onEnter: () => setPanelOpen("tools", true),
-            },
-            {
-                id: "tools-tabs",
-                title: "Tools Tabs",
-                body: "Switch between Task Runner, Diagnostics, Inspector, and Debugger from this tab row.",
-                target: "#toolsTabs",
-                onEnter: () => setPanelOpen("tools", true),
-            },
-            {
-                id: "task-actions",
-                title: "Task Runner",
-                body: "Use task shortcuts here to run app-level checks and formatting workflows quickly.",
-                target: "#taskRunnerPanel",
-                reveal: { toolsTab: "task-runner" },
-                onEnter: () => setPanelOpen("tools", true),
-            },
-            {
                 id: "search",
                 title: "Command Search",
                 body: "Search commands quickly here (or press Ctrl/Cmd+Shift+P).",
@@ -255,6 +283,7 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
                 body: "As you type, matching commands appear in this dropdown so you can run actions quickly.",
                 target: "#topCommandPaletteMenu",
                 reveal: { topCommandMenu: true },
+                onEnter: () => startTutorialCommandSearchDemo(),
             },
             {
                 id: "theme",
@@ -295,6 +324,11 @@ const tutorialState = {
     active: false,
     index: 0,
     stepId: "",
+    keepFilesMenuOpen: false,
+    activeFilesTabFocus: "",
+    commandDemoTimer: null,
+    commandDemoToken: 0,
+    sandboxDemoRan: false,
     highlightNode: null,
     wired: false,
     listenersWired: false,
@@ -315,6 +349,121 @@ function normalizeTutorialId(value = "", fallback = DEFAULT_TUTORIAL_ID) {
 function getTutorialDefinition(tutorialId = DEFAULT_TUTORIAL_ID) {
     const resolvedId = normalizeTutorialId(tutorialId, DEFAULT_TUTORIAL_ID);
     return TUTORIAL_DEFINITIONS[resolvedId] || TUTORIAL_DEFINITIONS[DEFAULT_TUTORIAL_ID];
+}
+
+function getWelcomeProjectHtmlFile() {
+    const preferred = ["welcome/index.html", "welcome\\index.html", "index.html"];
+    const lowerSet = new Set(preferred.map((entry) => entry.toLowerCase()));
+    return files.find((file) => {
+        const name = String(file?.name || "").trim().toLowerCase();
+        if (!name) return false;
+        if (lowerSet.has(name)) return true;
+        return name.endsWith("/index.html") && name.includes("welcome");
+    }) || null;
+}
+
+function focusWelcomeProjectInEditor() {
+    const file = getWelcomeProjectHtmlFile();
+    if (!file?.id) return false;
+    selectFile(file.id);
+    return true;
+}
+
+function runWelcomeProjectForTutorial() {
+    if (!focusWelcomeProjectInEditor()) return false;
+    if (tutorialState.sandboxDemoRan) return true;
+    run();
+    tutorialState.sandboxDemoRan = true;
+    return true;
+}
+
+function clearTutorialCommandSearchDemo({ resetInput = true } = {}) {
+    tutorialState.commandDemoToken += 1;
+    if (tutorialState.commandDemoTimer) {
+        clearTimeout(tutorialState.commandDemoTimer);
+        tutorialState.commandDemoTimer = null;
+    }
+    if (resetInput) {
+        commandPaletteIndex = 0;
+        updateCommandPaletteResults("");
+    }
+}
+
+function startTutorialCommandSearchDemo() {
+    if (!tutorialState.active) return;
+    clearTutorialCommandSearchDemo({ resetInput: true });
+    setTopCommandPaletteOpen(true);
+    const token = tutorialState.commandDemoToken;
+    const demoTerms = ["layout", "theme", "run"];
+    let termIndex = 0;
+    let charIndex = 0;
+
+    const scheduleNext = (delay, fn) => {
+        tutorialState.commandDemoTimer = setTimeout(() => {
+            tutorialState.commandDemoTimer = null;
+            if (!tutorialState.active || tutorialState.commandDemoToken !== token) return;
+            fn();
+        }, Math.max(0, Number(delay) || 0));
+    };
+
+    const typeCurrentTerm = () => {
+        if (termIndex >= demoTerms.length) {
+            scheduleNext(450, () => {
+                commandPaletteIndex = 0;
+                updateCommandPaletteResults("");
+            });
+            return;
+        }
+
+        const term = demoTerms[termIndex];
+        if (charIndex < term.length) {
+            charIndex += 1;
+            commandPaletteIndex = 0;
+            updateCommandPaletteResults(term.slice(0, charIndex));
+            scheduleNext(85, typeCurrentTerm);
+            return;
+        }
+
+        scheduleNext(420, () => {
+            termIndex += 1;
+            charIndex = 0;
+            commandPaletteIndex = 0;
+            updateCommandPaletteResults("");
+            scheduleNext(180, typeCurrentTerm);
+        });
+    };
+
+    scheduleNext(120, typeCurrentTerm);
+}
+
+function stopSandboxRun() {
+    clearSandboxReadyTimer();
+    currentToken = null;
+    currentRunContext = null;
+    currentRunFileId = null;
+    const frame = getRunnerFrame();
+    if (frame instanceof HTMLIFrameElement) {
+        frame.srcdoc = "<!doctype html><html><head><meta charset=\"utf-8\" /><style>html,body{height:100%;margin:0;background:#0b0f14;color:#94a3b8;font:600 14px/1.4 system-ui,sans-serif;display:grid;place-items:center}</style></head><body>Sandbox stopped</body></html>";
+    }
+    setHealth(health.sandbox, "idle", "Sandbox: Idle");
+}
+
+function finalizeBeginnerTutorialCompletion() {
+    stopSandboxRun();
+    applyLayoutPreset("studio", { animatePanels: false });
+    setPanelOpen("tools", false);
+    setPanelOpen("files", true);
+    layoutState.filesOpenEditorsOpen = true;
+    layoutState.filesListOpen = true;
+    layoutState.filesGamesOpen = true;
+    layoutState.filesAppsOpen = true;
+    layoutState.filesLessonsOpen = true;
+    gamesSelectorOpen = true;
+    applicationsSelectorOpen = true;
+    lessonsSelectorOpen = true;
+    applyFilesLayout();
+    renderFileList();
+    syncFilesMenuToggles();
 }
 
 function safeLocalStorageGet(key) {
@@ -361,6 +510,7 @@ function getTutorialElements() {
         title: document.getElementById("tutorialIntroTitle"),
         body: document.getElementById("tutorialIntroBody"),
         progress: document.getElementById("tutorialIntroProgress"),
+        progressFill: document.getElementById("tutorialIntroProgressFill"),
         back: document.getElementById("tutorialIntroBack"),
         next: document.getElementById("tutorialIntroNext"),
         skip: document.getElementById("tutorialIntroSkip"),
@@ -497,6 +647,9 @@ function updateTutorialPanelPosition() {
 }
 
 function resetTutorialStepReveals() {
+    clearTutorialCommandSearchDemo({ resetInput: true });
+    tutorialState.activeFilesTabFocus = "";
+    tutorialState.keepFilesMenuOpen = false;
     closeFileMenus();
     setTopCommandPaletteOpen(false);
     setCommandPaletteOpen(false, { focusInput: false });
@@ -505,13 +658,162 @@ function resetTutorialStepReveals() {
     setEditorSettingsOpen(false);
     setShortcutHelpOpen(false);
     setLessonStatsOpen(false);
+    if (el.runnerShell instanceof HTMLElement) {
+        delete el.runnerShell.dataset.tutorialActions;
+    }
 }
 
 function applyTutorialStepReveal(step) {
     const reveal = step?.reveal;
     if (!reveal || typeof reveal !== "object") return;
+
+    const syncTutorialMotionFrames = (frameCount = 8) => {
+        let remaining = Math.max(1, Number(frameCount) || 0);
+        const tick = () => {
+            if (!tutorialState.active) return;
+            refreshTutorialHighlightPosition();
+            updateTutorialPanelPosition();
+            remaining -= 1;
+            if (remaining > 0) scheduleFrame(tick);
+        };
+        tick();
+    };
+
+    const prefersReducedMotion = typeof window !== "undefined"
+        && typeof window.matchMedia === "function"
+        && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const setTutorialFilesTabFocus = (section, targetSelector = "") => {
+        const normalized = String(section || "").toLowerCase();
+        if (!normalized) return;
+
+        if (normalized === "open-editors") {
+            const fallbackFileId = activeFileId || files[0]?.id;
+            if (fallbackFileId) {
+                ensureTabOpen(fallbackFileId);
+            }
+        }
+
+        tutorialState.activeFilesTabFocus = normalized;
+        const highlightSelector = targetSelector || ({
+            "open-editors": "#fileList [data-file-section=\"open-editors\"]",
+            files: "#fileList [data-file-section=\"files\"]",
+            games: "#filesGames",
+            applications: "#filesApps",
+            lessons: "#filesLessons",
+        }[normalized] || "");
+
+        const openFocusedTab = () => {
+            if (!tutorialState.active || tutorialState.activeFilesTabFocus !== normalized) return;
+            if (normalized === "open-editors") layoutState.filesOpenEditorsOpen = true;
+            if (normalized === "files") layoutState.filesListOpen = true;
+            if (normalized === "games") {
+                layoutState.filesGamesOpen = true;
+                gamesSelectorOpen = true;
+            }
+            if (normalized === "applications") {
+                layoutState.filesAppsOpen = true;
+                applicationsSelectorOpen = true;
+            }
+            if (normalized === "lessons") {
+                layoutState.filesLessonsOpen = true;
+                lessonsSelectorOpen = true;
+            }
+            applyFilesLayout();
+            renderFileList();
+            syncFilesMenuToggles();
+            if (highlightSelector) {
+                const targetNode = typeof document !== "undefined" ? document.querySelector(highlightSelector) : null;
+                if (targetNode instanceof HTMLElement) {
+                    tutorialState.highlightNode = targetNode;
+                    try {
+                        targetNode.scrollIntoView({
+                            block: "nearest",
+                            inline: "nearest",
+                            behavior: prefersReducedMotion ? "auto" : "smooth",
+                        });
+                    } catch {
+                        // no-op
+                    }
+                }
+            }
+            syncTutorialMotionFrames(prefersReducedMotion ? 8 : 18);
+        };
+
+        openFocusedTab();
+        scheduleFrame(() => {
+            openFocusedTab();
+            scheduleFrame(openFocusedTab);
+        });
+    };
+
+    const revealFilesMenuViewSection = () => {
+        if (!(el.filesMenuButton instanceof HTMLElement) || !(el.filesMenu instanceof HTMLElement)) return;
+        openFilesMenu(el.filesMenuButton);
+        el.filesMenu.scrollTop = 0;
+        syncTutorialMotionFrames(3);
+        const syncViewSection = ({ smooth = false } = {}) => {
+            if (!(el.filesMenu instanceof HTMLElement)) return;
+            const viewSection = el.filesMenu.querySelector('[aria-label="View actions"]');
+            const viewAnchor = (viewSection instanceof HTMLElement)
+                ? viewSection
+                : el.filesMenu.querySelector('[data-files-toggle="filters"]');
+            const viewHighlight = (viewSection instanceof HTMLElement)
+                ? (viewSection.querySelector('.files-menu-grid') || viewSection)
+                : viewAnchor;
+
+            if (viewAnchor instanceof HTMLElement) {
+                try {
+                    viewAnchor.scrollIntoView({
+                        block: "start",
+                        inline: "nearest",
+                        behavior: smooth && !prefersReducedMotion ? "smooth" : "auto",
+                    });
+                } catch {
+                    // no-op
+                }
+            } else if (!smooth) {
+                el.filesMenu.scrollTop = el.filesMenu.scrollHeight;
+            }
+
+            if (viewHighlight instanceof HTMLElement) {
+                tutorialState.highlightNode = viewHighlight;
+            }
+
+            syncTutorialMotionFrames(smooth ? 14 : 4);
+        };
+
+        scheduleFrame(() => {
+            syncViewSection({ smooth: true });
+            scheduleFrame(() => {
+                syncViewSection();
+                scheduleFrame(() => syncViewSection());
+            });
+        });
+    };
+
     if (reveal.filesFilters === true) setFilesFiltersOpen(true);
-    if (reveal.filesMenu === true && el.filesMenuButton) openFilesMenu(el.filesMenuButton);
+    if (reveal.filesMenu === true && el.filesMenuButton) {
+        tutorialState.keepFilesMenuOpen = true;
+        scheduleFrame(() => {
+            openFilesMenu(el.filesMenuButton);
+            if (el.filesMenu instanceof HTMLElement) el.filesMenu.scrollTop = 0;
+            scheduleFrame(() => {
+                syncTutorialMotionFrames(5);
+            });
+        });
+    }
+    if (reveal.filesMenuView === true && el.filesMenuButton) {
+        tutorialState.keepFilesMenuOpen = true;
+        revealFilesMenuViewSection();
+    }
+    if (typeof reveal.filesTabFocus === "string") {
+        setTutorialFilesTabFocus(reveal.filesTabFocus, step?.target || "");
+    }
+    if (reveal.sandboxActions === true && el.runnerShell instanceof HTMLElement) {
+        el.runnerShell.dataset.tutorialActions = "true";
+        syncTutorialMotionFrames(prefersReducedMotion ? 6 : 12);
+    }
     if (reveal.topCommandMenu === true) setTopCommandPaletteOpen(true);
     if (reveal.layoutPanel === true) setLayoutPanelOpen(true);
     if (reveal.editorSettings === true) setEditorSettingsOpen(true);
@@ -533,9 +835,108 @@ function refreshTutorialHighlightPosition() {
         return false;
     }
 
-    const rect = tutorialState.highlightNode.getBoundingClientRect();
-    const width = Math.max(0, Math.round(rect.width));
-    const height = Math.max(0, Math.round(rect.height));
+    const intersectRect = (a, b) => {
+        if (!a || !b) return null;
+        const left = Math.max(Number(a.left) || 0, Number(b.left) || 0);
+        const top = Math.max(Number(a.top) || 0, Number(b.top) || 0);
+        const right = Math.min(Number(a.right) || 0, Number(b.right) || 0);
+        const bottom = Math.min(Number(a.bottom) || 0, Number(b.bottom) || 0);
+        if (right <= left || bottom <= top) return null;
+        return {
+            left,
+            top,
+            right,
+            bottom,
+            width: right - left,
+            height: bottom - top,
+        };
+    };
+
+    const unionRect = (a, b) => {
+        if (!a && !b) return null;
+        if (!a) return b;
+        if (!b) return a;
+        const left = Math.min(Number(a.left) || 0, Number(b.left) || 0);
+        const top = Math.min(Number(a.top) || 0, Number(b.top) || 0);
+        const right = Math.max(Number(a.right) || 0, Number(b.right) || 0);
+        const bottom = Math.max(Number(a.bottom) || 0, Number(b.bottom) || 0);
+        if (right <= left || bottom <= top) return null;
+        return {
+            left,
+            top,
+            right,
+            bottom,
+            width: right - left,
+            height: bottom - top,
+        };
+    };
+
+    const getFilesSectionRect = (node) => {
+        if (!(node instanceof HTMLElement) || !(el.fileList instanceof HTMLElement)) return null;
+        const sectionId = String(node.dataset.fileSection || "").trim();
+        if (!sectionId) return null;
+        const header = node.closest(".file-section-header");
+        if (!(header instanceof HTMLElement)) return null;
+
+        let sectionRect = header.getBoundingClientRect();
+        let cursor = header.nextElementSibling;
+        while (cursor instanceof HTMLElement) {
+            if (cursor.classList.contains("file-section-header") || cursor.hasAttribute("data-files-static-slot")) {
+                break;
+            }
+            if (String(cursor.dataset.fileRowSection || "") === sectionId) {
+                sectionRect = unionRect(sectionRect, cursor.getBoundingClientRect()) || sectionRect;
+            }
+            cursor = cursor.nextElementSibling;
+        }
+        return sectionRect;
+    };
+
+    const viewportRect = {
+        left: 0,
+        top: 0,
+        right: Math.max(0, Number(window.innerWidth) || 0),
+        bottom: Math.max(0, Number(window.innerHeight) || 0),
+    };
+
+    const sectionRect = getFilesSectionRect(tutorialState.highlightNode);
+    const rawRect = sectionRect || tutorialState.highlightNode.getBoundingClientRect();
+    let clippedRect = {
+        left: rawRect.left,
+        top: rawRect.top,
+        right: rawRect.right,
+        bottom: rawRect.bottom,
+        width: rawRect.width,
+        height: rawRect.height,
+    };
+
+    let clampBounds = viewportRect;
+    const nodeInFileList = el.fileList instanceof HTMLElement && el.fileList.contains(tutorialState.highlightNode);
+    if (nodeInFileList && el.filesPanel instanceof HTMLElement) {
+        const panelRect = el.filesPanel.getBoundingClientRect();
+        const panelBounds = {
+            left: panelRect.left,
+            top: panelRect.top,
+            right: panelRect.right,
+            bottom: panelRect.bottom,
+        };
+        const boundedPanel = intersectRect(panelBounds, viewportRect);
+        if (boundedPanel) {
+            clampBounds = boundedPanel;
+            const clippedToPanel = intersectRect(clippedRect, boundedPanel);
+            if (clippedToPanel) {
+                clippedRect = clippedToPanel;
+            }
+        }
+    }
+
+    const clippedToViewport = intersectRect(clippedRect, viewportRect);
+    if (clippedToViewport) {
+        clippedRect = clippedToViewport;
+    }
+
+    const width = Math.max(0, Math.round(clippedRect.width));
+    const height = Math.max(0, Math.round(clippedRect.height));
     if (width <= 0 || height <= 0) {
         ui.highlight.hidden = true;
         ui.highlight.style.opacity = "0";
@@ -543,10 +944,17 @@ function refreshTutorialHighlightPosition() {
     }
 
     const padding = 4;
-    const left = Math.max(0, Math.round(rect.left - padding));
-    const top = Math.max(0, Math.round(rect.top - padding));
-    const ringWidth = Math.round(width + (padding * 2));
-    const ringHeight = Math.round(height + (padding * 2));
+    const paddedLeft = clippedRect.left - padding;
+    const paddedTop = clippedRect.top - padding;
+    const paddedRight = clippedRect.right + padding;
+    const paddedBottom = clippedRect.bottom + padding;
+
+    const left = Math.round(clamp(paddedLeft, clampBounds.left, Math.max(clampBounds.left, clampBounds.right - 1)));
+    const top = Math.round(clamp(paddedTop, clampBounds.top, Math.max(clampBounds.top, clampBounds.bottom - 1)));
+    const right = Math.round(clamp(paddedRight, left + 1, Math.max(left + 1, clampBounds.right)));
+    const bottom = Math.round(clamp(paddedBottom, top + 1, Math.max(top + 1, clampBounds.bottom)));
+    const ringWidth = Math.max(1, right - left);
+    const ringHeight = Math.max(1, bottom - top);
     ui.highlight.hidden = false;
     ui.highlight.style.left = `${left}px`;
     ui.highlight.style.top = `${top}px`;
@@ -581,6 +989,12 @@ function setTutorialSeen(value, tutorialId = tutorialState.tutorialId) {
     }
 }
 
+function resetAllTutorialSeenState() {
+    getTutorialIds().forEach((tutorialId) => {
+        setTutorialSeen(false, tutorialId);
+    });
+}
+
 function renderTutorialStep() {
     const ui = getTutorialElements();
     if (!ui || !tutorialState.active) return false;
@@ -592,6 +1006,9 @@ function renderTutorialStep() {
     if (!step) return false;
 
     tutorialState.stepId = String(step.id || "");
+    if (tutorialState.tutorialId === "beginner") {
+        setPanelOpen("tools", false);
+    }
     resetTutorialStepReveals();
     applyTutorialStepReveal(step);
 
@@ -608,13 +1025,31 @@ function renderTutorialStep() {
     if (target instanceof HTMLElement) {
         tutorialState.highlightNode = target;
         refreshTutorialHighlightPosition();
+        const prefersReducedMotion = typeof window !== "undefined"
+            && typeof window.matchMedia === "function"
+            && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const syncTransition = (frameCount = 10) => {
+            let remaining = Math.max(1, Number(frameCount) || 0);
+            const tick = () => {
+                if (!tutorialState.active) return;
+                refreshTutorialHighlightPosition();
+                updateTutorialPanelPosition();
+                remaining -= 1;
+                if (remaining > 0) scheduleFrame(tick);
+            };
+            tick();
+        };
         scheduleFrame(() => {
             try {
-                target.scrollIntoView({ block: "nearest", inline: "nearest" });
+                target.scrollIntoView({
+                    block: "nearest",
+                    inline: "nearest",
+                    behavior: prefersReducedMotion ? "auto" : "smooth",
+                });
             } catch {
                 // no-op
             }
-            refreshTutorialHighlightPosition();
+            syncTransition(prefersReducedMotion ? 4 : 12);
         });
     } else {
         refreshTutorialHighlightPosition();
@@ -623,6 +1058,11 @@ function renderTutorialStep() {
     if (ui.title) ui.title.textContent = step.title;
     setTutorialBodyTypewriter(step.body);
     if (ui.progress) ui.progress.textContent = `Step ${tutorialState.index + 1} of ${steps.length}`;
+    if (ui.progressFill) {
+        const total = Math.max(1, steps.length);
+        const ratio = clamp((tutorialState.index + 1) / total, 0, 1);
+        ui.progressFill.style.width = `${Math.round(ratio * 100)}%`;
+    }
     if (ui.back) ui.back.disabled = tutorialState.index <= 0;
     if (ui.next) ui.next.textContent = tutorialState.index >= steps.length - 1 ? "Finish" : "Next";
     updateTutorialPanelPosition();
@@ -633,6 +1073,9 @@ function closeBeginnerTutorial({ markSeen = true, tutorialId = tutorialState.tut
     const ui = getTutorialElements();
     tutorialState.active = false;
     tutorialState.stepId = "";
+    tutorialState.sandboxDemoRan = false;
+    tutorialState.keepFilesMenuOpen = false;
+    clearTutorialCommandSearchDemo({ resetInput: true });
     clearTutorialTypewriter();
     clearTutorialHighlight();
     resetTutorialStepReveals();
@@ -662,6 +1105,9 @@ function moveBeginnerTutorial(delta = 1) {
     if (next < 0) return false;
     if (next >= steps.length) {
         closeBeginnerTutorial({ markSeen: true, tutorialId: tutorialState.tutorialId });
+        if (tutorialState.tutorialId === "beginner") {
+            finalizeBeginnerTutorialCompletion();
+        }
         status.set("Tutorial complete");
         logger.append("system", [String(definition.completeMessage || "Tutorial complete")]);
         return true;
@@ -680,6 +1126,11 @@ function openBeginnerTutorial({ force = false, tutorialId = DEFAULT_TUTORIAL_ID 
     tutorialState.active = true;
     tutorialState.index = 0;
     tutorialState.stepId = "";
+    tutorialState.sandboxDemoRan = false;
+    if (resolvedId === "beginner") {
+        setPanelOpen("tools", false);
+        focusWelcomeProjectInEditor();
+    }
     ui.root.hidden = false;
     ui.root.setAttribute("aria-hidden", "false");
     if (typeof document !== "undefined" && document.body) {
@@ -5153,6 +5604,9 @@ async function resetAppToFirstLaunchState() {
         // no-op
     }
 
+    resetAllTutorialSeenState();
+    safeLocalStorageSet(TUTORIAL_FORCE_START_STORAGE_KEY, "1");
+
     let serviceWorkersCleared = 0;
     try {
         if (typeof navigator !== "undefined" && navigator.serviceWorker?.getRegistrations) {
@@ -6989,12 +7443,25 @@ function setFooterOpen(open) {
     persistLayout();
 }
 
+function panelRowsEqual(a, b) {
+    const left = normalizePanelRows(a);
+    const right = normalizePanelRows(b);
+    return ["top", "bottom"].every((row) => {
+        const leftRow = Array.isArray(left[row]) ? left[row] : [];
+        const rightRow = Array.isArray(right[row]) ? right[row] : [];
+        if (leftRow.length !== rightRow.length) return false;
+        return leftRow.every((name, index) => name === rightRow[index]);
+    });
+}
+
 function setPanelOpen(panel, open) {
+    const nextOpen = Boolean(open);
+    const previousOpen = isPanelOpen(panel);
     if (panel === "log") layoutState.logOpen = open;
     if (panel === "editor") layoutState.editorOpen = open;
     if (panel === "files") layoutState.filesOpen = open;
     if (panel === "sandbox") {
-        if (open && isSandboxWindowOpen()) {
+        if (nextOpen && isSandboxWindowOpen()) {
             sandboxWindow.focus();
             layoutState.sandboxOpen = false;
             applyLayout();
@@ -7003,13 +7470,25 @@ function setPanelOpen(panel, open) {
             syncLayoutControls();
             return;
         }
-        layoutState.sandboxOpen = open;
+        layoutState.sandboxOpen = nextOpen;
     }
-    if (panel === "tools") layoutState.toolsOpen = open;
-    setPanelRows(enforceDockingRowCaps(layoutState.panelRows, {
+    if (panel === "tools") layoutState.toolsOpen = nextOpen;
+    if (panel === "log") layoutState.logOpen = nextOpen;
+    if (panel === "editor") layoutState.editorOpen = nextOpen;
+    if (panel === "files") layoutState.filesOpen = nextOpen;
+
+    const nextRows = enforceDockingRowCaps(layoutState.panelRows, {
         preferredRow: getPanelRow(panel),
-        preservePanel: open ? panel : null,
-    }));
+        preservePanel: nextOpen ? panel : null,
+    });
+    const rowsChanged = !panelRowsEqual(layoutState.panelRows, nextRows);
+    const openChanged = previousOpen !== isPanelOpen(panel);
+    if (!rowsChanged && !openChanged) {
+        return;
+    }
+    if (rowsChanged) {
+        setPanelRows(nextRows);
+    }
     applyLayout();
     syncPanelToggles();
     persistLayout();
@@ -17687,9 +18166,13 @@ async function hydrateFileState() {
         .filter(Boolean);
 
     if (welcomeFiles.length) {
+        const automation = isAutomationEnvironment();
         const preferredActive =
-            welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/app.js")) ||
+            (automation
+                ? welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/app.js"))
+                : null) ||
             welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/index.html")) ||
+            welcomeFiles.find((file) => String(file.name || "").toLowerCase().endsWith("/app.js")) ||
             welcomeFiles[0];
         const derivedFolders = normalizeFolderList(
             welcomeFiles
@@ -18598,6 +19081,7 @@ function openFilesMenu(anchorEl) {
     syncFilesMenuActions();
     setFilesMenuOpenState(true);
     syncFilesMenuToggles();
+    el.filesMenu.scrollTop = 0;
     positionMenu(el.filesMenu, anchorEl);
 }
 
@@ -18608,6 +19092,7 @@ function openFilesMenuAt(clientX, clientY) {
     syncFilesMenuActions();
     setFilesMenuOpenState(true);
     syncFilesMenuToggles();
+    el.filesMenu.scrollTop = 0;
     positionMenuAt(el.filesMenu, clientX, clientY);
 }
 
@@ -19210,7 +19695,7 @@ function renderFileList() {
             ? `draggable="true" data-files-section-id="${id}"`
             : "";
         return `
-        <li class="file-section-header">
+        <li class="file-section-header" data-file-section-wrap="${id}">
             <button type="button" class="file-section-toggle" data-file-section="${id}" data-caret-side="${caretSide}" aria-expanded="${open}" ${dragAttrs}>
                 ${content}
             </button>
@@ -21872,7 +22357,11 @@ async function boot() {
     }
 
     scheduleFrame(() => {
-        openBeginnerTutorial({ force: false });
+        const shouldForceTutorialStart = safeLocalStorageGet(TUTORIAL_FORCE_START_STORAGE_KEY) === "1";
+        if (shouldForceTutorialStart) {
+            safeLocalStorageRemove(TUTORIAL_FORCE_START_STORAGE_KEY);
+        }
+        openBeginnerTutorial({ force: shouldForceTutorialStart });
     });
 
     // Autosave on edit
@@ -22190,6 +22679,12 @@ async function boot() {
 
     el.btnFormat.addEventListener("click", async () => {
         await formatCurrentEditor({ announce: true });
+        editor.focus();
+    });
+
+    el.btnStop?.addEventListener("click", () => {
+        stopSandboxRun();
+        status.set("Sandbox stopped");
         editor.focus();
     });
 
@@ -23003,6 +23498,7 @@ async function boot() {
 
     document.addEventListener("click", (event) => {
         if (!openFileMenu) return;
+        if (tutorialState.active && tutorialState.keepFilesMenuOpen && openFileMenu === "header") return;
         const target = event.target;
         if (target.closest("#filesMenu") || target.closest("#fileRowMenu") || target.closest("#fileFolderMenu")) return;
         if (target.closest("[data-file-menu]") || target.closest("[data-folder-menu]")) return;

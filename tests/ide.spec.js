@@ -20,6 +20,37 @@ test("loads the IDE shell with files and editor", async ({ page }) => {
   expect(fileRows).toBeGreaterThan(0);
 });
 
+test("fresh start opens welcome project in editor", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.removeItem("fazide.files.v1");
+    localStorage.removeItem("fazide.workspace-snapshot.v1");
+    localStorage.removeItem("fazide.code.v0");
+    sessionStorage.removeItem("fazide.session.v1");
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const automation = Boolean(navigator.webdriver);
+    const cm = document.querySelector(".CodeMirror");
+    const cmValue = cm?.CodeMirror?.getValue?.() || "";
+    const textValue = String(document.querySelector("#editor")?.value || "");
+    const code = String(cmValue || textValue || "");
+    return {
+      automation,
+      hasWelcomeTitle: code.includes("<title>Welcome to FAZ IDE</title>"),
+      hasWelcomeScript: code.includes("<script src=\"app.js\"></script>"),
+      hasWelcomeLog: code.includes("WELCOME TO FAZ IDE! Welcome project animation is running."),
+    };
+  });
+
+  if (result.automation) {
+    expect(result.hasWelcomeLog).toBeTruthy();
+  } else {
+    expect(result.hasWelcomeTitle).toBeTruthy();
+    expect(result.hasWelcomeScript).toBeTruthy();
+  }
+});
+
 test("boot exposes core fazide api surface", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -3277,7 +3308,7 @@ test("beginner tutorial reset restarts from the first step", async ({ page }) =>
   expect(before.ready).toBeTruthy();
   expect(before.visible).toBeTruthy();
   expect(before.progress.toLowerCase()).toContain("step 1 of");
-  expect(before.title).toBe("Files Panel");
+  expect(before.title).toBe("Welcome to FAZ IDE");
   expect(before.tutorialId).toBe("beginner");
   expect(before.availableTutorials).toContain("beginner");
   expect(before.listedBeginner).toBeTruthy();
@@ -3321,6 +3352,11 @@ test("beginner tutorial panel follows target without overlapping spotlight", asy
     const nextButton = document.querySelector("#tutorialIntroNext");
     if (!(panel instanceof HTMLElement) || !(ring instanceof HTMLElement)) {
       return { ready: false };
+    }
+
+    if (nextButton instanceof HTMLElement) {
+      nextButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 40));
     }
 
     const viewportWidth = Math.max(0, window.innerWidth || document.documentElement.clientWidth || 0);
@@ -3385,6 +3421,667 @@ test("beginner tutorial panel follows target without overlapping spotlight", asy
   expect(result.ringOpacity).toBeGreaterThan(0.1);
   expect(result.ringWidth).toBeGreaterThan(12);
   expect(result.ringHeight).toBeGreaterThan(12);
+});
+
+test("tutorial files actions step opens menu and reveals view toggles", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    nextButton.click();
+    await wait(40);
+    nextButton.click();
+    await wait(40);
+
+    const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+    const filesMenu = document.querySelector("#filesMenu");
+    const viewSection = filesMenu?.querySelector?.('[aria-label="View actions"]');
+    const viewGrid = viewSection?.querySelector?.('.files-menu-grid') || null;
+    const filtersToggle = filesMenu?.querySelector?.('[data-files-toggle="filters"]');
+    const gamesToggle = filesMenu?.querySelector?.('[data-files-toggle="games"]');
+    const highlight = document.querySelector("#tutorialIntroHighlight");
+
+    if (!(filesMenu instanceof HTMLElement) || !(viewSection instanceof HTMLElement)) {
+      return {
+        ready: true,
+        title,
+        menuOpen: false,
+        viewVisible: false,
+        menuScrollStart: 0,
+        menuScrollAfter: 0,
+        togglesPresent: false,
+        highlightOverlap: 0,
+      };
+    }
+
+    const menuScrollStart = Number(filesMenu.scrollTop || 0);
+    await wait(280);
+
+    const sectionRect = viewSection.getBoundingClientRect();
+    const menuRect = filesMenu.getBoundingClientRect();
+    const viewVisible = sectionRect.bottom > menuRect.top && sectionRect.top < menuRect.bottom;
+    let highlightOverlap = 0;
+    if (highlight instanceof HTMLElement && viewGrid instanceof HTMLElement) {
+      const h = highlight.getBoundingClientRect();
+      const g = viewGrid.getBoundingClientRect();
+      const overlapW = Math.max(0, Math.min(h.right, g.right) - Math.max(h.left, g.left));
+      highlightOverlap = g.width > 0 ? overlapW / g.width : 0;
+    }
+
+    return {
+      ready: true,
+      title,
+      menuOpen: filesMenu.getAttribute("aria-hidden") !== "true",
+      viewVisible,
+      menuScrollStart,
+      menuScrollAfter: Number(filesMenu.scrollTop || 0),
+      togglesPresent: filtersToggle instanceof HTMLElement && gamesToggle instanceof HTMLElement,
+      highlightOverlap,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.title).toBe("Files Actions");
+  expect(result.menuOpen).toBeTruthy();
+  expect(result.viewVisible).toBeTruthy();
+  expect(result.menuScrollStart).toBeLessThanOrEqual(4);
+  expect(result.menuScrollAfter).toBeGreaterThan(result.menuScrollStart);
+  expect(result.togglesPresent).toBeTruthy();
+  expect(result.highlightOverlap).toBeGreaterThan(0.55);
+});
+
+test("files tab tutorial highlights full open-editors and files sections", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const computeCoverage = (sectionId) => {
+      const highlight = document.querySelector("#tutorialIntroHighlight");
+      const headerBtn = document.querySelector(`#fileList [data-file-section="${sectionId}"]`);
+      if (!(highlight instanceof HTMLElement) || !(headerBtn instanceof HTMLElement)) {
+        return { ok: false, overlap: 0 };
+      }
+      const header = headerBtn.closest(".file-section-header");
+      if (!(header instanceof HTMLElement)) {
+        return { ok: false, overlap: 0 };
+      }
+      let sectionRect = header.getBoundingClientRect();
+      let cursor = header.nextElementSibling;
+      while (cursor instanceof HTMLElement) {
+        if (cursor.classList.contains("file-section-header") || cursor.hasAttribute("data-files-static-slot")) {
+          break;
+        }
+        if (String(cursor.dataset.fileRowSection || "") === sectionId) {
+          const r = cursor.getBoundingClientRect();
+          sectionRect = {
+            left: Math.min(sectionRect.left, r.left),
+            top: Math.min(sectionRect.top, r.top),
+            right: Math.max(sectionRect.right, r.right),
+            bottom: Math.max(sectionRect.bottom, r.bottom),
+            width: Math.max(sectionRect.right, r.right) - Math.min(sectionRect.left, r.left),
+            height: Math.max(sectionRect.bottom, r.bottom) - Math.min(sectionRect.top, r.top),
+          };
+        }
+        cursor = cursor.nextElementSibling;
+      }
+
+      const h = highlight.getBoundingClientRect();
+      const overlapW = Math.max(0, Math.min(h.right, sectionRect.right) - Math.max(h.left, sectionRect.left));
+      const overlap = sectionRect.width > 0 ? overlapW / sectionRect.width : 0;
+      return { ok: true, overlap };
+    };
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    let openEditorsCoverage = null;
+    let filesCoverage = null;
+    for (let i = 0; i < 60; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Files Tab: Open Editors") {
+        await wait(130);
+        openEditorsCoverage = computeCoverage("open-editors");
+      }
+      if (title === "Files Tab: Files") {
+        await wait(130);
+        filesCoverage = computeCoverage("files");
+        break;
+      }
+      nextButton.click();
+      await wait(40);
+    }
+
+    return {
+      ready: true,
+      openEditorsCoverage,
+      filesCoverage,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.openEditorsCoverage?.ok).toBeTruthy();
+  expect(result.filesCoverage?.ok).toBeTruthy();
+  expect(result.openEditorsCoverage?.overlap).toBeGreaterThan(0.55);
+  expect(result.filesCoverage?.overlap).toBeGreaterThan(0.55);
+});
+
+test("tutorial files tab walkthrough follows requested top-down order", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const expected = [
+      "Files Tab: Open Editors",
+      "Files Tab: Files",
+      "Files Tab: Games",
+      "Files Tab: Applications",
+      "Files Tab: Lessons",
+    ];
+
+    const readExpandedState = () => {
+      const openEditorsToggle = document.querySelector('#fileList [data-files-section-id="open-editors"]');
+      const filesToggle = document.querySelector('#fileList [data-files-section-id="files"]');
+      const gamesToggle = document.querySelector("#gamesSelectorToggle");
+      const appsToggle = document.querySelector("#appsSelectorToggle");
+      const lessonsToggle = document.querySelector("#lessonsSelectorToggle");
+      return {
+        "open-editors": String(openEditorsToggle?.getAttribute("aria-expanded") || "false") === "true",
+        files: String(filesToggle?.getAttribute("aria-expanded") || "false") === "true",
+        games: String(gamesToggle?.getAttribute("aria-expanded") || "false") === "true",
+        applications: String(appsToggle?.getAttribute("aria-expanded") || "false") === "true",
+        lessons: String(lessonsToggle?.getAttribute("aria-expanded") || "false") === "true",
+      };
+    };
+
+    const expectedOpenByTitle = {
+      "Files Tab: Open Editors": "open-editors",
+      "Files Tab: Files": "files",
+      "Files Tab: Games": "games",
+      "Files Tab: Applications": "applications",
+      "Files Tab: Lessons": "lessons",
+    };
+    const expectedOpenCountByTitle = {
+      "Files Tab: Open Editors": 1,
+      "Files Tab: Files": 2,
+      "Files Tab: Games": 3,
+      "Files Tab: Applications": 4,
+      "Files Tab: Lessons": 5,
+    };
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const titles = [];
+    const snapshots = [];
+    for (let i = 0; i < 30; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      titles.push(title);
+      if (expected.includes(title)) {
+        const expectedOpenKey = expectedOpenByTitle[title];
+        const expectedOpenCount = expectedOpenCountByTitle[title];
+        let expanded = readExpandedState();
+        let attempts = 0;
+        while (attempts < 16) {
+          const openCount = Object.values(expanded).filter(Boolean).length;
+          if (openCount >= expectedOpenCount && expectedOpenKey && expanded[expectedOpenKey]) break;
+          await wait(50);
+          expanded = readExpandedState();
+          attempts += 1;
+        }
+        snapshots.push({
+          title,
+          expanded,
+        });
+      }
+      if (title === expected[expected.length - 1]) break;
+      nextButton.click();
+      await wait(40);
+    }
+
+    const indices = expected.map((title) => titles.indexOf(title));
+    const allPresent = indices.every((value) => value >= 0);
+    const ordered = indices.every((value, index) => index === 0 || value > indices[index - 1]);
+    const contiguous = allPresent
+      ? titles.slice(indices[0], indices[0] + expected.length).join("|") === expected.join("|")
+      : false;
+
+    return {
+      ready: true,
+      allPresent,
+      ordered,
+      contiguous,
+      indices,
+      titles,
+      snapshots,
+      expectedOpenByTitle,
+      expectedOpenCountByTitle,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.allPresent).toBeTruthy();
+  expect(result.ordered).toBeTruthy();
+  expect(result.contiguous).toBeTruthy();
+  expect(result.snapshots.length).toBeGreaterThanOrEqual(5);
+  result.snapshots.forEach((entry) => {
+    const expectedOpenKey = result.expectedOpenByTitle[entry.title];
+    const expectedOpenCount = result.expectedOpenCountByTitle[entry.title];
+    expect(Boolean(expectedOpenKey)).toBeTruthy();
+    expect(Number.isFinite(expectedOpenCount)).toBeTruthy();
+    const openCount = Object.values(entry.expanded).filter(Boolean).length;
+    expect(openCount).toBeGreaterThanOrEqual(expectedOpenCount);
+    expect(entry.expanded[expectedOpenKey]).toBeTruthy();
+  });
+  const lastSnapshot = result.snapshots[result.snapshots.length - 1];
+  if (lastSnapshot) {
+    const finalOpenCount = Object.values(lastSnapshot.expanded).filter(Boolean).length;
+    expect(finalOpenCount).toBe(5);
+  }
+});
+
+test("files tab tutorial highlights full games section container", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let reached = false;
+    for (let i = 0; i < 80; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Files Tab: Games") {
+        reached = true;
+        break;
+      }
+      nextButton.click();
+      await wait(35);
+    }
+
+    await wait(120);
+
+    const highlight = document.querySelector("#tutorialIntroHighlight");
+    const section = document.querySelector("#filesGames");
+    if (!(highlight instanceof HTMLElement) || !(section instanceof HTMLElement)) {
+      return { ready: true, reached, comparable: false };
+    }
+
+    const h = highlight.getBoundingClientRect();
+    const s = section.getBoundingClientRect();
+    const overlapWidth = Math.max(0, Math.min(h.right, s.right) - Math.max(h.left, s.left));
+    const overlapRatio = s.width > 0 ? overlapWidth / s.width : 0;
+
+    return {
+      ready: true,
+      reached,
+      comparable: true,
+      overlapRatio,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.reached).toBeTruthy();
+  expect(result.comparable).toBeTruthy();
+  expect(result.overlapRatio).toBeGreaterThan(0.6);
+});
+
+test("files tab tutorial spotlight stays inside files panel bounds", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let reached = false;
+    for (let i = 0; i < 80; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Files Tab: Games") {
+        reached = true;
+        break;
+      }
+      nextButton.click();
+      await wait(35);
+    }
+
+    await wait(140);
+
+    const highlight = document.querySelector("#tutorialIntroHighlight");
+    const filesPanel = document.querySelector("#filesPanel");
+    if (!(highlight instanceof HTMLElement) || !(filesPanel instanceof HTMLElement)) {
+      return { ready: true, reached, comparable: false };
+    }
+
+    const h = highlight.getBoundingClientRect();
+    const p = filesPanel.getBoundingClientRect();
+    const within = h.left >= (p.left - 1)
+      && h.top >= (p.top - 1)
+      && h.right <= (p.right + 1)
+      && h.bottom <= (p.bottom + 1);
+
+    return {
+      ready: true,
+      reached,
+      comparable: true,
+      within,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.reached).toBeTruthy();
+  expect(result.comparable).toBeTruthy();
+  expect(result.within).toBeTruthy();
+});
+
+test("beginner tutorial sandbox actions are visible without hover", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let reached = false;
+    for (let i = 0; i < 80; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Sandbox Actions") {
+        reached = true;
+        break;
+      }
+      nextButton.click();
+      await wait(40);
+    }
+
+    await wait(120);
+
+    const runnerShell = document.querySelector("#runnerShell");
+    const actions = runnerShell?.querySelector?.(".runner-actions");
+    const popout = document.querySelector("#popoutSandbox");
+    const expand = document.querySelector("#runnerFull");
+    const computed = actions instanceof HTMLElement ? window.getComputedStyle(actions) : null;
+
+    return {
+      ready: true,
+      reached,
+      tutorialActionsAttr: String(runnerShell?.getAttribute?.("data-tutorial-actions") || ""),
+      opacity: computed ? Number.parseFloat(computed.opacity || "0") : 0,
+      pointerEvents: computed ? String(computed.pointerEvents || "") : "",
+      popoutPresent: popout instanceof HTMLElement,
+      expandPresent: expand instanceof HTMLElement,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.reached).toBeTruthy();
+  expect(result.tutorialActionsAttr).toBe("true");
+  expect(result.opacity).toBeGreaterThan(0.8);
+  expect(result.pointerEvents).toBe("auto");
+  expect(result.popoutPresent).toBeTruthy();
+  expect(result.expandPresent).toBeTruthy();
+});
+
+test("beginner tutorial does not rerun sandbox while advancing steps", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial || !api?.getState) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let reachedSandbox = false;
+    for (let i = 0; i < 100; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Sandbox Preview") {
+        reachedSandbox = true;
+        break;
+      }
+      nextButton.click();
+      await wait(35);
+    }
+
+    if (!reachedSandbox) {
+      return { ready: true, reachedSandbox: false, advanced: false, runCountStable: false };
+    }
+
+    await wait(120);
+    const runCountAtSandbox = Number(api.getState()?.runCount || 0);
+
+    let advanced = false;
+    for (let i = 0; i < 4; i += 1) {
+      nextButton.click();
+      await wait(40);
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Console") {
+        advanced = true;
+        break;
+      }
+    }
+
+    await wait(120);
+    const runCountAfterAdvance = Number(api.getState()?.runCount || 0);
+
+    return {
+      ready: true,
+      reachedSandbox,
+      advanced,
+      runCountAtSandbox,
+      runCountAfterAdvance,
+      runCountStable: runCountAfterAdvance === runCountAtSandbox,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.reachedSandbox).toBeTruthy();
+  expect(result.advanced).toBeTruthy();
+  expect(result.runCountAtSandbox).toBeGreaterThan(0);
+  expect(result.runCountStable).toBeTruthy();
+});
+
+test("beginner tutorial command results step animates search input and filters commands", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let reached = false;
+    for (let i = 0; i < 120; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Command Results") {
+        reached = true;
+        break;
+      }
+      nextButton.click();
+      await wait(35);
+    }
+
+    if (!reached) {
+      return { ready: true, reached, typed: false, listHasItems: false, hintText: "" };
+    }
+
+    await wait(520);
+
+    const input = document.querySelector("#topCommandPaletteInput");
+    const list = document.querySelector("#topCommandPaletteList");
+    const hint = document.querySelector("#topCommandPaletteHint");
+    const query = String(input?.value || "").trim();
+    const optionsCount = list ? list.querySelectorAll("[data-command-id]").length : 0;
+
+    return {
+      ready: true,
+      reached,
+      typed: query.length > 0,
+      listHasItems: optionsCount > 0,
+      hintText: String(hint?.textContent || "").trim(),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.reached).toBeTruthy();
+  expect(result.typed).toBeTruthy();
+  expect(result.listHasItems).toBeTruthy();
+  expect(result.hintText.toLowerCase()).toContain("enter to run");
+});
+
+test("beginner tutorial completion resets layout and leaves sandbox idle", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial || !api?.getState || !api?.applyPreset) {
+      return { ready: false };
+    }
+
+    api.applyPreset("diagnostics");
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    for (let i = 0; i < 80; i += 1) {
+      const root = document.querySelector("#tutorialIntro");
+      if (!(root instanceof HTMLElement) || root.hidden) break;
+      nextButton.click();
+      await wait(35);
+    }
+
+    const state = api.getState();
+    const layout = state?.layout || {};
+    const rows = layout.panelRows || { top: [], bottom: [] };
+    const runner = document.querySelector("#runner");
+    const runnerSrcdoc = String(runner?.getAttribute?.("srcdoc") || "");
+    const openEditorsToggle = document.querySelector('#fileList [data-files-section-id="open-editors"]');
+    const filesToggle = document.querySelector('#fileList [data-files-section-id="files"]');
+    const gamesToggle = document.querySelector("#gamesSelectorToggle");
+    const appsToggle = document.querySelector("#appsSelectorToggle");
+    const lessonsToggle = document.querySelector("#lessonsSelectorToggle");
+
+    return {
+      ready: true,
+      tutorialClosed: Boolean(document.querySelector("#tutorialIntro")?.hidden),
+      toolsOpen: Boolean(layout.toolsOpen),
+      topOrder: Array.isArray(rows.top) ? rows.top.slice(0, 4) : [],
+      sandboxStopped: runnerSrcdoc.toLowerCase().includes("sandbox stopped"),
+      filesSectionsOpen: {
+        "open-editors": String(openEditorsToggle?.getAttribute("aria-expanded") || "false") === "true",
+        files: String(filesToggle?.getAttribute("aria-expanded") || "false") === "true",
+        games: String(gamesToggle?.getAttribute("aria-expanded") || "false") === "true",
+        applications: String(appsToggle?.getAttribute("aria-expanded") || "false") === "true",
+        lessons: String(lessonsToggle?.getAttribute("aria-expanded") || "false") === "true",
+      },
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.tutorialClosed).toBeTruthy();
+  expect(result.toolsOpen).toBeFalsy();
+  expect(result.topOrder).toEqual(["files", "editor", "sandbox", "tools"]);
+  expect(result.sandboxStopped).toBeTruthy();
+  expect(result.filesSectionsOpen["open-editors"]).toBeTruthy();
+  expect(result.filesSectionsOpen.files).toBeTruthy();
+  expect(result.filesSectionsOpen.games).toBeTruthy();
+  expect(result.filesSectionsOpen.applications).toBeTruthy();
+  expect(result.filesSectionsOpen.lessons).toBeTruthy();
+});
+
+test("stop button halts sandbox run", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.click("#run");
+  await page.click("#stop");
+
+  const stopped = await page.evaluate(() => {
+    const text = String(document.body?.textContent || "").toLowerCase();
+    return text.includes("sandbox stopped");
+  });
+  expect(stopped).toBeTruthy();
 });
 
 test("fresh-start confirm resets workspace and browser-persisted app state", async ({ page }) => {
@@ -3507,6 +4204,8 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
       sessionMarkerPresent: sessionStorage.getItem("fazide.test-reset-session") === "present",
       tutorialSeenMarkerPresent: localStorage.getItem("fazide.tutorial.beginner.seen.v1") === "1",
       tutorialSeenState: Boolean(api.getTutorialState()?.seen),
+      tutorialOpen: Boolean(document.querySelector("#tutorialIntro") && !document.querySelector("#tutorialIntro")?.hidden),
+      tutorialProgress: String(document.querySelector("#tutorialIntroProgress")?.textContent || "").trim(),
       lessonLevel: Number(profile?.level || 0),
       lessonXp: Number(profile?.xp || 0),
       idbChecked,
@@ -3523,6 +4222,8 @@ test("fresh-start confirm resets workspace and browser-persisted app state", asy
   expect(after.sessionMarkerPresent).toBeFalsy();
   expect(after.tutorialSeenMarkerPresent).toBeFalsy();
   expect(after.tutorialSeenState).toBeFalsy();
+  expect(after.tutorialOpen).toBeTruthy();
+  expect(after.tutorialProgress).toContain("Step 1 of");
   expect(after.lessonLevel).toBe(1);
   expect(after.lessonXp).toBe(0);
   if (seeded.idbSeeded && after.idbChecked) {

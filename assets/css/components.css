@@ -2186,6 +2186,7 @@ button:focus-visible {
     max-height: min(68vh, 520px);
     overflow-x: hidden;
     overflow-y: auto;
+    scroll-behavior: smooth;
     display: none;
     z-index: 1550;
 }
@@ -6261,6 +6262,12 @@ body[data-resize="row"] {
 
 .runner-shell:hover .runner-actions,
 .runner-shell:focus-within .runner-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.runner-shell[data-tutorial-actions="true"] .runner-actions {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);

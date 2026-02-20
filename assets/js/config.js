@@ -244,15 +244,15 @@ export const DEFAULT_WELCOME_FILES = [
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <main class="welcome-card">
-        <h1>Welcome to FAZ IDE</h1>
-        <p id="message">Your free coding workspace is ready.</p>
-        <ul>
-            <li>100% free program</li>
-            <li>No ads</li>
-            <li>Never charging for anything in FAZ IDE</li>
-        </ul>
-        <button id="showPolicy" type="button">Show Promise</button>
+    <main class="hero" aria-label="Welcome animation">
+        <p class="kicker">WELCOME PROJECT</p>
+        <h1 class="title" id="title" aria-live="polite">WELCOME TO FAZ IDE!</h1>
+        <p class="subtitle" id="message">Local-first, free forever, and ready to build.</p>
+        <div class="pulse-wrap" aria-hidden="true">
+            <span class="pulse pulse-a"></span>
+            <span class="pulse pulse-b"></span>
+            <span class="pulse pulse-c"></span>
+        </div>
     </main>
     <script src="app.js"></script>
 </body>
@@ -273,53 +273,151 @@ body {
 
 body {
     font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
-    background: #0b0f14;
     color: #e6edf3;
     display: grid;
     place-items: center;
     padding: 24px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.22), transparent 46%),
+        radial-gradient(circle at 80% 35%, rgba(217, 70, 239, 0.2), transparent 44%),
+        radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.18), transparent 52%),
+        #04060a;
 }
 
-.welcome-card {
-    width: min(760px, 100%);
-    border-radius: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    background: #111520;
-    padding: 20px;
+.hero {
+    width: min(920px, 100%);
+    padding: 26px 24px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: rgba(10, 14, 20, 0.72);
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.12) inset;
+    backdrop-filter: blur(8px);
 }
 
-h1 {
+.kicker {
     margin: 0 0 10px;
+    letter-spacing: 0.2em;
+    font-size: 12px;
+    color: rgba(148, 163, 184, 0.9);
 }
 
-p,
-li {
-    color: rgba(148, 163, 184, 0.95);
+.title {
+    margin: 0;
+    font-size: clamp(2.1rem, 8vw, 5.8rem);
+    line-height: 0.95;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #f8fafc;
+    text-shadow:
+        0 0 20px rgba(56, 189, 248, 0.4),
+        0 0 44px rgba(217, 70, 239, 0.32);
+    transform-origin: center;
+    animation:
+        titleGlow 1.8s ease-in-out infinite alternate,
+        titleLift 4.6s ease-in-out infinite;
 }
 
-button {
-    margin-top: 12px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid #38bdf8;
-    background: transparent;
-    color: #e6edf3;
-    cursor: pointer;
+.subtitle {
+    margin: 14px 0 0;
+    font-size: clamp(1rem, 1.8vw, 1.25rem);
+    color: rgba(203, 213, 225, 0.95);
+    max-width: 60ch;
+}
+
+.pulse-wrap {
+    position: relative;
+    height: 18px;
+    margin-top: 18px;
+}
+
+.pulse {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    height: 2px;
+    width: 100%;
+    transform-origin: left center;
+}
+
+.pulse-a {
+    background: linear-gradient(90deg, rgba(56, 189, 248, 0.7), rgba(14, 165, 233, 0.05));
+    animation: wave 2.4s ease-in-out infinite;
+}
+
+.pulse-b {
+    background: linear-gradient(90deg, rgba(217, 70, 239, 0.65), rgba(217, 70, 239, 0.03));
+    animation: wave 2.4s ease-in-out 0.5s infinite;
+}
+
+.pulse-c {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.55), rgba(16, 185, 129, 0.03));
+    animation: wave 2.4s ease-in-out 1s infinite;
+}
+
+@keyframes titleGlow {
+    from {
+        text-shadow:
+            0 0 12px rgba(56, 189, 248, 0.3),
+            0 0 28px rgba(217, 70, 239, 0.22);
+    }
+    to {
+        text-shadow:
+            0 0 22px rgba(56, 189, 248, 0.62),
+            0 0 56px rgba(217, 70, 239, 0.46);
+    }
+}
+
+@keyframes titleLift {
+    0%,
+    100% {
+        transform: translateY(0px) scale(1);
+    }
+    50% {
+        transform: translateY(-3px) scale(1.01);
+    }
+}
+
+@keyframes wave {
+    0% {
+        transform: scaleX(0.08);
+        opacity: 0.22;
+    }
+    45% {
+        transform: scaleX(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scaleX(0.08);
+        opacity: 0.22;
+    }
 }
 `,
         },
         {
                 name: "Welcome/app.js",
-                code: `const message = document.getElementById("message");
-const button = document.getElementById("showPolicy");
+                code: `const title = document.getElementById("title");
+const message = document.getElementById("message");
 
-if (button && message) {
-    button.addEventListener("click", () => {
-        message.textContent = "FAZ IDE is free forever. No ads. No charges. Build anything you want.";
-    });
+if (title) {
+    const text = "WELCOME TO FAZ IDE!";
+    let index = 0;
+    title.textContent = "";
+    const timer = setInterval(() => {
+        index += 1;
+        title.textContent = text.slice(0, index);
+        if (index >= text.length) {
+            clearInterval(timer);
+        }
+    }, 55);
 }
 
-console.log("Welcome to FAZ IDE: free forever, no ads, never charging for anything.");
+if (message) {
+    setTimeout(() => {
+        message.textContent = "Your Welcome project is live. Start editing and make it yours.";
+    }, 1400);
+}
+
+console.log("WELCOME TO FAZ IDE! Welcome project animation is running.");
 `,
         },
 ];

@@ -66,6 +66,9 @@
                     <h2 id="tutorialIntroTitle" class="tutorial-intro-title">Welcome to FAZ IDE</h2>
                     <p id="tutorialIntroBody" class="tutorial-intro-body">We will highlight core IDE sections so you can start quickly.</p>
                     <p id="tutorialIntroProgress" class="tutorial-intro-progress">Step 1 of 1</p>
+                    <div class="tutorial-intro-progressbar" aria-hidden="true">
+                        <span id="tutorialIntroProgressFill" class="tutorial-intro-progressbar-fill"></span>
+                    </div>
                     <div class="tutorial-intro-actions">
                         <button id="tutorialIntroBack" type="button">Back</button>
                         <button id="tutorialIntroNext" type="button">Next</button>
@@ -281,11 +284,11 @@
                                         <p class="files-menu-label">View</p>
                                         <div class="files-menu-grid files-menu-grid-3">
                                             <button type="button" class="files-menu-item" data-files-toggle="filters" aria-pressed="false">Filters</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="open-editors" aria-pressed="true">Editors</button>
+                                            <button type="button" class="files-menu-item" data-files-toggle="files" aria-pressed="true">Files</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="games" aria-pressed="false">Games</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="applications" aria-pressed="false">Apps</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="lessons" aria-pressed="false">Lessons</button>
-                                            <button type="button" class="files-menu-item" data-files-toggle="open-editors" aria-pressed="true">Editors</button>
-                                            <button type="button" class="files-menu-item" data-files-toggle="files" aria-pressed="true">Files</button>
                                             <button type="button" class="files-menu-item" data-files-toggle="trash" aria-pressed="false">Trash</button>
                                         </div>
                                     </section>
@@ -321,6 +324,7 @@
                                         <button class="primary" id="run" type="button" title="Run code in sandbox">Run</button>
                                         <button class="danger" id="clear" type="button" title="Clear editor contents">Clear</button>
                                         <button id="format" type="button" title="Format active file">Format</button>
+                                        <button class="danger" id="stop" type="button" title="Stop sandbox run">Stop</button>
                                     </div>
                                     <div class="editor-pro-buttons" aria-label="Editor tools">
                                         <button id="editorFindBtn" type="button" title="Find and replace">Find</button>

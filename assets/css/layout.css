@@ -115,6 +115,24 @@ body[data-tutorial-active="true"] {
     font-family: var(--font);
 }
 
+.tutorial-intro-progressbar {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    margin: -2px 0 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-menu);
+    overflow: hidden;
+}
+
+.tutorial-intro-progressbar-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--accent-info);
+    transition: width var(--motion-fast) var(--motion-ease);
+}
+
 .tutorial-intro-actions {
     display: flex;
     gap: 8px;
