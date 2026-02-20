@@ -798,49 +798,31 @@ button:focus-visible {
 
 .lesson-hud {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: var(--lesson-hud-offset);
+    right: var(--lesson-hud-offset);
+    bottom: var(--lesson-hud-offset);
     z-index: 8;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 6px;
-    grid-template-rows: auto auto auto auto;
-    grid-template-areas:
-        "main rail"
-        "mood rail"
-        "streak rail"
-        "bottom bottom";
-    gap: 5px 7px;
-    min-height: 52px;
-    width: min(390px, calc(100% - 24px));
-    padding: 7px 8px 8px;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    width: var(--lesson-hud-width);
+    min-height: 0;
+    height: auto;
+    padding: 0;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-sm);
-    background:
-        radial-gradient(120% 140% at 100% -20%, color-mix(in srgb, var(--surface-selected-soft) 18%, transparent), transparent 58%),
-        linear-gradient(165deg, color-mix(in srgb, var(--surface-panel) 56%, transparent), color-mix(in srgb, var(--surface-raised) 62%, transparent));
+    background: color-mix(in srgb, var(--surface-panel) 68%, transparent);
     box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--surface-raised) 14%, transparent),
-        0 8px 16px color-mix(in srgb, var(--surface-bg) 58%, transparent);
+        inset 0 0 0 1px color-mix(in srgb, var(--surface-raised) 16%, transparent),
+        0 4px 12px color-mix(in srgb, var(--surface-bg) 52%, transparent);
     backdrop-filter: blur(7px) saturate(1.14);
     pointer-events: none;
     --lesson-progress: 0%;
     --lesson-hud-chip-font-size: clamp(11px, 0.72rem, 12px);
-    --lesson-hud-meta-font-size: clamp(11px, 0.7rem, 12px);
 }
 
 .lesson-hud[data-active="false"] {
     display: none;
-}
-
-.lesson-hud-main {
-    display: inline-flex;
-    grid-area: main;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 5px;
-    min-width: 0;
-    max-width: 100%;
-    overflow: hidden;
 }
 
 .lesson-hud::before {
@@ -848,11 +830,11 @@ button:focus-visible {
     position: absolute;
     inset: 0;
     background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--surface-selected-soft) 38%, transparent),
-        transparent 58%
+        180deg,
+        color-mix(in srgb, var(--surface-selected-soft) 22%, transparent),
+        transparent 72%
     );
-    opacity: 0.32;
+    opacity: 0.4;
     border-radius: inherit;
     pointer-events: none;
 }
@@ -917,23 +899,22 @@ button:focus-visible {
 
 .lesson-hud-rail {
     position: relative;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-xxs);
-    background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+    border: 0;
+    border-radius: calc(var(--radius-sm) - 1px);
+    background: color-mix(in srgb, var(--surface-raised) 62%, transparent);
     overflow: hidden;
+    width: 100%;
+    height: 100%;
 }
 
 .lesson-hud-rail-vertical {
-    grid-area: rail;
-    width: 6px;
+    width: 100%;
     height: 100%;
-    min-height: 45px;
+    min-height: 0;
 }
 
 .lesson-hud-rail-bottom {
-    grid-area: bottom;
-    width: 100%;
-    height: 4px;
+    display: none;
 }
 
 .lesson-hud-fill {
@@ -945,10 +926,12 @@ button:focus-visible {
     border-radius: inherit;
     background: linear-gradient(
         180deg,
-        color-mix(in srgb, var(--surface-selected-soft) 42%, transparent),
-        color-mix(in srgb, var(--text) 88%, transparent)
+        color-mix(in srgb, var(--surface-selected-soft) 72%, transparent),
+        color-mix(in srgb, var(--text-top-control) 90%, transparent)
     );
-    box-shadow: 0 0 8px color-mix(in srgb, var(--text-top-control) 28%, transparent);
+    box-shadow:
+        0 0 8px color-mix(in srgb, var(--text-top-control) 30%, transparent),
+        inset 0 0 0 1px color-mix(in srgb, var(--text-top-control) 22%, transparent);
     transition: height 140ms linear, filter var(--motion-ui) var(--motion-ease);
 }
 

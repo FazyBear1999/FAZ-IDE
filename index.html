@@ -90,6 +90,7 @@
                             <div class="strip-group" aria-label="Workspace actions">
                                 <button id="layoutToggle" type="button" aria-expanded="false">Layout</button>
                                 <button id="toggleHeader" type="button" data-panel-toggle="true">Header</button>
+                                <button id="toggleFooter" type="button" data-panel-toggle="true">Footer</button>
                                 <button
                                     id="editorShortcutHelpBtn"
                                     type="button"
@@ -343,17 +344,13 @@
                                 </div>
                                 <div class="editor-pane">
                                     <div id="lessonHud" class="lesson-hud" data-active="false" aria-live="polite" aria-label="Lesson progress" hidden>
-                                        <div class="lesson-hud-main" aria-hidden="true">
-                                            <span id="lessonHudProgress" class="lesson-hud-chip">Progress 0%</span>
-                                            <span id="lessonHudStreak" class="lesson-hud-chip">Streak 0</span>
-                                            <span id="lessonHudPace" class="lesson-hud-chip">WPM 0</span>
-                                        </div>
                                         <div class="lesson-hud-rail lesson-hud-rail-vertical" aria-hidden="true">
                                             <span id="lessonHudFill" class="lesson-hud-fill"></span>
                                         </div>
-                                        <div class="lesson-hud-rail lesson-hud-rail-bottom" aria-hidden="true">
-                                            <span id="lessonHudStreakFill" class="lesson-hud-streak-fill"></span>
-                                        </div>
+                                        <span id="lessonHudPace" class="lesson-hud-legacy" hidden>WPM 0</span>
+                                        <span id="lessonHudProgress" class="lesson-hud-legacy" hidden>Progress 0%</span>
+                                        <span id="lessonHudStreak" class="lesson-hud-legacy" hidden>Streak 0</span>
+                                        <span id="lessonHudStreakFill" class="lesson-hud-legacy" hidden></span>
                                         <span id="lessonHudStep" class="lesson-hud-legacy" hidden>Lesson</span>
                                         <div id="lessonHudMood" class="lesson-hud-legacy" aria-hidden="true" hidden></div>
                                         <div id="lessonHudBurst" class="lesson-hud-legacy" aria-hidden="true" hidden></div>
@@ -550,8 +547,8 @@
                             <span class="dot" aria-hidden="true"></span>
                             <span id="statusText">Ready</span>
                         </div>
-                        <span id="footerPrivacy" title="Workspace data stays in your browser only">Privacy: Local only</span>
                         <span id="footerEditorStatus" class="foot-editor-status" aria-label="Editor footer status">
+                            <span id="footerPrivacy" title="Workspace data stays in your browser only">Privacy: Local only</span>
                             <span id="footerEditorFile">File Name: -</span>
                             <span id="footerEditorLang">Lang: Text</span>
                             <span id="footerEditorDirty" data-dirty="false">Saved</span>

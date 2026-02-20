@@ -5953,7 +5953,7 @@ test("lesson HUD hides and regular typing stays normal after switching to non-le
   expect(typed.lessonActive).toBeFalsy();
 });
 
-test("lesson HUD split pieces attach correctly and stay lesson-only", async ({ page }) => {
+test("lesson HUD rail attaches to editor and stays lesson-only", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
@@ -5968,7 +5968,9 @@ test("lesson HUD split pieces attach correctly and stay lesson-only", async ({ p
     const hud = document.querySelector("#lessonHud");
     const headerHud = document.querySelector("#lessonHeaderHud");
     const verticalRail = document.querySelector("#lessonHudFill");
-    const streakRail = document.querySelector("#lessonHudStreakFill");
+    const editorPane = document.querySelector(".editor-pane");
+    const paneRect = editorPane instanceof HTMLElement ? editorPane.getBoundingClientRect() : null;
+    const hudRect = hud instanceof HTMLElement ? hud.getBoundingClientRect() : null;
 
     const activeSnapshot = {
       hudVisible: Boolean(hud && !hud.hidden),
@@ -5976,11 +5978,16 @@ test("lesson HUD split pieces attach correctly and stay lesson-only", async ({ p
       hudActive: String(hud?.getAttribute("data-active") || ""),
       headerActive: String(headerHud?.getAttribute("data-active") || ""),
       verticalProgress: String(hud instanceof HTMLElement ? hud.style.getPropertyValue("--lesson-progress") : "").trim(),
-      streakProgress: String(hud instanceof HTMLElement ? hud.style.getPropertyValue("--lesson-combo-progress") : "").trim(),
+      hasStreakRail: document.querySelector(".lesson-hud-rail-bottom") instanceof HTMLElement,
       verticalTop: String(verticalRail instanceof HTMLElement ? getComputedStyle(verticalRail).top : ""),
       verticalBottom: String(verticalRail instanceof HTMLElement ? getComputedStyle(verticalRail).bottom : ""),
+      railWidth: Number.parseFloat(verticalRail instanceof HTMLElement ? getComputedStyle(verticalRail).width : "0"),
+      hudWidth: Number.parseFloat(hud instanceof HTMLElement ? getComputedStyle(hud).width : "0"),
+      paneTop: Number(paneRect?.top || 0),
+      paneBottom: Number(paneRect?.bottom || 0),
+      hudTop: Number(hudRect?.top || 0),
+      hudBottom: Number(hudRect?.bottom || 0),
       hasVerticalRail: verticalRail instanceof HTMLElement,
-      hasStreakRail: streakRail instanceof HTMLElement,
     };
 
     api.createFile("hud-isolation-check.js", "");
@@ -6007,11 +6014,14 @@ test("lesson HUD split pieces attach correctly and stay lesson-only", async ({ p
   expect(result.activeSnapshot.hudActive).toBe("true");
   expect(result.activeSnapshot.headerActive).toBe("true");
   expect(result.activeSnapshot.verticalProgress.endsWith("%")).toBeTruthy();
-  expect(result.activeSnapshot.streakProgress.endsWith("%")).toBeTruthy();
   expect(result.activeSnapshot.verticalTop).toBe("0px");
   expect(result.activeSnapshot.verticalBottom).not.toBe("0px");
+  expect(result.activeSnapshot.railWidth).toBeGreaterThanOrEqual(8);
+  expect(result.activeSnapshot.hudWidth).toBeGreaterThanOrEqual(10);
+  expect(result.activeSnapshot.hudTop).toBeGreaterThanOrEqual(result.activeSnapshot.paneTop);
+  expect(result.activeSnapshot.hudBottom).toBeLessThanOrEqual(result.activeSnapshot.paneBottom + 1);
   expect(result.activeSnapshot.hasVerticalRail).toBeTruthy();
-  expect(result.activeSnapshot.hasStreakRail).toBeTruthy();
+  expect(result.activeSnapshot.hasStreakRail).toBeFalsy();
 
   expect(result.inactiveSnapshot.hudVisible).toBeFalsy();
   expect(result.inactiveSnapshot.headerVisible).toBeFalsy();
@@ -6035,14 +6045,14 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
     const lessonState = api.getLessonState();
 
     const hud = document.querySelector("#lessonHud");
-    const hudProgress = String(document.querySelector("#lessonHudProgress")?.textContent || "");
     const hudLevel = String(document.querySelector("#lessonHudLevel")?.textContent || "");
     const hudXp = String(document.querySelector("#lessonHudXp")?.textContent || "");
     const hudCoins = String(document.querySelector("#lessonHudCoins")?.textContent || "");
-    const hudStreak = String(document.querySelector("#lessonHudStreak")?.textContent || "");
     const hudPace = String(document.querySelector("#lessonHudPace")?.textContent || "");
-    const hudComboProgress = String(hud instanceof HTMLElement ? hud.style.getPropertyValue("--lesson-combo-progress") : "").trim();
-    const hudComboNumeric = Number.parseFloat(hudComboProgress.replace("%", ""));
+    const hudProgressVar = String(hud instanceof HTMLElement ? hud.style.getPropertyValue("--lesson-progress") : "").trim();
+    const hudProgressNumeric = Number.parseFloat(hudProgressVar.replace("%", ""));
+    const hudProgressNodeHidden = Boolean(document.querySelector("#lessonHudProgress")?.hasAttribute("hidden"));
+    const hudStreakNodeHidden = Boolean(document.querySelector("#lessonHudStreak")?.hasAttribute("hidden"));
 
     return {
       ready: true,
@@ -6055,14 +6065,14 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
       dailyStreak: Number(after?.dailyStreak || 0),
       active: Boolean(lessonState?.active),
       hudActive: hud?.getAttribute("data-active") === "true" && !hud?.hidden,
-      hudProgress,
       hudLevel,
       hudXp,
       hudCoins,
-      hudStreak,
       hudPace,
-      hudComboProgress,
-      hudComboNumeric,
+      hudProgressVar,
+      hudProgressNumeric,
+      hudProgressNodeHidden,
+      hudStreakNodeHidden,
     };
   });
 
@@ -6074,17 +6084,15 @@ test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
   expect(result.dailyStreak).toBeGreaterThanOrEqual(0);
   expect(result.active).toBeTruthy();
   expect(result.hudActive).toBeTruthy();
-  expect(result.hudProgress).toContain("Progress ");
-  expect(result.hudProgress).toContain("%");
   expect(result.hudLevel).toContain("Lv ");
   expect(result.hudXp).toContain("XP ");
   expect(result.hudCoins).toContain("Bytes ");
-  expect(result.hudStreak).toContain("Streak ");
-  expect(result.hudStreak).not.toContain("•");
   expect(result.hudPace).toContain("WPM ");
-  expect(result.hudComboProgress.endsWith("%")).toBeTruthy();
-  expect(result.hudComboNumeric).toBeGreaterThanOrEqual(0);
-  expect(result.hudComboNumeric).toBeLessThanOrEqual(100);
+  expect(result.hudProgressVar.endsWith("%")).toBeTruthy();
+  expect(result.hudProgressNumeric).toBeGreaterThanOrEqual(0);
+  expect(result.hudProgressNumeric).toBeLessThanOrEqual(100);
+  expect(result.hudProgressNodeHidden).toBeTruthy();
+  expect(result.hudStreakNodeHidden).toBeTruthy();
 });
 
 test("lesson HUD keeps mood and burst copy hidden in minimal mode", async ({ page }) => {
@@ -6121,7 +6129,7 @@ test("lesson HUD keeps mood and burst copy hidden in minimal mode", async ({ pag
   expect(result.burstHidden).toBeTruthy();
 });
 
-test("lesson HUD typography is readable and visually bounded", async ({ page }) => {
+test("lesson HUD rail is full-height and visually bounded", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
@@ -6137,34 +6145,37 @@ test("lesson HUD typography is readable and visually bounded", async ({ page }) 
 
     api.typeLessonInput("const canvas");
 
-    const progress = document.querySelector("#lessonHudProgress");
-    const streak = document.querySelector("#lessonHudStreak");
-    const pace = document.querySelector("#lessonHudPace");
-    if (!(progress instanceof HTMLElement) || !(streak instanceof HTMLElement) || !(pace instanceof HTMLElement)) {
+    const hud = document.querySelector("#lessonHud");
+    const rail = document.querySelector(".lesson-hud-rail-vertical");
+    const pane = document.querySelector(".editor-pane");
+    if (!(hud instanceof HTMLElement) || !(rail instanceof HTMLElement) || !(pane instanceof HTMLElement)) {
       return { ready: false };
     }
 
-    const progressSize = parseFloat(getComputedStyle(progress).fontSize || "0");
-    const streakSize = parseFloat(getComputedStyle(streak).fontSize || "0");
-    const paceSize = parseFloat(getComputedStyle(pace).fontSize || "0");
+    const hudRect = hud.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    const hudWidth = parseFloat(getComputedStyle(hud).width || "0");
+    const railHeight = parseFloat(getComputedStyle(rail).height || "0");
 
     return {
       ready: true,
       loaded: true,
-      progressSize,
-      streakSize,
-      paceSize,
+      hudWidth,
+      railHeight,
+      paneHeight: paneRect.height,
+      hudTopOffset: Math.abs(hudRect.top - paneRect.top),
+      hudBottomOffset: Math.abs(hudRect.bottom - paneRect.bottom),
     };
   });
 
   expect(result.ready).toBeTruthy();
   expect(result.loaded).toBeTruthy();
-  expect(result.progressSize).toBeGreaterThanOrEqual(11);
-  expect(result.progressSize).toBeLessThanOrEqual(14);
-  expect(result.streakSize).toBeGreaterThanOrEqual(11);
-  expect(result.streakSize).toBeLessThanOrEqual(14);
-  expect(result.paceSize).toBeGreaterThanOrEqual(11);
-  expect(result.paceSize).toBeLessThanOrEqual(14);
+  expect(result.hudWidth).toBeGreaterThanOrEqual(10);
+  expect(result.hudWidth).toBeLessThanOrEqual(20);
+  expect(result.railHeight).toBeGreaterThanOrEqual(100);
+  expect(result.paneHeight).toBeGreaterThanOrEqual(result.railHeight);
+  expect(result.hudTopOffset).toBeLessThanOrEqual(10);
+  expect(result.hudBottomOffset).toBeLessThanOrEqual(10);
 });
 
 test("lesson level up triggers editor celebration animation", async ({ page }) => {

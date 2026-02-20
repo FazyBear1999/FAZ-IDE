@@ -171,6 +171,24 @@ test("workflow contract: header toggle updates shell and quick bar visibility", 
   await expect(shell).toHaveAttribute("data-header", "open");
 });
 
+test("workflow contract: footer toggle updates shell and footer visibility", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const shell = page.locator("#appShell");
+  const footer = page.locator(".foot");
+
+  await expect(shell).toHaveAttribute("data-footer", "open");
+  await expect(footer).toHaveAttribute("aria-hidden", "false");
+
+  await page.locator("#toggleFooter").click();
+  await expect(shell).toHaveAttribute("data-footer", "closed");
+  await expect(footer).toHaveAttribute("aria-hidden", "true");
+
+  await page.locator("#toggleFooter").click();
+  await expect(shell).toHaveAttribute("data-footer", "open");
+  await expect(footer).toHaveAttribute("aria-hidden", "false");
+});
+
 test("workflow contract: layout quick action opens layout panel when header is hidden", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

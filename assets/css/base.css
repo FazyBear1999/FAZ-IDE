@@ -251,6 +251,17 @@
     --footer-pad-block: 6px;
     --footer-pad-inline: 10px;
     --footer-chip-height: 22px;
+    --footer-gap: 6px;
+    --footer-cell-gap: 5px;
+    --footer-cluster-gap: 8px;
+    --footer-item-pad-inline: 2px;
+    --footer-line-height: 1.15;
+    --footer-grid-status: max-content;
+    --footer-grid-privacy: max-content;
+    --footer-grid-editor: minmax(max-content, 1fr);
+    --footer-grid-runtime: minmax(max-content, 1fr);
+    --lesson-hud-offset: 8px;
+    --lesson-hud-width: 14px;
     --splitter-hit-area: 16px;
     --splitter-overlap: 8px;
     --modal-radius: var(--radius-sm);

@@ -7492,6 +7492,11 @@ function syncQuickBar() {
         setDataPanelOpen(button, layoutState.headerOpen);
         button.textContent = "Header";
     });
+    if (el.btnToggleFooter) {
+        setAriaExpanded(el.btnToggleFooter, layoutState.footerOpen);
+        setDataPanelOpen(el.btnToggleFooter, layoutState.footerOpen);
+        el.btnToggleFooter.textContent = "Footer";
+    }
     if (!el.quickBar) return;
     const visible = !layoutState.headerOpen;
     setBooleanAttribute(el.quickBar, "data-visible", visible);
@@ -10349,9 +10354,6 @@ function updateLessonHud() {
     const paceText = `WPM ${metrics.wpm}`;
     const activeStreak = Math.max(0, Number(lessonSession?.streak) || lessonProfile.currentStreak || 0);
     const streakTier = activeStreak >= 25 ? "fire" : activeStreak >= 12 ? "hot" : activeStreak >= 5 ? "warm" : "none";
-    const comboProgress = activeStreak > 0
-        ? ((activeStreak % 10) === 0 ? 100 : clamp((activeStreak % 10) * 10, 0, 100))
-        : 0;
     const stepKey = `${stepId}:${stepIndex}/${stepCount}`;
     if (stepKey !== lessonHudLastStepKey) {
         lessonHudLastStepKey = stepKey;
@@ -10367,13 +10369,6 @@ function updateLessonHud() {
         }
         lessonHudLastProgressPercent = progressPercent;
     }
-    if (comboProgress !== lessonHudLastComboProgress) {
-        el.lessonHud.style.setProperty("--lesson-combo-progress", `${comboProgress}%`);
-        if (el.lessonHudStreakFill) {
-            el.lessonHudStreakFill.style.setProperty("--lesson-combo-progress", `${comboProgress}%`);
-        }
-        lessonHudLastComboProgress = comboProgress;
-    }
     const mood = accuracy >= 98 && progressPercent >= 65
         ? "perfect"
         : accuracy >= 90
@@ -10385,11 +10380,9 @@ function updateLessonHud() {
         el.lessonHud.dataset.mood = mood;
     }
     const stepText = `${stepId} ${stepIndex}/${stepCount}`;
-    const progressText = `Progress ${progressPercent}%`;
     const levelText = `Lv ${lessonProfile.level}`;
     const xpText = `XP ${lessonProfile.xp}`;
     const bytesText = `Bytes ${Math.max(0, Number(lessonProfile.bytes) || 0)}`;
-    const streakText = `Streak ${activeStreak}`;
     const moodText = mood === "perfect"
         ? "Locked in. Precision and pace are aligned."
         : mood === "strong"
@@ -10397,15 +10390,13 @@ function updateLessonHud() {
             : mood === "recovery"
                 ? "Quick reset. Clean next keystroke."
                 : "Smooth rhythm. Build confidence key by key.";
-    const renderKey = `${stepText}|${progressText}|${levelText}|${xpText}|${bytesText}|${streakText}|${paceText}|${moodText}|${streakTier}|${mood}`;
+    const renderKey = `${stepText}|${levelText}|${xpText}|${bytesText}|${paceText}|${moodText}|${streakTier}|${mood}`;
     if (renderKey !== lessonHudLastRenderKey) {
         lessonHudLastRenderKey = renderKey;
         setNodeText(el.lessonHudStep, stepText);
-        setNodeText(el.lessonHudProgress, progressText);
         setNodeText(el.lessonHudLevel, levelText);
         setNodeText(el.lessonHudXp, xpText);
         setNodeText(el.lessonHudCoins, bytesText);
-        setNodeText(el.lessonHudStreak, streakText);
         setNodeText(el.lessonHudPace, paceText);
         setNodeText(el.lessonHudMood, moodText);
     }
@@ -23283,6 +23274,11 @@ async function boot() {
     if (el.btnToggleHeader) {
         el.btnToggleHeader.addEventListener("click", () => {
             setHeaderOpen(!layoutState.headerOpen);
+        });
+    }
+    if (el.btnToggleFooter) {
+        el.btnToggleFooter.addEventListener("click", () => {
+            setFooterOpen(!layoutState.footerOpen);
         });
     }
     if (el.themeSelect) {

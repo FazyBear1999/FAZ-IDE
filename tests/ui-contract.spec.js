@@ -64,6 +64,7 @@ test("ui contract: default panel toggles and shell dataset state", async ({ page
     "#toggleFiles": "true",
     "#toggleSandbox": "true",
     "#toggleTools": "false",
+    "#toggleFooter": "true",
   };
 
   for (const [selector, expanded] of Object.entries(expectedExpanded)) {

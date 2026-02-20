@@ -613,15 +613,12 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 }
 
 .foot {
-    display: grid;
-    grid-template-columns: 20% 12% 34% 34%;
-    justify-content: stretch;
-    justify-items: center;
+    display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--footer-gap);
     color: var(--text-footer);
     font-size: var(--text-size-2xs);
-    line-height: 1.2;
+    line-height: var(--footer-line-height);
     padding-top: var(--footer-pad-block);
     padding-bottom: var(--footer-pad-block);
     padding-left: max(var(--footer-pad-inline), env(safe-area-inset-left));
@@ -636,23 +633,24 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .foot,
 .foot * {
+    font-family: var(--font);
     font-size: var(--text-size-2xs);
-    line-height: 1.2;
+    line-height: var(--footer-line-height);
 }
 
 .foot > * {
-    min-width: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    gap: 10px;
-    width: 100%;
+    gap: var(--footer-cell-gap);
+    flex: 0 0 auto;
 }
 
 #footerStatus {
-    justify-content: flex-start;
-    text-align: left;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    text-align: right;
     overflow: visible;
 }
 
@@ -663,7 +661,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 #footerStatus #statusText {
     flex: 0 1 auto;
     min-width: 0;
-    text-align: left;
+    text-align: right;
 }
 
 #footerPrivacy {
@@ -675,15 +673,16 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 }
 
 #footerPrivacy {
-    flex: 1 1 0;
+    flex: 0 0 auto;
 }
 
 #footerEditorStatus {
+    flex: 1 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 14px;
-    min-width: 0;
+    gap: var(--footer-cluster-gap);
+    min-width: max-content;
 }
 
 #footerEditorStatus > span {
@@ -691,7 +690,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     align-items: center;
     justify-content: center;
     min-width: max-content;
-    padding-inline: 2px;
+    padding-inline: var(--footer-item-pad-inline);
 }
 
 #footerEditorFile {
@@ -716,19 +715,20 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 }
 
 #footerRuntimeStatus {
+    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: 14px;
-    justify-content: center;
-    min-width: 0;
+    gap: var(--footer-cluster-gap);
+    justify-content: flex-end;
+    min-width: max-content;
 }
 
 #footerRuntimeStatus > span {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
     min-width: max-content;
-    padding-inline: 2px;
+    padding-inline: var(--footer-item-pad-inline);
 }
 
 :is(#footerSandbox, #footerStorage, #footerProblems, #footerEditorRuntime, #footerZoom)[data-state="ok"] {
@@ -754,7 +754,6 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     }
 
     .foot > * {
-        flex: 0 0 auto;
         min-width: max-content;
     }
 

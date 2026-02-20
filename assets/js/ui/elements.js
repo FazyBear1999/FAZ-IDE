@@ -247,6 +247,7 @@ export function getRequiredElements() {
         debugWatchList: $("#debugWatchList"),
         btnPopoutSandbox: $("#popoutSandbox"),
         btnToggleHeader: $("#toggleHeader"),
+        btnToggleFooter: $("#toggleFooter"),
         quickBar: $("#quickBar"),
         quickLayout: $("#quickLayout"),
         quickHeader: $("#quickHeader"),
