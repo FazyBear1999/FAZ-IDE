@@ -29,6 +29,61 @@ test("layout micro: preset list includes all release presets", async ({ page }) 
   expect(values).toContain("diagnostics");
 });
 
+test("layout micro: system font selector exposes supported font options", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const values = await page.locator("#layoutSystemFontSelect option").evaluateAll((nodes) =>
+    nodes.map((node) => String(node.getAttribute("value") || "")),
+  );
+
+  expect(values).toEqual([
+    "default",
+    "jetbrains-mono",
+    "fira-code",
+    "source-code-pro",
+    "ibm-plex-mono",
+    "roboto-mono",
+    "inconsolata",
+    "ubuntu-mono",
+    "cascadia-mono",
+    "space-mono",
+  ]);
+});
+
+test("layout micro: system font control updates runtime font variable and layout state", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#layoutToggle").click();
+  await expect(page.locator("#layoutPanel")).toHaveAttribute("aria-hidden", "false");
+
+  await page.locator("#layoutSystemFontSelect").selectOption("jetbrains-mono");
+
+  const selected = await page.evaluate(() => {
+    const layout = window.fazide?.getState?.()?.layout || {};
+    const runtimeFont = document.documentElement.style.getPropertyValue("--font").trim();
+    return {
+      systemFontFamily: String(layout.systemFontFamily || ""),
+      runtimeFont,
+    };
+  });
+
+  expect(selected.systemFontFamily).toBe("jetbrains-mono");
+  expect(selected.runtimeFont).toContain("JetBrains Mono");
+
+  await page.locator("#layoutSystemFontSelect").selectOption("default");
+
+  const reset = await page.evaluate(() => {
+    const layout = window.fazide?.getState?.()?.layout || {};
+    return {
+      systemFontFamily: String(layout.systemFontFamily || ""),
+      runtimeFont: document.documentElement.style.getPropertyValue("--font").trim(),
+    };
+  });
+
+  expect(reset.systemFontFamily).toBe("default");
+  expect(reset.runtimeFont).toBe("");
+});
+
 test("layout micro: all panel order selectors expose four positions", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

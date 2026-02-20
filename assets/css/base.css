@@ -329,6 +329,7 @@
 
     /* Micro primitives (consistency + safer refactors) */
     --stroke-1: var(--space-1);
+    --stroke-1-5: 1.5px;
     --stroke-2: var(--space-2);
     --stroke-3: var(--space-3);
     --ring-size-sm: var(--space-1);
@@ -337,6 +338,13 @@
     --letter-spacing-ui: 0.3px;
     --letter-spacing-ui-plus: 0.35px;
     --letter-spacing-ui-strong: 0.4px;
+    --letter-spacing-subtle: 0.08px;
+    --letter-spacing-soft: 0.14px;
+    --letter-spacing-soft-plus: 0.16px;
+    --letter-spacing-meta: 0.22px;
+    --letter-spacing-badge: 0.24px;
+    --letter-spacing-caption: 0.28px;
+    --letter-spacing-section: 0.38px;
 
     /* Radius + shadow */
     --radius: 0px;

@@ -162,3 +162,27 @@ test("persistence micro: files filters visibility toggle is reflected and persis
   expect(result.filtersAttr).toBe("open");
   expect(result.filtersOpen).toBeTruthy();
 });
+
+test("persistence micro: system font selection persists in layout storage", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#layoutToggle").click();
+  await expect(page.locator("#layoutPanel")).toHaveAttribute("aria-hidden", "false");
+  await page.locator("#layoutSystemFontSelect").selectOption("cascadia-mono");
+
+  const result = await page.evaluate(() => {
+    let persisted = {};
+    try {
+      persisted = JSON.parse(localStorage.getItem("fazide.layout.v1") || "{}");
+    } catch (_err) {
+      persisted = {};
+    }
+    return {
+      systemFontFamily: String(persisted.systemFontFamily || ""),
+      runtimeFont: document.documentElement.style.getPropertyValue("--font").trim(),
+    };
+  });
+
+  expect(result.systemFontFamily).toBe("cascadia-mono");
+  expect(result.runtimeFont).toContain("Cascadia Mono");
+});

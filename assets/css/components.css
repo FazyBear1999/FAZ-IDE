@@ -150,7 +150,7 @@ button.danger {
 button:focus-visible {
     outline: none;
     border-color: var(--border-focus);
-    box-shadow: 0 0 0 2px var(--ring-focus);
+    box-shadow: 0 0 0 var(--ring-size-md) var(--ring-focus);
 }
 
 .top.strip button {
@@ -179,7 +179,7 @@ button:focus-visible {
 
 .top.strip button:focus-visible {
     border-color: var(--border-focus-soft);
-    box-shadow: 0 0 0 2px var(--ring-focus-soft);
+    box-shadow: 0 0 0 var(--ring-size-md) var(--ring-focus-soft);
 }
 
 .top.strip button[data-panel-toggle="true"][data-panel-open="false"] {
@@ -1787,10 +1787,10 @@ button:focus-visible {
 }
 
 .editor-tab-close {
-    width: 18px;
-    height: 18px;
-    min-width: 18px;
-    min-height: 18px;
+    width: var(--control-size-xs);
+    height: var(--control-size-xs);
+    min-width: var(--control-size-xs);
+    min-height: var(--control-size-xs);
     padding: 0;
     border-radius: 0;
     border: 0;
@@ -1820,6 +1820,11 @@ button:focus-visible {
     --files-tab-edge-space: 4px;
     --files-section-inset: var(--files-tab-edge-space);
     --files-tree-line-color: var(--files-tree-guide);
+    --files-icon-size: var(--space-14);
+    --files-caret-size: var(--space-10);
+    --files-caret-stroke: var(--stroke-1-5);
+    --files-row-min-height: var(--control-height-compact);
+    --files-section-action-size: var(--control-size-lg);
     width: 100%;
     flex: 1;
     min-width: 0;
@@ -1938,8 +1943,8 @@ button:focus-visible {
 }
 
 .files-header .files-menu-btn {
-    width: 28px;
-    min-width: 28px;
+    width: var(--control-size-md);
+    min-width: var(--control-size-md);
     height: var(--control-height-sm);
     min-height: var(--control-height-sm);
     padding: 0;
@@ -1956,7 +1961,7 @@ button:focus-visible {
 .files-sub {
     margin: var(--space-2) 0 0;
     font-size: var(--text-size-5xs);
-    letter-spacing: 0.28px;
+    letter-spacing: var(--letter-spacing-caption);
     color: var(--text-muted-quiet);
 }
 
@@ -2105,7 +2110,7 @@ button:focus-visible {
 
 .files-games-option {
     width: 100%;
-    min-height: 24px;
+    min-height: var(--files-row-min-height);
     padding: var(--space-4) var(--space-6);
     border-radius: 0;
     border: 1px solid transparent;
@@ -2120,9 +2125,9 @@ button:focus-visible {
 }
 
 .files-games-option-icon {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
+    width: var(--files-icon-size);
+    height: var(--files-icon-size);
+    flex: 0 0 var(--files-icon-size);
     object-fit: contain;
     opacity: 0.95;
     pointer-events: none;
@@ -2145,7 +2150,7 @@ button:focus-visible {
 .files-games-option:focus-visible {
     outline: none;
     border-color: var(--btn-pressed-border);
-    box-shadow: 0 0 0 2px var(--ring-focus-soft);
+    box-shadow: 0 0 0 var(--ring-size-md) var(--ring-focus-soft);
 }
 
 .files-games-option[data-selected="true"] {
@@ -2284,7 +2289,7 @@ button:focus-visible {
     border-radius: 0;
     font-size: var(--text-size-4xs-quarter);
     line-height: 1.2;
-    letter-spacing: 0.08px;
+    letter-spacing: var(--letter-spacing-subtle);
 }
 
 #fileRowMenu .files-menu-item {
@@ -2307,7 +2312,7 @@ button:focus-visible {
 .files-menu-item:focus-visible {
     outline: none;
     border-color: var(--btn-pressed-border);
-    box-shadow: 0 0 0 1px var(--ring-focus);
+    box-shadow: 0 0 0 var(--ring-size-sm) var(--ring-focus);
 }
 
 .files-menu-item:disabled {
@@ -2394,7 +2399,7 @@ button:focus-visible {
     padding: var(--space-2) var(--space-4);
     font-size: var(--text-size-6xs-plus);
     text-transform: uppercase;
-    letter-spacing: 0.38px;
+    letter-spacing: var(--letter-spacing-section);
     color: var(--text-muted-quiet);
 }
 
@@ -2471,8 +2476,8 @@ button:focus-visible {
 }
 
 .file-section-action {
-    width: 30px;
-    min-width: 30px;
+    width: var(--files-section-action-size);
+    min-width: var(--files-section-action-size);
     height: var(--control-height-md);
     min-height: var(--control-height-md);
     border-radius: 0;
@@ -2503,8 +2508,8 @@ button:focus-visible {
 .file-section-action-mark {
     position: relative;
     display: inline-block;
-    width: 14px;
-    height: 14px;
+    width: var(--files-icon-size);
+    height: var(--files-icon-size);
 }
 
 .file-section-action-mark::before,
@@ -2513,7 +2518,7 @@ button:focus-visible {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 14px;
+    width: var(--files-icon-size);
     height: 2px;
     border-radius: var(--radius-pill);
     background: currentColor;
@@ -2563,12 +2568,12 @@ button:focus-visible {
 .file-section-caret {
     display: inline-block;
     flex: 0 0 auto;
-    width: 10px;
-    height: 10px;
+    width: var(--files-caret-size);
+    height: var(--files-caret-size);
     box-sizing: border-box;
     margin-left: var(--space-2);
-    border-right: 1.5px solid var(--files-caret-color);
-    border-bottom: 1.5px solid var(--files-caret-color);
+    border-right: var(--files-caret-stroke) solid var(--files-caret-color);
+    border-bottom: var(--files-caret-stroke) solid var(--files-caret-color);
     transform: translateY(0) rotate(45deg);
     transform-origin: 50% 50%;
     transition: transform var(--motion-ui) var(--motion-ease);
@@ -2602,7 +2607,7 @@ button:focus-visible {
     align-items: center;
     justify-content: space-between;
     gap: var(--space-6);
-    min-height: 24px;
+    min-height: var(--files-row-min-height);
     padding: var(--space-4) var(--space-6) var(--space-4) calc(var(--space-6) + (var(--file-depth, 0) * var(--space-12)));
     border-radius: 0;
     border: 1px solid transparent;
@@ -2701,9 +2706,9 @@ button:focus-visible {
 }
 
 .file-folder-icon {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
+    width: var(--files-icon-size);
+    height: var(--files-icon-size);
+    flex: 0 0 var(--files-icon-size);
     display: inline-block;
     object-fit: contain;
     object-position: center;
@@ -2728,12 +2733,12 @@ button:focus-visible {
 .file-folder-caret {
     display: inline-block;
     flex: 0 0 auto;
-    width: 10px;
-    height: 10px;
+    width: var(--files-caret-size);
+    height: var(--files-caret-size);
     box-sizing: border-box;
     margin-left: var(--space-2);
-    border-right: 1.5px solid var(--files-caret-color);
-    border-bottom: 1.5px solid var(--files-caret-color);
+    border-right: var(--files-caret-stroke) solid var(--files-caret-color);
+    border-bottom: var(--files-caret-stroke) solid var(--files-caret-color);
     transform: translateY(0) rotate(45deg);
     transform-origin: 50% 50%;
     transition: transform var(--motion-ui) var(--motion-ease);
@@ -2772,7 +2777,7 @@ button:focus-visible {
     justify-content: space-between;
     align-items: center;
     padding: var(--space-4) var(--space-6) var(--space-4) calc(var(--space-6) + (var(--file-depth, 0) * var(--space-12)));
-    min-height: 24px;
+    min-height: var(--files-row-min-height);
     gap: var(--space-6);
     border-radius: 0;
     border: 1px solid transparent;
@@ -2788,9 +2793,9 @@ button:focus-visible {
 }
 
 .file-row-icon {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
+    width: var(--files-icon-size);
+    height: var(--files-icon-size);
+    flex: 0 0 var(--files-icon-size);
     display: inline-block;
     object-fit: contain;
     object-position: center;
@@ -3010,7 +3015,7 @@ button:focus-visible {
     font-size: var(--text-size-6xs);
     line-height: 1;
     transform: translateY(1px);
-    letter-spacing: 0.24px;
+    letter-spacing: var(--letter-spacing-badge);
     font-weight: 700;
     text-transform: uppercase;
 }
@@ -3050,7 +3055,7 @@ button:focus-visible {
     background: transparent;
     color: var(--accent-info);
     font-size: var(--text-size-6xs);
-    letter-spacing: 0.24px;
+    letter-spacing: var(--letter-spacing-badge);
     font-weight: 600;
     text-transform: uppercase;
     white-space: nowrap;
@@ -3081,7 +3086,7 @@ button:focus-visible {
 .file-rename:focus {
     outline: none;
     border-color: var(--border-focus);
-    box-shadow: 0 0 0 2px var(--ring-focus);
+    box-shadow: 0 0 0 var(--ring-size-md) var(--ring-focus);
 }
 
 .file-error {
@@ -3837,7 +3842,7 @@ body[data-resize="row"] {
     background: var(--prompt-arm-bg);
     color: var(--prompt-arm-text);
     font-weight: 700;
-    letter-spacing: 0.28px;
+    letter-spacing: var(--letter-spacing-caption);
     padding-right: calc(var(--space-10) * 7);
     box-shadow: var(--prompt-arm-shadow);
 }
@@ -3968,7 +3973,7 @@ body[data-resize="row"] {
     padding: var(--space-3) var(--space-6);
     font-size: var(--text-size-xs);
     font-weight: 700;
-    letter-spacing: 0.22px;
+    letter-spacing: var(--letter-spacing-meta);
     text-transform: uppercase;
     color: var(--text);
     border-left: 2px solid var(--border-soft);
@@ -4337,7 +4342,7 @@ body[data-resize="row"] {
     margin: 0;
     font-size: var(--text-size-sm);
     color: var(--text-top-control);
-    letter-spacing: 0.16px;
+    letter-spacing: var(--letter-spacing-soft-plus);
 }
 
 .lesson-stats-hero-sub {
@@ -4408,7 +4413,7 @@ body[data-resize="row"] {
     font-size: var(--text-size-2xs);
     color: var(--text-muted-soft);
     text-transform: uppercase;
-    letter-spacing: 0.22px;
+    letter-spacing: var(--letter-spacing-meta);
 }
 
 .lesson-stats-card strong {
@@ -4429,7 +4434,7 @@ body[data-resize="row"] {
     margin: 0;
     font-size: var(--text-size-xs);
     color: var(--text-muted-soft);
-    letter-spacing: 0.14px;
+    letter-spacing: var(--letter-spacing-soft);
 }
 
 .lesson-stats-session-grid {
@@ -6205,7 +6210,7 @@ body[data-resize="row"] {
 
 .dev-terminal-meta {
     font-size: var(--text-size-4xs);
-    letter-spacing: 0.28px;
+    letter-spacing: var(--letter-spacing-caption);
     color: var(--muted);
     white-space: nowrap;
 }
