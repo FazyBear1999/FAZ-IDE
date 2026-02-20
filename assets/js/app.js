@@ -1469,6 +1469,8 @@ let projectDirectoryHandle = null;
 const FILE_DEFAULT_NAME = "main.js";
 let files = [];
 let folders = [];
+const FILE_TREE_CACHE_LIMIT = 8;
+let fileTreeCache = new Map();
 let fileByIdCache = new Map();
 let fileByIdCacheSource = null;
 let fileByIdCacheSize = -1;
@@ -2851,6 +2853,9 @@ let quickOpenOpen = false;
 let quickOpenQuery = "";
 let quickOpenResults = [];
 let quickOpenIndex = 0;
+const quickOpenResultsTask = createDebouncedTask((query) => {
+    updateQuickOpenResults(query);
+}, 72);
 let promptDialogOpen = false;
 let promptDialogState = null;
 let promptDialogSecondaryButton = null;
@@ -2860,6 +2865,10 @@ let topCommandPaletteOpen = false;
 let commandPaletteQuery = "";
 let commandPaletteResults = [];
 let commandPaletteIndex = 0;
+let topCommandPalettePositionFrame = null;
+const commandPaletteResultsTask = createDebouncedTask((query) => {
+    updateCommandPaletteResults(query);
+}, 72);
 let shortcutHelpOpen = false;
 let lessonStatsOpen = false;
 let editorSearchOpen = false;
@@ -2871,6 +2880,9 @@ let editorSplitOpen = false;
 let symbolResults = [];
 let symbolIndex = 0;
 let symbolRequestId = 0;
+const symbolResultsTask = createDebouncedTask((query) => {
+    refreshSymbolResults(query);
+}, 72);
 let symbolReferenceResults = [];
 let symbolReferenceRequestId = 0;
 let symbolSourceCacheKey = "";
@@ -2893,6 +2905,10 @@ let editorBottomComfortLastPx = -1;
 let lastInspectInfo = null;
 let projectSearchResults = [];
 let projectSearchSelectedIds = new Set();
+let projectSearchResultsVersion = 0;
+let projectSearchSelectionVersion = 0;
+let projectSearchRenderedVersionKey = "";
+let projectSearchHintRenderedKey = "";
 let findResults = [];
 let findIndex = 0;
 let findDecorationsActive = false;
@@ -2905,6 +2921,9 @@ const collapsedFolderPaths = new Set();
 const fileDiagnosticsById = new Map();
 let runtimeProblems = [];
 let problemsById = new Map();
+let problemEntriesCacheVersion = 0;
+let problemEntriesCachedVersion = -1;
+let problemEntriesCached = [];
 let footerProblemsTotalCached = 0;
 let footerProblemsHasErrorCached = false;
 let footerProblemsHasWarnCached = false;
@@ -3163,6 +3182,10 @@ const debouncedProjectSearchScan = createDebouncedTask(() => {
     if (!projectSearchOpen) return;
     runProjectSearchScan();
 }, PROJECT_SEARCH_SCAN_DEBOUNCE_MS);
+const debouncedFindRefresh = createDebouncedTask(() => {
+    if (!editorSearchOpen) return;
+    refreshFindResults({ preserveIndex: false, focusSelection: false });
+}, 64);
 
 const RESIZE_SNAP_STEP = 8;
 const PANEL_REFLOW_ANIMATION_MS = 180;
@@ -4941,6 +4964,7 @@ function ensureToolsOpen(reason, { tab = "", problems = false } = {}) {
 }
 
 function queueProblemsRender() {
+    invalidateProblemEntriesCache();
     if (problemsRenderFrame != null) return;
     problemsRenderFrame = scheduleFrame(() => {
         problemsRenderFrame = null;
@@ -4951,11 +4975,22 @@ function queueProblemsRender() {
 
 function pruneProblemDiagnostics() {
     const validIds = new Set(files.map((file) => file.id));
+    let removed = false;
     [...fileDiagnosticsById.keys()].forEach((fileId) => {
         if (!validIds.has(fileId)) {
             fileDiagnosticsById.delete(fileId);
+            removed = true;
         }
     });
+    if (removed) {
+        invalidateProblemEntriesCache();
+    }
+}
+
+function invalidateProblemEntriesCache() {
+    problemEntriesCacheVersion += 1;
+    problemEntriesCachedVersion = -1;
+    problemEntriesCached = [];
 }
 
 function clearSandboxReadyTimer() {
@@ -5077,6 +5112,9 @@ function getProblemSeverity(level) {
 }
 
 function collectProblemEntries() {
+    if (problemEntriesCachedVersion === problemEntriesCacheVersion) {
+        return problemEntriesCached;
+    }
     pruneProblemDiagnostics();
     const entries = [];
     fileDiagnosticsById.forEach((payload, fileId) => {
@@ -5111,7 +5149,9 @@ function collectProblemEntries() {
         if (timeDiff !== 0) return timeDiff;
         return String(a.fileName || "").localeCompare(String(b.fileName || ""));
     });
-    return entries.slice(0, PROBLEM_ENTRY_LIMIT);
+    problemEntriesCached = entries.slice(0, PROBLEM_ENTRY_LIMIT);
+    problemEntriesCachedVersion = problemEntriesCacheVersion;
+    return problemEntriesCached;
 }
 
 function renderProblemsList() {
@@ -5164,6 +5204,7 @@ function renderProblemsList() {
 function clearProblemsPanel() {
     fileDiagnosticsById.clear();
     runtimeProblems = [];
+    invalidateProblemEntriesCache();
     queueProblemsRender();
     status.set("Problems cleared");
 }
@@ -5200,6 +5241,7 @@ async function refreshWorkspaceProblems({ announce = true } = {}) {
         );
         if (requestId !== problemsRefreshRequestId) return false;
         fileDiagnosticsById.clear();
+        invalidateProblemEntriesCache();
         let lintCount = 0;
         results.forEach((result) => {
             const normalized = (Array.isArray(result.diagnostics) ? result.diagnostics : [])
@@ -8796,6 +8838,29 @@ function buildFileTree(list = [], { explicitFolders = folders } = {}) {
     return root;
 }
 
+function buildFileTreeCacheKey(list = [], explicitFolders = []) {
+    const filesKey = (Array.isArray(list) ? list : [])
+        .map((file) => `${String(file?.id || "")}:${String(file?.name || "")}`)
+        .join("|");
+    const foldersKey = normalizeFolderList(explicitFolders).join("|");
+    return `${filesKey}::${foldersKey}`;
+}
+
+function getMemoizedFileTree(list = [], { explicitFolders = folders } = {}) {
+    const key = buildFileTreeCacheKey(list, explicitFolders);
+    const cached = fileTreeCache.get(key);
+    if (cached) return cached;
+    const tree = buildFileTree(list, { explicitFolders });
+    fileTreeCache.set(key, tree);
+    if (fileTreeCache.size > FILE_TREE_CACHE_LIMIT) {
+        const oldestKey = fileTreeCache.keys().next().value;
+        if (oldestKey !== undefined) {
+            fileTreeCache.delete(oldestKey);
+        }
+    }
+    return tree;
+}
+
 function makeFile(name = FILE_DEFAULT_NAME, code = DEFAULT_CODE, { preserveExtensionless = false } = {}) {
     const normalizedName = preserveExtensionless
         ? normalizeLooseFileName(name, FILE_DEFAULT_NAME)
@@ -12225,12 +12290,21 @@ function updateQuickOpenResults(query = quickOpenQuery) {
     renderQuickOpenResults();
 }
 
+function scheduleQuickOpenResultsUpdate(query = quickOpenQuery) {
+    quickOpenResultsTask.schedule(String(query || ""));
+}
+
+function flushQuickOpenResultsUpdate(query = quickOpenQuery) {
+    quickOpenResultsTask.flush(String(query || ""));
+}
+
 function setQuickOpenOpen(open) {
     quickOpenOpen = Boolean(open);
     if (!el.quickOpenPalette || !el.quickOpenBackdrop) return;
     setOpenStateAttributes(el.quickOpenPalette, quickOpenOpen);
     setOpenStateAttributes(el.quickOpenBackdrop, quickOpenOpen);
     if (!quickOpenOpen) {
+        quickOpenResultsTask.cancel();
         quickOpenQuery = "";
         quickOpenResults = [];
         quickOpenIndex = 0;
@@ -12282,6 +12356,10 @@ function activateQuickOpen(index = quickOpenIndex) {
 }
 
 function onQuickOpenKeyDown(event) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter") {
+        const latestQuery = event.target?.value ?? quickOpenQuery;
+        flushQuickOpenResultsUpdate(latestQuery);
+    }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         if (!quickOpenResults.length) return;
@@ -12305,7 +12383,7 @@ function wireQuickOpen() {
     if (el.quickOpenInput) {
         el.quickOpenInput.addEventListener("input", (event) => {
             quickOpenIndex = 0;
-            updateQuickOpenResults(event.target.value || "");
+            scheduleQuickOpenResultsUpdate(event.target.value || "");
         });
         el.quickOpenInput.addEventListener("keydown", onQuickOpenKeyDown);
     }
@@ -13613,8 +13691,22 @@ function refreshFindResults({ preserveIndex = true, focusSelection = false } = {
     }
 }
 
+function scheduleFindResultsRefresh() {
+    debouncedFindRefresh.schedule();
+}
+
+function flushFindResultsRefresh() {
+    if (debouncedFindRefresh.pending()) {
+        debouncedFindRefresh.flush();
+        return;
+    }
+    refreshFindResults({ preserveIndex: false, focusSelection: false });
+}
+
 function replaceCurrentFindResult() {
-    if (!editorSearchOpen || !findResults.length) return false;
+    if (!editorSearchOpen) return false;
+    flushFindResultsRefresh();
+    if (!findResults.length) return false;
     const findState = getFindState();
     const target = findResults[findIndex];
     if (!target) return false;
@@ -13630,6 +13722,7 @@ function replaceCurrentFindResult() {
 
 function replaceAllFindResults() {
     if (!editorSearchOpen) return false;
+    flushFindResultsRefresh();
     const code = editor.get();
     const findState = getFindState();
     if (!findResults.length) return false;
@@ -13691,6 +13784,7 @@ function setEditorSearchOpen(open, { replaceMode = false } = {}) {
         editor.clearMarks?.(EDITOR_MARK_KIND_FIND);
         findDecorationsActive = false;
     }
+    debouncedFindRefresh.cancel();
 }
 
 function openEditorSearch({ replaceMode = false } = {}) {
@@ -13803,8 +13897,11 @@ function scanProjectMatches() {
 
 function renderProjectSearchResults() {
     if (!el.projectSearchList) return;
+    const versionKey = `${projectSearchResultsVersion}:${projectSearchSelectionVersion}`;
+    if (versionKey === projectSearchRenderedVersionKey) return;
     if (!projectSearchResults.length) {
         el.projectSearchList.innerHTML = `<li class="quick-open-empty">No project matches.</li>`;
+        projectSearchRenderedVersionKey = versionKey;
         return;
     }
     el.projectSearchList.innerHTML = projectSearchResults
@@ -13824,23 +13921,31 @@ function renderProjectSearchResults() {
             `;
         })
         .join("");
+    projectSearchRenderedVersionKey = versionKey;
 }
 
 function updateProjectSearchHint(message = "") {
     if (!el.projectSearchHint) return;
     if (message) {
+        if (projectSearchHintRenderedKey === `m:${message}`) return;
         el.projectSearchHint.textContent = message;
+        projectSearchHintRenderedKey = `m:${message}`;
         return;
     }
     const selected = projectSearchSelectedIds.size;
     const total = projectSearchResults.length;
-    el.projectSearchHint.textContent = `${total} matches • ${selected} selected`;
+    const nextText = `${total} matches • ${selected} selected`;
+    if (projectSearchHintRenderedKey === `a:${nextText}`) return;
+    el.projectSearchHint.textContent = nextText;
+    projectSearchHintRenderedKey = `a:${nextText}`;
 }
 
 function runProjectSearchScan() {
     const { results, invalidRegex } = scanProjectMatches();
     projectSearchResults = results;
     projectSearchSelectedIds = new Set(results.map((item) => item.id));
+    projectSearchResultsVersion += 1;
+    projectSearchSelectionVersion += 1;
     renderProjectSearchResults();
     if (invalidRegex) {
         updateProjectSearchHint("Invalid regular expression.");
@@ -13851,9 +13956,14 @@ function runProjectSearchScan() {
 
 function toggleProjectResultSelection(id, forced = null) {
     if (!id) return;
+    const had = projectSearchSelectedIds.has(id);
     const next = forced == null ? !projectSearchSelectedIds.has(id) : Boolean(forced);
     if (next) projectSearchSelectedIds.add(id);
     else projectSearchSelectedIds.delete(id);
+    const changed = had !== next;
+    if (changed) {
+        projectSearchSelectionVersion += 1;
+    }
     renderProjectSearchResults();
     updateProjectSearchHint();
 }
@@ -13864,6 +13974,7 @@ function selectAllProjectResults(selected) {
     } else {
         projectSearchSelectedIds = new Set();
     }
+    projectSearchSelectionVersion += 1;
     renderProjectSearchResults();
     updateProjectSearchHint();
 }
@@ -13903,10 +14014,11 @@ function replaceSelectedProjectResults() {
         list.push(item);
         byFile.set(item.fileId, list);
     });
+    const filesById = new Map(files.map((entry) => [entry.id, entry]));
 
     let replaceCount = 0;
     byFile.forEach((entries, fileId) => {
-        const file = files.find((entry) => entry.id === fileId);
+        const file = filesById.get(fileId);
         if (!file) return;
         const ordered = [...entries].sort((a, b) => b.start - a.start);
         let nextCode = String(file.code || "");
@@ -13950,6 +14062,10 @@ function setProjectSearchOpen(open) {
     debouncedProjectSearchScan.cancel();
     projectSearchResults = [];
     projectSearchSelectedIds = new Set();
+    projectSearchResultsVersion += 1;
+    projectSearchSelectionVersion += 1;
+    projectSearchRenderedVersionKey = "";
+    projectSearchHintRenderedKey = "";
     if (el.projectSearchList) el.projectSearchList.innerHTML = "";
 }
 
@@ -14470,6 +14586,14 @@ async function refreshSymbolResults(query = el.symbolSearchInput?.value || "") {
     renderSymbolResults();
 }
 
+function scheduleSymbolResultsUpdate(query = el.symbolSearchInput?.value || "") {
+    symbolResultsTask.schedule(String(query || ""));
+}
+
+function flushSymbolResultsUpdate(query = el.symbolSearchInput?.value || "") {
+    symbolResultsTask.flush(String(query || ""));
+}
+
 function highlightSymbolAt(symbol) {
     if (!symbol) return;
     editor.clearMarks?.(EDITOR_MARK_KIND_SYMBOL);
@@ -14608,6 +14732,7 @@ function setSymbolPaletteOpen(open) {
             el.symbolSearchInput?.select();
         });
     } else {
+        symbolResultsTask.cancel();
         symbolResults = [];
         symbolIndex = 0;
         symbolReferenceResults = [];
@@ -16712,11 +16837,12 @@ function wireEditorSearch() {
     if (el.editorFindInput) {
         el.editorFindInput.addEventListener("input", () => {
             findIndex = 0;
-            refreshFindResults({ preserveIndex: false, focusSelection: false });
+            scheduleFindResultsRefresh();
         });
         el.editorFindInput.addEventListener("keydown", (event) => {
             if (event.key === "Enter") {
                 event.preventDefault();
+                flushFindResultsRefresh();
                 moveFindSelection(event.shiftKey ? -1 : 1);
             }
             if (event.key === "Escape") {
@@ -16777,11 +16903,15 @@ function wireSymbolPalette() {
     if (el.symbolSearchInput) {
         el.symbolSearchInput.addEventListener("input", (event) => {
             symbolIndex = 0;
-            refreshSymbolResults(event.target.value || "");
+            scheduleSymbolResultsUpdate(event.target.value || "");
             symbolReferenceResults = [];
             renderSymbolReferenceResults();
         });
         el.symbolSearchInput.addEventListener("keydown", async (event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter") {
+                const latestQuery = (event.target?.value ?? el.symbolSearchInput?.value) || "";
+                flushSymbolResultsUpdate(latestQuery);
+            }
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
                 if (!symbolResults.length) return;
@@ -18164,12 +18294,21 @@ function updateCommandPaletteResults(query = commandPaletteQuery) {
     renderCommandPaletteResults();
 }
 
+function scheduleCommandPaletteResultsUpdate(query = commandPaletteQuery) {
+    commandPaletteResultsTask.schedule(String(query || ""));
+}
+
+function flushCommandPaletteResultsUpdate(query = commandPaletteQuery) {
+    commandPaletteResultsTask.flush(String(query || ""));
+}
+
 function setCommandPaletteOpen(open, { query = "", focusInput = true } = {}) {
     commandPaletteOpen = Boolean(open);
     if (!el.commandPalette || !el.commandPaletteBackdrop) return;
     setOpenStateAttributes(el.commandPalette, commandPaletteOpen);
     setOpenStateAttributes(el.commandPaletteBackdrop, commandPaletteOpen);
     if (!commandPaletteOpen) {
+        commandPaletteResultsTask.cancel();
         commandPaletteQuery = "";
         commandPaletteResults = [];
         commandPaletteIndex = 0;
@@ -18192,11 +18331,24 @@ function setTopCommandPaletteOpen(open) {
     if (!el.topCommandPaletteMenu) return;
     setOpenStateAttributes(el.topCommandPaletteMenu, topCommandPaletteOpen);
     if (topCommandPaletteOpen) {
-        positionTopCommandPaletteMenu();
+        queueTopCommandPaletteMenuPosition();
     }
     if (!topCommandPaletteOpen) {
+        if (topCommandPalettePositionFrame != null) {
+            topCommandPalettePositionFrame = null;
+        }
         clearTopCommandPaletteUi();
     }
+}
+
+function queueTopCommandPaletteMenuPosition() {
+    if (!topCommandPaletteOpen) return;
+    if (topCommandPalettePositionFrame != null) return;
+    topCommandPalettePositionFrame = scheduleFrame(() => {
+        topCommandPalettePositionFrame = null;
+        if (!topCommandPaletteOpen) return;
+        positionTopCommandPaletteMenu();
+    });
 }
 
 function positionTopCommandPaletteMenu() {
@@ -18255,6 +18407,10 @@ function activateCommandPalette(index = commandPaletteIndex) {
 
 function onCommandPaletteKeyDown(event) {
     const fromTopInput = event.target === el.topCommandPaletteInput;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter") {
+        const latestQuery = event.target?.value ?? commandPaletteQuery;
+        flushCommandPaletteResultsUpdate(latestQuery);
+    }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         if (fromTopInput && !topCommandPaletteOpen) {
@@ -18294,7 +18450,7 @@ function wireCommandPalette() {
     if (el.commandPaletteInput) {
         el.commandPaletteInput.addEventListener("input", (event) => {
             commandPaletteIndex = 0;
-            updateCommandPaletteResults(event.target.value || "");
+            scheduleCommandPaletteResultsUpdate(event.target.value || "");
         });
         el.commandPaletteInput.addEventListener("keydown", onCommandPaletteKeyDown);
     }
@@ -18308,7 +18464,7 @@ function wireCommandPalette() {
             const value = event.target?.value || "";
             commandPaletteIndex = 0;
             setTopCommandPaletteOpen(true);
-            updateCommandPaletteResults(value);
+            scheduleCommandPaletteResultsUpdate(value);
         });
         el.topCommandPaletteInput.addEventListener("keydown", onCommandPaletteKeyDown);
     }
@@ -18326,11 +18482,11 @@ function wireCommandPalette() {
     });
     window.addEventListener("resize", () => {
         if (!topCommandPaletteOpen) return;
-        positionTopCommandPaletteMenu();
+        queueTopCommandPaletteMenuPosition();
     });
     document.addEventListener("scroll", () => {
         if (!topCommandPaletteOpen) return;
-        positionTopCommandPaletteMenu();
+        queueTopCommandPaletteMenuPosition();
     }, true);
 }
 
@@ -19845,6 +20001,7 @@ function renderFileList() {
         closeFileMenus();
     }
     openTabIds = normalizeOpenTabIds(openTabIds);
+    const filesById = new Map(files.map((file) => [file.id, file]));
     const query = fileFilter.trim().toLowerCase();
     const matchedFiles = query
         ? files.filter((file) => file.name.toLowerCase().includes(query))
@@ -19853,11 +20010,11 @@ function renderFileList() {
 
     if (query) {
         if (editingFileId && !visibleFiles.some((file) => file.id === editingFileId)) {
-            const editingFile = files.find((file) => file.id === editingFileId);
+            const editingFile = filesById.get(editingFileId);
             if (editingFile) visibleFiles.push(editingFile);
         }
         if (activeFileId && !visibleFiles.some((file) => file.id === activeFileId)) {
-            const activeFile = files.find((file) => file.id === activeFileId);
+            const activeFile = filesById.get(activeFileId);
             if (activeFile) visibleFiles.push(activeFile);
         }
     }
@@ -19951,7 +20108,7 @@ function renderFileList() {
         const explicitFolders = includeExplicitFolders
             ? normalizeFolderList(editingFolderPath ? [...folders, editingFolderPath] : [...folders])
             : [];
-        const tree = buildFileTree(list, {
+        const tree = getMemoizedFileTree(list, {
             explicitFolders,
         });
         const out = [];
@@ -20180,7 +20337,7 @@ function renderFileList() {
             const input = el.fileList.querySelector(`[data-file-rename="${editingFileId}"]`);
             if (input) {
                 input.focus();
-                const file = files.find((item) => item.id === editingFileId);
+                const file = filesById.get(editingFileId);
                 if (file && editingDraft === getFileBaseName(file.name)) {
                     selectBaseName(input);
                 }

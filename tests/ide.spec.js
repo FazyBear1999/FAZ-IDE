@@ -2493,6 +2493,54 @@ test("files search shows helpful no-match copy and Escape clears filter", async 
   await expect(page.locator("#fileList .file-row").first()).toBeVisible();
 });
 
+test("files tree remains populated after rapid filter and sort changes", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const search = document.querySelector("#fileSearch");
+    const sort = document.querySelector("#fileSort");
+    const list = document.querySelector("#fileList");
+    const filesToggle = document.querySelector('#fileList [data-file-section="files"]');
+    if (!(search instanceof HTMLInputElement) || !(sort instanceof HTMLSelectElement) || !list || !(filesToggle instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    if (filesToggle.getAttribute("aria-expanded") !== "true") {
+      filesToggle.click();
+      await wait(40);
+    }
+
+    ["i", "in", "ind", ""].forEach((value) => {
+      search.value = value;
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    ["name", "recent", "manual"].forEach((value) => {
+      sort.value = value;
+      sort.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await wait(220);
+
+    const rowCount = list.querySelectorAll(".file-row").length;
+    const hasFilesHeader = Boolean(list.querySelector('[data-file-section="files"]'));
+    return {
+      ready: true,
+      rowCount,
+      hasFilesHeader,
+      finalSearch: search.value,
+      finalSort: sort.value,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.finalSearch).toBe("");
+  expect(result.finalSort).toBe("manual");
+  expect(result.hasFilesHeader).toBeTruthy();
+  expect(result.rowCount).toBeGreaterThan(0);
+});
+
 test("panel docking keeps rows within three open columns and preserves keyboard target placement", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -4308,6 +4356,220 @@ test("beginner tutorial command results step animates search input and filters c
   expect(result.hintText.toLowerCase()).toContain("enter to run");
 });
 
+test("top command palette keeps latest rapid input and mirrors results across lists", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const input = document.querySelector("#topCommandPaletteInput");
+    const modalInput = document.querySelector("#commandPaletteInput");
+    const topList = document.querySelector("#topCommandPaletteList");
+    const modalList = document.querySelector("#commandPaletteList");
+    if (!(input instanceof HTMLInputElement) || !(modalInput instanceof HTMLInputElement) || !topList || !modalList) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    input.focus();
+
+    const rapidValues = ["task", "task run", "task run-all", ""]; 
+    rapidValues.forEach((value) => {
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await wait(150);
+
+    const topCount = topList.querySelectorAll("[data-command-id]").length;
+    const modalCount = modalList.querySelectorAll("[data-command-id]").length;
+    return {
+      ready: true,
+      topValue: String(input.value || ""),
+      modalValue: String(modalInput.value || ""),
+      topCount,
+      modalCount,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.topValue).toBe("");
+  expect(result.modalValue).toBe("");
+  expect(result.topCount).toBeGreaterThan(0);
+  expect(result.modalCount).toBe(result.topCount);
+});
+
+test("top command palette menu stays anchored after resize and scroll bursts", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const input = document.querySelector("#topCommandPaletteInput");
+    const menu = document.querySelector("#topCommandPaletteMenu");
+    if (!(input instanceof HTMLInputElement) || !(menu instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    input.focus();
+    await wait(40);
+
+    for (let i = 0; i < 24; i += 1) {
+      window.dispatchEvent(new Event("resize"));
+      document.dispatchEvent(new Event("scroll", { bubbles: true }));
+    }
+
+    await wait(90);
+
+    const inputRect = input.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const computed = getComputedStyle(menu);
+    const horizontalDelta = Math.abs(menuRect.left - inputRect.left);
+    const verticalGap = menuRect.top - inputRect.bottom;
+
+    return {
+      ready: true,
+      open: menu.getAttribute("data-open") === "true",
+      visible: computed.visibility !== "hidden" && menuRect.width > 0 && menuRect.height > 0,
+      horizontalDelta,
+      verticalGap,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.open).toBeTruthy();
+  expect(result.visible).toBeTruthy();
+  expect(result.horizontalDelta).toBeLessThanOrEqual(12);
+  expect(result.verticalGap).toBeGreaterThanOrEqual(0);
+  expect(result.verticalGap).toBeLessThanOrEqual(16);
+});
+
+test("quick open keeps latest rapid input and renders matching file results", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.keyboard.press("Control+P");
+
+  const result = await page.evaluate(async () => {
+    const panel = document.querySelector("#quickOpenPalette");
+    const input = document.querySelector("#quickOpenInput");
+    const list = document.querySelector("#quickOpenList");
+    const hint = document.querySelector("#quickOpenHint");
+    if (!(panel instanceof HTMLElement) || !(input instanceof HTMLInputElement) || !list || !hint) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const rapidValues = ["index", "index.html", "app", "app.js"];
+    rapidValues.forEach((value) => {
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await wait(160);
+
+    const rows = Array.from(list.querySelectorAll("[data-quick-open-id]"));
+    const names = rows
+      .slice(0, 6)
+      .map((row) => String(row.querySelector(".quick-open-name")?.textContent || "").trim().toLowerCase())
+      .filter(Boolean);
+    const query = String(input.value || "").trim().toLowerCase();
+    const hintText = String(hint.textContent || "").toLowerCase();
+
+    return {
+      ready: true,
+      open: panel.getAttribute("data-open") === "true",
+      query,
+      rowCount: rows.length,
+      names,
+      hintText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.open).toBeTruthy();
+  expect(result.query).toBe("app.js");
+  expect(result.rowCount).toBeGreaterThan(0);
+  expect(result.names.some((name) => name.includes("app.js"))).toBeTruthy();
+  expect(result.hintText).toContain("enter to open");
+});
+
+test("problems refresh and clear keep list and footer counts in sync", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.applyPreset) {
+      return { ready: false };
+    }
+
+    api.applyPreset("diagnostics");
+
+    const cm = document.querySelector(".CodeMirror")?.CodeMirror;
+    const textarea = document.querySelector("#editor");
+    const invalidSource = "const answer = ;\n";
+    if (cm && typeof cm.setValue === "function") {
+      cm.setValue(invalidSource);
+    } else if (textarea instanceof HTMLTextAreaElement) {
+      textarea.value = invalidSource;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    } else {
+      return { ready: false };
+    }
+
+    const refreshBtn = document.querySelector("#problemsRefresh");
+    const clearBtn = document.querySelector("#problemsClear");
+    const list = document.querySelector("#problemsList");
+    const footer = document.querySelector("#footerProblems");
+    if (!(refreshBtn instanceof HTMLButtonElement) || !(clearBtn instanceof HTMLButtonElement) || !list || !footer) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    await wait(80);
+    refreshBtn.click();
+
+    let refreshCount = 0;
+    for (let i = 0; i < 45; i += 1) {
+      refreshCount = list.querySelectorAll("[data-problem-id]").length;
+      if (refreshCount > 0) break;
+      await wait(40);
+    }
+
+    const footerAfterRefreshText = String(footer.textContent || "");
+    const footerAfterRefreshCount = Number((footerAfterRefreshText.match(/(\d+)/) || ["0", "0"])[1] || 0);
+
+    const validSource = "const answer = 1;\n";
+    if (cm && typeof cm.setValue === "function") {
+      cm.setValue(validSource);
+    } else if (textarea instanceof HTMLTextAreaElement) {
+      textarea.value = validSource;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    await wait(80);
+    clearBtn.click();
+    await wait(100);
+
+    const clearCount = list.querySelectorAll("[data-problem-id]").length;
+    const listText = String(list.textContent || "").toLowerCase();
+    const footerAfterClearText = String(footer.textContent || "");
+    const footerAfterClearCount = Number((footerAfterClearText.match(/(\d+)/) || ["0", "0"])[1] || 0);
+
+    return {
+      ready: true,
+      refreshCount,
+      footerAfterRefreshCount,
+      clearCount,
+      footerAfterClearCount,
+      emptyMessageVisible: listText.includes("no active problems"),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.refreshCount).toBeGreaterThan(0);
+  expect(result.footerAfterRefreshCount).toBeGreaterThan(0);
+  expect(result.clearCount).toBe(0);
+  expect(result.footerAfterClearCount).toBe(0);
+  expect(result.emptyMessageVisible).toBeTruthy();
+});
+
 test("beginner tutorial completion resets layout and leaves sandbox idle", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -4871,6 +5133,41 @@ test("find replace-all updates code and reports replacement count", async ({ pag
   expect(result.findStatusText.toLowerCase()).toContain("no matches");
 });
 
+test("editor find keeps latest rapid input and reports final match set", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    const findInput = document.querySelector("#editorFindInput");
+    const findStatusNode = document.querySelector("#editorFindStatus");
+    if (!api?.setCode || !api?.openEditorSearch || !(findInput instanceof HTMLInputElement) || !findStatusNode) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    api.setCode("alphaOne();\nbetaTwo();\ngammaThree();\n");
+    api.openEditorSearch({ replaceMode: false });
+
+    ["alpha", "beta", "gamma", "gammathree"].forEach((value) => {
+      findInput.value = value;
+      findInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await wait(170);
+
+    const statusText = String(findStatusNode.textContent || "").toLowerCase();
+    return {
+      ready: true,
+      query: String(findInput.value || "").trim().toLowerCase(),
+      statusText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.query).toBe("gammathree");
+  expect(result.statusText).toContain("1/1 match");
+});
+
 test("symbols palette lists and filters active file symbols", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -4929,6 +5226,175 @@ test("symbols palette lists and filters active file symbols", async ({ page }) =
   expect(result.filteredHasGamma).toBeTruthy();
   expect(result.filteredAllMatch).toBeTruthy();
   expect(result.hintText.toLowerCase()).toContain("symbol");
+});
+
+test("symbols palette keeps latest rapid input and filters to final query", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    const symbolInput = document.querySelector("#symbolSearchInput");
+    const symbolList = document.querySelector("#symbolList");
+    if (!api?.setCode || !api?.openSymbolPalette || !(symbolInput instanceof HTMLInputElement) || !symbolList) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    api.setCode(
+      "function alphaOne() { return 1; }\n"
+      + "const betaTwo = 2;\n"
+      + "class GammaThree {}\n"
+    );
+    api.openSymbolPalette();
+
+    for (let i = 0; i < 60; i += 1) {
+      if (symbolList.querySelectorAll("[data-symbol-id]").length > 0) break;
+      await wait(25);
+    }
+
+    ["alp", "alpha", "gamma", "gammathree"].forEach((value) => {
+      symbolInput.value = value;
+      symbolInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await wait(170);
+
+    const names = Array.from(symbolList.querySelectorAll("[data-symbol-id] .symbol-row-name"))
+      .map((node) => String(node.textContent || "").trim().toLowerCase())
+      .filter(Boolean);
+
+    return {
+      ready: true,
+      query: String(symbolInput.value || "").trim().toLowerCase(),
+      count: names.length,
+      names,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.query).toBe("gammathree");
+  expect(result.count).toBeGreaterThan(0);
+  expect(result.names.every((name) => name.includes("gammathree"))).toBeTruthy();
+});
+
+test("project search keeps latest rapid input and renders final-query matches", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    const input = document.querySelector("#projectSearchInput");
+    const list = document.querySelector("#projectSearchList");
+    const hint = document.querySelector("#projectSearchHint");
+    if (!api?.setCode || !api?.openProjectSearch || !(input instanceof HTMLInputElement) || !list || !hint) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    api.setCode("const alphaNeedle = 1;\nconst omegaNeedle = 2;\n");
+    api.openProjectSearch();
+
+    ["alpha", "omega", "omeganeedle"].forEach((value) => {
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await wait(240);
+
+    const query = String(input.value || "").trim().toLowerCase();
+    const previews = Array.from(list.querySelectorAll(".project-search-preview"))
+      .map((node) => String(node.textContent || "").trim().toLowerCase())
+      .filter(Boolean);
+    const hintText = String(hint.textContent || "").trim().toLowerCase();
+
+    return {
+      ready: true,
+      query,
+      count: previews.length,
+      hasNeedle: previews.some((text) => text.includes("omeganeedle")),
+      hintText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.query).toBe("omeganeedle");
+  expect(result.count).toBeGreaterThan(0);
+  expect(result.hasNeedle).toBeTruthy();
+  expect(result.hintText).toContain("matches");
+});
+
+test("project search replace selected updates matched results across files", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    const searchInput = document.querySelector("#projectSearchInput");
+    const replaceInput = document.querySelector("#projectReplaceInput");
+    const list = document.querySelector("#projectSearchList");
+    const selectAllBtn = document.querySelector("#projectSearchSelectAll");
+    const replaceSelectedBtn = document.querySelector("#projectReplaceSelected");
+    if (
+      !api?.setCode
+      || !api?.createFile
+      || !api?.openProjectSearch
+      || !(searchInput instanceof HTMLInputElement)
+      || !(replaceInput instanceof HTMLInputElement)
+      || !list
+      || !(selectAllBtn instanceof HTMLElement)
+      || !(replaceSelectedBtn instanceof HTMLElement)
+    ) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    api.setCode("const needleToken = 1;\nconsole.log('needleToken');\n");
+    api.createFile("project-replace-extra.js", "const needleToken = 2;\n");
+    api.openProjectSearch();
+
+    searchInput.value = "needleToken";
+    searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+    for (let i = 0; i < 60; i += 1) {
+      if (list.querySelectorAll("[data-project-result-id]").length >= 3) break;
+      await wait(30);
+    }
+
+    const beforeCount = list.querySelectorAll("[data-project-result-id]").length;
+    selectAllBtn.click();
+    replaceInput.value = "replacedToken";
+    replaceInput.dispatchEvent(new Event("input", { bubbles: true }));
+    replaceSelectedBtn.click();
+
+    for (let i = 0; i < 60; i += 1) {
+      if (list.querySelectorAll("[data-project-result-id]").length === 0) break;
+      await wait(30);
+    }
+
+    const afterOldTermCount = list.querySelectorAll("[data-project-result-id]").length;
+    const noMatchesText = String(list.textContent || "").toLowerCase();
+
+    searchInput.value = "replacedToken";
+    searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+    for (let i = 0; i < 60; i += 1) {
+      if (list.querySelectorAll("[data-project-result-id]").length >= beforeCount) break;
+      await wait(30);
+    }
+
+    const replacedCount = list.querySelectorAll("[data-project-result-id]").length;
+    return {
+      ready: true,
+      beforeCount,
+      afterOldTermCount,
+      replacedCount,
+      noMatchesText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.beforeCount).toBeGreaterThan(0);
+  expect(result.afterOldTermCount).toBe(0);
+  expect(result.noMatchesText).toContain("no project matches");
+  expect(result.replacedCount).toBeGreaterThanOrEqual(result.beforeCount);
 });
 
 test("editor history panel supports keyboard navigation with synced action states", async ({ page }) => {
