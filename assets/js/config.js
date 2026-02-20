@@ -225,6 +225,15 @@ export const LESSONS = [
         ],
         entryFile: "game.js",
     },
+    {
+        id: "quick-output-4line",
+        name: "Lesson: Quick Output Test (4 lines)",
+        icon: buildThemedIcon("2615"),
+        files: [
+            { path: "index.html", src: "./assets/lessons/quick-output-4line/index.html" },
+        ],
+        entryFile: "index.html",
+    },
 ];
 
 // Default editor contents shown on first load (or when storage is empty/reset).

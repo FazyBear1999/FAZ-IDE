@@ -3272,6 +3272,7 @@ test("dev terminal help stays aligned with safe runtime command scope", async ({
       "commands: help, clear, status, run, format, save, save-all",
       "commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
       "commands: open <log|editor|files|sandbox|tools>",
+      "commands: bytes <status|add <amount>|reset>",
       "commands: tutorial <start|reset|status>",
       "commands: tutorial list",
       "commands: fresh-start confirm",
@@ -3304,6 +3305,43 @@ test("dev terminal help stays aligned with safe runtime command scope", async ({
   expect(result.ready).toBeTruthy();
   expect(result.missingExpected).toEqual([]);
   expect(result.presentForbidden).toEqual([]);
+});
+
+test("dev terminal bytes commands support add status and reset for lesson testing", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.openDevTerminal || !api?.runDevTerminal || !api?.getLessonProfile) {
+      return { ready: false };
+    }
+
+    api.openDevTerminal();
+    await api.runDevTerminal("bytes reset");
+    await api.runDevTerminal("bytes add 42");
+    await api.runDevTerminal("bytes status");
+    await api.runDevTerminal("bytes add nope");
+
+    const profileAfterAdd = api.getLessonProfile();
+    const outputText = String(document.querySelector("#devTerminalOutput")?.textContent || "");
+
+    await api.runDevTerminal("bytes reset");
+    const profileAfterReset = api.getLessonProfile();
+
+    return {
+      ready: true,
+      bytesAfterAdd: Number(profileAfterAdd?.bytes || 0),
+      bytesAfterReset: Number(profileAfterReset?.bytes || 0),
+      outputText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.bytesAfterAdd).toBe(42);
+  expect(result.bytesAfterReset).toBe(0);
+  expect(result.outputText).toContain("Added 42 lesson bytes. Total: 42.");
+  expect(result.outputText).toContain("Lesson bytes: 42");
+  expect(result.outputText).toContain("Usage: bytes add <amount>");
 });
 
 test("beginner tutorial reset restarts from the first step", async ({ page }) => {
@@ -5424,6 +5462,60 @@ test("lesson mode loads starter and advances through STEP typing markers", async
   expect(result.afterAll?.completed).toBeTruthy();
   expect(Number(result.afterAll?.remaining) || 0).toBeGreaterThanOrEqual(0);
   expect(result.afterAll?.stepCount).toBe(result.initial?.stepCount);
+});
+
+test("quick 4-line lesson auto-runs connected html output when completed", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.listLessons || !api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const lessons = api.listLessons();
+    const hasLesson = lessons.some((entry) => entry.id === "quick-output-4line");
+    if (!hasLesson) {
+      return { ready: true, hasLesson: false };
+    }
+
+    const loaded = await api.loadLesson("quick-output-4line", { startTyping: true, run: false });
+    let typedChars = 0;
+    const deadline = Date.now() + 4500;
+    while (Date.now() < deadline) {
+      const state = api.getLessonState();
+      if (!state || state.completed) break;
+      const expectedNext = String(state.expectedNext || "");
+      if (!expectedNext) break;
+      const typed = Number(api.typeLessonInput(expectedNext) || 0);
+      if (typed <= 0) break;
+      typedChars += typed;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 320));
+
+    const finalState = api.getLessonState();
+    const logText = String(document.querySelector("#log")?.textContent || "");
+    const statusText = String(document.querySelector("#statusText")?.textContent || "");
+
+    return {
+      ready: true,
+      hasLesson,
+      loaded,
+      typedChars,
+      completed: Boolean(finalState?.completed),
+      logText,
+      statusText,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.hasLesson).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.typedChars).toBeGreaterThan(20);
+  expect(result.completed).toBeTruthy();
+  expect(result.logText).toContain("Quick lesson output ready.");
+  expect(result.statusText.toLowerCase()).toContain("ran");
 });
 
 test("lesson typing highlights typed text while keeping remaining text softly faded", async ({ page }) => {

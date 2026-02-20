@@ -6101,6 +6101,7 @@ async function executeDevTerminalCommand(input = "") {
             "Commands: help, clear, status, run, format, save, save-all",
             "Commands: task <run-all|run-app|lint-workspace|format-active|save-all>",
             `Commands: open <log|editor|files|sandbox|tools>, theme <${getSupportedThemeUsage()}>, files`,
+            "Commands: bytes <status|add <amount>|reset>",
             "Commands: tutorial <start|reset|status>",
             "Commands: tutorial list",
             "Commands: fresh-start confirm",
@@ -6175,6 +6176,39 @@ async function executeDevTerminalCommand(input = "") {
     if (command === "files") {
         appendDevTerminalEntry("info", `Workspace files: ${files.length} • folders: ${collectFolderPaths(files, folders).size} • trash: ${trashFiles.length}`);
         return true;
+    }
+
+    if (command === "bytes" || command === "lesson-bytes") {
+        const sub = String(values[0] || "status").trim().toLowerCase();
+        if (sub === "status") {
+            appendDevTerminalEntry("info", `Lesson bytes: ${Math.max(0, Number(lessonProfile.bytes) || 0)}`);
+            return true;
+        }
+        if (sub === "add") {
+            const amount = Math.floor(Number.parseInt(String(values[1] || ""), 10));
+            if (!Number.isFinite(amount) || amount <= 0) {
+                appendDevTerminalEntry("warn", "Usage: bytes add <amount>");
+                return false;
+            }
+            lessonProfile.bytes = Math.max(0, Math.floor(Number(lessonProfile.bytes) || 0) + amount);
+            persistLessonProfile({ force: true });
+            updateLessonHud();
+            queueLessonHeaderStatsUpdate({ force: true });
+            updateLessonShopUi({ force: true });
+            appendDevTerminalEntry("info", `Added ${amount} lesson bytes. Total: ${lessonProfile.bytes}.`);
+            return true;
+        }
+        if (sub === "reset") {
+            lessonProfile.bytes = 0;
+            persistLessonProfile({ force: true });
+            updateLessonHud();
+            queueLessonHeaderStatsUpdate({ force: true });
+            updateLessonShopUi({ force: true });
+            appendDevTerminalEntry("info", "Lesson bytes reset to 0.");
+            return true;
+        }
+        appendDevTerminalEntry("warn", "Usage: bytes <status|add <amount>|reset>");
+        return false;
     }
 
     if (command === "tutorial") {
