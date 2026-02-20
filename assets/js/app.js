@@ -298,6 +298,12 @@ const TUTORIAL_DEFINITIONS = Object.freeze({
                 target: "#layoutToggle",
             },
             {
+                id: "lessons-button",
+                title: "Lessons Button",
+                body: "Use Lessons to open progress, streak, and theme unlock stats right from the top header.",
+                target: "#lessonStatsBtn",
+            },
+            {
                 id: "status",
                 title: "Status",
                 body: "Status shows what the IDE is doing. Use it as a quick health signal while working.",

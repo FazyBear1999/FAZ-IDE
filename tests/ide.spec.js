@@ -3389,6 +3389,66 @@ test("layout menu Tutorial button restarts beginner tutorial and matches Reset s
   expect(result.progress).toContain("step 1 of");
 });
 
+test("beginner tutorial includes top header Lessons button step", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+    api.startTutorial("beginner");
+
+    const nextButton = document.querySelector("#tutorialIntroNext");
+    if (!(nextButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let reached = false;
+    for (let i = 0; i < 80; i += 1) {
+      const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+      if (title === "Lessons Button") {
+        reached = true;
+        break;
+      }
+      nextButton.click();
+      await wait(40);
+    }
+
+    const lessonButton = document.querySelector("#lessonStatsBtn");
+    const highlight = document.querySelector("#tutorialIntroHighlight");
+    const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+    let overlap = 0;
+    if (lessonButton instanceof HTMLElement && highlight instanceof HTMLElement) {
+      const buttonRect = lessonButton.getBoundingClientRect();
+      const highlightRect = highlight.getBoundingClientRect();
+      const overlapWidth = Math.max(0, Math.min(buttonRect.right, highlightRect.right) - Math.max(buttonRect.left, highlightRect.left));
+      const overlapHeight = Math.max(0, Math.min(buttonRect.bottom, highlightRect.bottom) - Math.max(buttonRect.top, highlightRect.top));
+      const overlapArea = overlapWidth * overlapHeight;
+      const buttonArea = Math.max(1, buttonRect.width * buttonRect.height);
+      overlap = overlapArea / buttonArea;
+    }
+    return {
+      ready: true,
+      reached,
+      title,
+      lessonButtonPresent: lessonButton instanceof HTMLElement,
+      highlightVisible: Boolean(highlight instanceof HTMLElement && !highlight.hidden),
+      overlap,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.reached).toBeTruthy();
+  expect(result.title).toBe("Lessons Button");
+  expect(result.lessonButtonPresent).toBeTruthy();
+  expect(result.highlightVisible).toBeTruthy();
+  expect(result.overlap).toBeGreaterThan(0.35);
+});
+
 test("beginner tutorial panel follows target without overlapping spotlight", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
