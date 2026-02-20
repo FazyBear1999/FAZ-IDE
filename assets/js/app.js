@@ -728,23 +728,50 @@ function applyTutorialStepReveal(step) {
 
         const openFocusedTab = () => {
             if (!tutorialState.active || tutorialState.activeFilesTabFocus !== normalized) return;
-            if (normalized === "open-editors") layoutState.filesOpenEditorsOpen = true;
-            if (normalized === "files") layoutState.filesListOpen = true;
+            let filesLayoutChanged = false;
+            if (normalized === "open-editors" && !layoutState.filesOpenEditorsOpen) {
+                layoutState.filesOpenEditorsOpen = true;
+                filesLayoutChanged = true;
+            }
+            if (normalized === "files" && !layoutState.filesListOpen) {
+                layoutState.filesListOpen = true;
+                filesLayoutChanged = true;
+            }
             if (normalized === "games") {
-                layoutState.filesGamesOpen = true;
-                gamesSelectorOpen = true;
+                if (!layoutState.filesGamesOpen) {
+                    layoutState.filesGamesOpen = true;
+                    filesLayoutChanged = true;
+                }
+                if (!gamesSelectorOpen) {
+                    gamesSelectorOpen = true;
+                    filesLayoutChanged = true;
+                }
             }
             if (normalized === "applications") {
-                layoutState.filesAppsOpen = true;
-                applicationsSelectorOpen = true;
+                if (!layoutState.filesAppsOpen) {
+                    layoutState.filesAppsOpen = true;
+                    filesLayoutChanged = true;
+                }
+                if (!applicationsSelectorOpen) {
+                    applicationsSelectorOpen = true;
+                    filesLayoutChanged = true;
+                }
             }
             if (normalized === "lessons") {
-                layoutState.filesLessonsOpen = true;
-                lessonsSelectorOpen = true;
+                if (!layoutState.filesLessonsOpen) {
+                    layoutState.filesLessonsOpen = true;
+                    filesLayoutChanged = true;
+                }
+                if (!lessonsSelectorOpen) {
+                    lessonsSelectorOpen = true;
+                    filesLayoutChanged = true;
+                }
             }
-            applyFilesLayout();
-            renderFileList();
-            syncFilesMenuToggles();
+            if (filesLayoutChanged) {
+                applyFilesLayout();
+                renderFileList();
+                syncFilesMenuToggles();
+            }
             if (highlightSelector) {
                 const targetNode = typeof document !== "undefined" ? document.querySelector(highlightSelector) : null;
                 if (targetNode instanceof HTMLElement) {
