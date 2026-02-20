@@ -1384,10 +1384,9 @@ function syncFooterRuntimeStatus() {
     }
 
     if (el.footerProblems) {
-        const list = el.problemsList;
-        const total = list ? list.querySelectorAll("[data-problem-id]").length : 0;
-        const hasError = Boolean(list?.querySelector('[data-problem-id][data-level="error"]'));
-        const hasWarn = Boolean(list?.querySelector('[data-problem-id][data-level="warn"]'));
+        const total = Math.max(0, Number(footerProblemsTotalCached) || 0);
+        const hasError = Boolean(footerProblemsHasErrorCached);
+        const hasWarn = Boolean(footerProblemsHasWarnCached);
         const state = hasError ? "error" : (hasWarn || total > 0 ? "warn" : "ok");
         el.footerProblems.dataset.state = state;
         el.footerProblems.textContent = `Problems: ${total}`;
@@ -1456,7 +1455,11 @@ let inspectEnabled = false;
 let debugMode = false;
 let debugBreakpoints = new Set();
 let debugWatches = [];
+let debugWatchSet = new Set();
 let debugWatchValues = new Map();
+let debugWatchRenderVersion = 0;
+let debugWatchLastRenderedVersion = -1;
+let debugWatchEvalScheduled = false;
 let runnerFullscreen = false;
 let sandboxWindow = null;
 let sandboxPopoutFrame = null;
@@ -1466,6 +1469,9 @@ let projectDirectoryHandle = null;
 const FILE_DEFAULT_NAME = "main.js";
 let files = [];
 let folders = [];
+let fileByIdCache = new Map();
+let fileByIdCacheSource = null;
+let fileByIdCacheSize = -1;
 let activeFileId = null;
 let editingFileId = null;
 let editingDraft = null;
@@ -2899,6 +2905,9 @@ const collapsedFolderPaths = new Set();
 const fileDiagnosticsById = new Map();
 let runtimeProblems = [];
 let problemsById = new Map();
+let footerProblemsTotalCached = 0;
+let footerProblemsHasErrorCached = false;
+let footerProblemsHasWarnCached = false;
 let problemsRefreshRequestId = 0;
 let problemsRenderFrame = null;
 let filesGutterSyncFrame = null;
@@ -2915,6 +2924,8 @@ let sandboxConsoleQueue = [];
 let sandboxRunReadyTimer = null;
 let taskRunnerEntries = [];
 let taskRunnerBusy = false;
+let taskRunnerRenderFrame = null;
+let taskRunnerLastRenderKey = "";
 let devTerminalUI = null;
 let devTerminalBusy = false;
 let devTerminalHistory = [];
@@ -5107,6 +5118,9 @@ function renderProblemsList() {
     if (!el.problemsList) return;
     const entries = collectProblemEntries();
     problemsById = new Map(entries.map((entry) => [entry.id, entry]));
+    footerProblemsTotalCached = entries.length;
+    footerProblemsHasErrorCached = entries.some((entry) => entry.level === "error");
+    footerProblemsHasWarnCached = entries.some((entry) => entry.level === "warn");
     if (!entries.length) {
         el.problemsList.innerHTML = `<li class="diagnostics-empty">No active problems.</li>`;
         syncFooterRuntimeStatus();
@@ -5356,17 +5370,41 @@ function appendTaskRunnerOutput(level = "info", message = "", { task = "", locat
         message: truncateText(rawMessage, TASK_RUNNER_MESSAGE_MAX_CHARS),
         location: inferredLocation,
     };
-    taskRunnerEntries = [...taskRunnerEntries, entry].slice(-TASK_RUNNER_OUTPUT_LIMIT);
-    renderTaskRunnerOutput();
+    taskRunnerEntries.push(entry);
+    if (taskRunnerEntries.length > TASK_RUNNER_OUTPUT_LIMIT) {
+        taskRunnerEntries.splice(0, taskRunnerEntries.length - TASK_RUNNER_OUTPUT_LIMIT);
+    }
+    queueTaskRunnerRender();
     return entry;
+}
+
+function queueTaskRunnerRender({ force = false } = {}) {
+    if (force) {
+        taskRunnerLastRenderKey = "";
+    }
+    if (taskRunnerRenderFrame != null) return;
+    taskRunnerRenderFrame = scheduleFrame(() => {
+        taskRunnerRenderFrame = null;
+        renderTaskRunnerOutput();
+    });
 }
 
 function renderTaskRunnerOutput() {
     if (!el.taskRunnerOutput) return;
     if (!taskRunnerEntries.length) {
-        el.taskRunnerOutput.innerHTML = `<li class="diagnostics-empty">No task output yet.</li>`;
+        if (taskRunnerLastRenderKey !== "empty") {
+            el.taskRunnerOutput.innerHTML = `<li class="diagnostics-empty">No task output yet.</li>`;
+            taskRunnerLastRenderKey = "empty";
+        }
         return;
     }
+    const firstId = taskRunnerEntries[0]?.id || "";
+    const lastId = taskRunnerEntries[taskRunnerEntries.length - 1]?.id || "";
+    const renderKey = `${taskRunnerEntries.length}:${firstId}:${lastId}`;
+    if (renderKey === taskRunnerLastRenderKey) {
+        return;
+    }
+    taskRunnerLastRenderKey = renderKey;
     el.taskRunnerOutput.innerHTML = taskRunnerEntries
         .map((entry) => {
             const meta = `${formatTaskRunnerTime(entry.at)}${entry.task ? ` • ${entry.task}` : ""}`;
@@ -5548,12 +5586,12 @@ async function runTaskRunnerTask(taskId = "") {
 
 function clearTaskRunnerOutput() {
     taskRunnerEntries = [];
-    renderTaskRunnerOutput();
+    queueTaskRunnerRender({ force: true });
     status.set("Task output cleared");
 }
 
 function wireTaskRunner() {
-    renderTaskRunnerOutput();
+    queueTaskRunnerRender({ force: true });
     setTaskRunnerBusy(false, "Idle");
     el.taskRunAll?.addEventListener("click", async () => {
         await runTaskRunnerTask("run-all");
@@ -17041,7 +17079,7 @@ function wireDebugger() {
         setDebugMode(!debugMode);
         if (debugMode) {
             status.set("Debug mode enabled");
-            requestDebugWatchValues();
+            queueDebugWatchValues();
         } else {
             status.set("Debug mode disabled");
         }
@@ -19105,12 +19143,28 @@ async function saveWorkspaceToLocalFolder() {
     }
 }
 
+function getFileByIdMap() {
+    if (fileByIdCacheSource !== files || fileByIdCacheSize !== files.length) {
+        fileByIdCache = new Map();
+        for (let i = 0; i < files.length; i += 1) {
+            const file = files[i];
+            if (!file?.id) continue;
+            fileByIdCache.set(file.id, file);
+        }
+        fileByIdCacheSource = files;
+        fileByIdCacheSize = files.length;
+    }
+    return fileByIdCache;
+}
+
 function getActiveFile() {
-    return files.find((f) => f.id === activeFileId);
+    if (!activeFileId) return null;
+    return getFileByIdMap().get(activeFileId) || null;
 }
 
 function getFileById(id) {
-    return files.find((f) => f.id === id);
+    if (!id) return null;
+    return getFileByIdMap().get(id) || null;
 }
 
 function toggleFilePin(fileId) {
@@ -19692,7 +19746,10 @@ function onEditorTabsWheel(event) {
 
 function buildFileProblemCounts() {
     const map = new Map();
-    collectProblemEntries().forEach((entry) => {
+    const sourceEntries = problemsById.size
+        ? [...problemsById.values()]
+        : collectProblemEntries();
+    sourceEntries.forEach((entry) => {
         if (!entry?.fileId) return;
         const prev = map.get(entry.fileId) || { errors: 0, warns: 0, info: 0, total: 0 };
         if (entry.level === "error") prev.errors += 1;
@@ -19818,10 +19875,10 @@ function renderFileList() {
     const pinned = sortList(visibleFiles.filter((file) => file.pinned));
     const unpinned = sortList(visibleFiles.filter((file) => !file.pinned));
     const orderedFiles = [...pinned, ...unpinned];
-    const visibleIds = new Set(visibleFiles.map((file) => file.id));
+    const visibleIds = query ? new Set(visibleFiles.map((file) => file.id)) : null;
     const openEditors = openTabIds
         .map((id) => getFileById(id))
-        .filter((file) => file && (!query || visibleIds.has(file.id)));
+        .filter((file) => file && (!query || visibleIds?.has(file.id)));
     const visibleTrash = query
         ? trashFiles.filter((file) => file.name.toLowerCase().includes(query))
         : [...trashFiles];
@@ -21688,6 +21745,8 @@ function renderDebugBreakpointList() {
 
 function renderDebugWatchList() {
     if (!el.debugWatchList) return;
+    if (debugWatchLastRenderedVersion === debugWatchRenderVersion) return;
+    debugWatchLastRenderedVersion = debugWatchRenderVersion;
     if (!debugWatches.length) {
         el.debugWatchList.innerHTML = `<li class="debug-watch-empty">No watch expressions.</li>`;
         return;
@@ -21726,19 +21785,24 @@ function clearDebugBreakpoints() {
 function addDebugWatch(expression) {
     const normalized = String(expression || "").trim();
     if (!normalized) return false;
-    if (debugWatches.includes(normalized)) return false;
+    if (debugWatchSet.has(normalized)) return false;
     debugWatches.push(normalized);
+    debugWatchSet.add(normalized);
+    debugWatchRenderVersion += 1;
     renderDebugWatchList();
-    requestDebugWatchValues();
+    queueDebugWatchValues();
     return true;
 }
 
 function removeDebugWatch(expression) {
     const normalized = String(expression || "").trim();
-    const before = debugWatches.length;
-    debugWatches = debugWatches.filter((entry) => entry !== normalized);
-    if (debugWatches.length === before) return false;
+    if (!debugWatchSet.delete(normalized)) return false;
+    const index = debugWatches.indexOf(normalized);
+    if (index >= 0) {
+        debugWatches.splice(index, 1);
+    }
     debugWatchValues.delete(normalized);
+    debugWatchRenderVersion += 1;
     renderDebugWatchList();
     return true;
 }
@@ -21747,7 +21811,9 @@ function clearDebugWatches() {
     const count = debugWatches.length;
     if (!count) return 0;
     debugWatches = [];
+    debugWatchSet.clear();
     debugWatchValues.clear();
+    debugWatchRenderVersion += 1;
     renderDebugWatchList();
     return count;
 }
@@ -21775,6 +21841,15 @@ function requestDebugWatchValues() {
             expressions: [...debugWatches],
         },
     }, "*");
+}
+
+function queueDebugWatchValues() {
+    if (debugWatchEvalScheduled) return;
+    debugWatchEvalScheduled = true;
+    scheduleFrame(() => {
+        debugWatchEvalScheduled = false;
+        requestDebugWatchValues();
+    });
 }
 
 function setRunnerFullscreen(active) {
@@ -23919,7 +23994,7 @@ function launchStandardSandboxRun(runnableSource, sandboxMode) {
         setTimeout(() => sendInspectCommand("inspect_enable"), 0);
     }
     if (debugMode && debugWatches.length) {
-        setTimeout(() => requestDebugWatchValues(), 80);
+        setTimeout(() => queueDebugWatchValues(), 80);
     }
 
     status.set("Ran");
@@ -24033,10 +24108,19 @@ function onSandboxMessage(event) {
     if (data.type === "debug_watch") {
         const values = data.payload?.values;
         if (values && typeof values === "object") {
+            let changed = false;
             Object.entries(values).forEach(([expr, value]) => {
-                debugWatchValues.set(expr, String(value));
+                if (!debugWatchSet.has(expr)) return;
+                const nextValue = String(value);
+                const prevValue = debugWatchValues.get(expr);
+                if (prevValue === nextValue) return;
+                debugWatchValues.set(expr, nextValue);
+                changed = true;
             });
-            renderDebugWatchList();
+            if (changed) {
+                debugWatchRenderVersion += 1;
+                renderDebugWatchList();
+            }
         }
         return;
     }
