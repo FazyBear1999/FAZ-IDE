@@ -19519,6 +19519,14 @@ function resolveFilesSectionDropTarget(event) {
 
 function updateFilesSectionDropIndicator(sectionId, { placeAfter = false } = {}) {
     if (!el.fileList || !isReorderableFilesSection(sectionId)) return;
+    const current = el.fileList.querySelector("[data-files-section-id][data-drop-before], [data-files-section-id][data-drop-after]");
+    if (current) {
+        const currentId = String(current.dataset.filesSectionId || "").trim();
+        const currentAfter = current.hasAttribute("data-drop-after");
+        if (currentId === String(sectionId).trim() && currentAfter === Boolean(placeAfter)) {
+            return;
+        }
+    }
     clearFilesSectionDropIndicators();
     const target = el.fileList.querySelector(`[data-files-section-id="${sectionId}"]`);
     if (!target) return;
@@ -19816,9 +19824,16 @@ function renderFileList() {
         .map((sectionId) => sectionMarkupById[sectionId] || "")
         .join("");
     const hasAnyVisibleRows = Boolean(orderedFiles.length || openEditors.length || visibleTrash.length);
-    const emptyCopy = query ? "No matches" : "No files";
-    const emptySection = hasAnyVisibleRows ? "" : `<li class="file-item"><span class="files-sub">${emptyCopy}</span></li>`;
-    const fileListMarkup = `${orderedSections}${trashSection}${emptySection}`;
+    const noFilterMatches = query && matchedFiles.length === 0;
+    const noMatchCopy = `No matches for "${escapeHTML(fileFilter.trim())}". Press Esc to clear filter.`;
+    const noMatchSection = noFilterMatches
+        ? `<li class="file-item"><span class="files-sub">${noMatchCopy}</span></li>`
+        : "";
+    const emptyCopy = "No files";
+    const emptySection = hasAnyVisibleRows || noFilterMatches
+        ? ""
+        : `<li class="file-item"><span class="files-sub">${emptyCopy}</span></li>`;
+    const fileListMarkup = `${orderedSections}${trashSection}${noMatchSection}${emptySection}`;
     if (fileListMarkup !== lastRenderedFileListMarkup) {
         el.fileList.innerHTML = fileListMarkup;
         bindFileListIconFallbacks(el.fileList);
@@ -20546,6 +20561,7 @@ function clearFileDragState() {
 
 function setFolderDropHover(path = null) {
     const normalized = normalizeFolderPath(path, { allowEmpty: true });
+    if ((normalized || null) === dragFolderHoverPath) return;
     dragFolderHoverPath = normalized || null;
     if (!el.fileList) return;
     el.fileList.querySelectorAll(`${FILE_FOLDER_ROW_SELECTOR}[data-drop-target="true"]`).forEach((row) => {
@@ -20561,6 +20577,8 @@ function setFolderDropHover(path = null) {
 
 function setRootDropHover(active = false) {
     if (!el.fileList) return;
+    const isActive = el.fileList.getAttribute("data-root-drop-target") === "true";
+    if (Boolean(active) === isActive) return;
     if (active) {
         el.fileList.setAttribute("data-root-drop-target", "true");
     } else {
@@ -20664,14 +20682,19 @@ function onFileListDragOver(event) {
     if (dragFilesSectionId) {
         const target = resolveFilesSectionDropTarget(event);
         if (!target || target.sectionId === dragFilesSectionId) {
-            dragFilesSectionDropId = null;
-            dragFilesSectionDropAfter = false;
-            clearFilesSectionDropIndicators();
+            if (dragFilesSectionDropId || dragFilesSectionDropAfter) {
+                dragFilesSectionDropId = null;
+                dragFilesSectionDropAfter = false;
+                clearFilesSectionDropIndicators();
+            }
             return;
         }
         event.preventDefault();
         if (event.dataTransfer) {
             event.dataTransfer.dropEffect = "move";
+        }
+        if (target.sectionId === dragFilesSectionDropId && target.placeAfter === dragFilesSectionDropAfter) {
+            return;
         }
         dragFilesSectionDropId = target.sectionId;
         dragFilesSectionDropAfter = target.placeAfter;
@@ -22939,6 +22962,15 @@ async function boot() {
                 return;
             }
             debouncedFileFilterRender.schedule();
+        });
+        el.fileSearch.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return;
+            if (!fileFilter.trim()) return;
+            event.preventDefault();
+            fileFilter = "";
+            debouncedFileFilterRender.cancel();
+            el.fileSearch.value = "";
+            renderFileList();
         });
     }
     if (el.fileSearchClear) {

@@ -2460,6 +2460,39 @@ test("files panel width is clamped to a minimum of 180px", async ({ page }) => {
   expect(result.cssVar).toBeGreaterThanOrEqual(180);
 });
 
+test("files search shows helpful no-match copy and Escape clears filter", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const filesSection = page.locator('#fileList [data-file-section="files"]');
+  await expect(filesSection).toHaveCount(1);
+  const expanded = await filesSection.getAttribute("aria-expanded");
+  if (expanded !== "true") {
+    await filesSection.click();
+  }
+
+  const search = page.locator("#fileSearch");
+  if (!(await search.isVisible())) {
+    await page.locator("#filesMenuButton").click();
+    const filtersToggle = page.locator('#filesMenu [data-files-toggle="filters"]');
+    await expect(filtersToggle).toBeVisible();
+    const pressed = await filtersToggle.getAttribute("aria-pressed");
+    if (pressed !== "true") {
+      await filtersToggle.click();
+    }
+    await page.keyboard.press("Escape");
+  }
+  await expect(search).toBeVisible();
+  await search.fill("zzzz-no-match-phrase");
+
+  const empty = page.locator("#fileList .files-sub");
+  await expect(empty).toContainText("No matches for");
+  await expect(empty).toContainText("Press Esc to clear filter");
+
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
+  await expect(page.locator("#fileList .file-row").first()).toBeVisible();
+});
+
 test("panel docking keeps rows within three open columns and preserves keyboard target placement", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
