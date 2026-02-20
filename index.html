@@ -215,7 +215,13 @@
                             </div>
                         </div>
 
-                        <div class="strip-right"></div>
+                        <div class="strip-right" aria-label="Lesson quick stats">
+                            <div id="lessonHeaderHud" class="strip-group top-lesson-stats" aria-label="Lesson stats summary">
+                                <span id="lessonHudLevel" class="top-lesson-stat">Lv 1</span>
+                                <span id="lessonHudXp" class="top-lesson-stat">XP 0</span>
+                                <span id="lessonHudCoins" class="top-lesson-stat">Bytes 0</span>
+                            </div>
+                        </div>
                     </header>
 
                     <main id="workspace" class="workspace" aria-label="Main content">
@@ -400,11 +406,6 @@
                                         <button class="danger" id="clear" type="button" title="Clear editor contents">Clear</button>
                                         <button id="format" type="button" title="Format active file">Format</button>
                                         <button class="danger" id="stop" type="button" title="Stop sandbox run">Stop</button>
-                                        <div id="lessonHeaderHud" class="lesson-header-hud" data-active="false" aria-hidden="true" aria-label="Lesson level and XP" hidden>
-                                            <span id="lessonHudLevel" class="lesson-header-chip">Lv 1</span>
-                                            <span id="lessonHudXp" class="lesson-header-chip">XP 0</span>
-                                            <span id="lessonHudCoins" class="lesson-header-chip">Bytes 0</span>
-                                        </div>
                                     </div>
                                     <div class="editor-pro-buttons" aria-label="Editor tools">
                                         <button id="editorFindBtn" type="button" title="Find and replace">Find</button>

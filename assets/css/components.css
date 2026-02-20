@@ -767,35 +767,35 @@ button:focus-visible {
     color: var(--text-top-control);
 }
 
-.lesson-header-hud {
+.top-lesson-stats {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin-left: 2px;
-    pointer-events: none;
+    gap: 5px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border-soft);
+    justify-content: flex-end;
+    white-space: nowrap;
 }
 
-.lesson-header-chip {
+.top-lesson-stat {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 26px;
-    padding: 0 10px;
-    border-radius: var(--radius-xxs);
-    border: 1px solid var(--border-soft);
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--surface-panel) 92%, transparent),
-        color-mix(in srgb, var(--surface-raised) 88%, transparent)
-    );
+    min-height: var(--control-height-sm);
+    height: var(--control-height-sm);
+    padding: 4px 9px;
+    font-size: 13px;
+    border: 1px solid transparent;
+    background: transparent;
+    box-shadow: none;
     color: var(--text-top-control);
-    font-size: var(--text-size-xs);
-    font-weight: 600;
-    font-family: var(--font);
+    font-weight: 500;
+    text-decoration-line: none;
+    text-decoration-thickness: 1.25px;
+    text-underline-offset: 0.16em;
+    border-radius: var(--radius-sm);
     line-height: 1;
-    letter-spacing: 0.1px;
-    -webkit-font-smoothing: antialiased;
-    white-space: nowrap;
+    pointer-events: none;
 }
 
 .lesson-hud {

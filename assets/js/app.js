@@ -3023,7 +3023,6 @@ let lessonHudLastProgressPercent = -1;
 let lessonHudLastComboProgress = -1;
 let lessonHudWasActive = false;
 let lessonHudLastActiveState = null;
-let lessonHeaderHudLastActiveState = null;
 let lessonHudInactiveResetDone = false;
 let lessonShopRenderKey = "";
 let lessonHeaderStatsRenderKey = "";
@@ -8710,12 +8709,7 @@ async function deleteFolderPath(folderPath, { confirm = true, focus = true } = {
         openTabIds = openTabIds.filter((tabId) => !removedIds.has(tabId));
 
         if (!files.length) {
-            const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
-            files = [fallback];
-            activeFileId = fallback.id;
-            setSingleSelection(fallback.id);
-            openTabIds = [fallback.id];
-            setEditorValue(fallback.code, { silent: true });
+            resetWorkspaceToWelcome();
         } else if (!files.some((file) => file.id === activeFileId)) {
             activeFileId = files[0].id;
             setSingleSelection(activeFileId);
@@ -10108,9 +10102,7 @@ function restoreLessonSessionFromStorage() {
         setLessonCursorToProgress();
         updateLessonProgressStatus({ prefix: "Lesson resumed" });
     } else {
-        editor.clearMarks?.("lesson-ghost");
-        editor.clearMarks?.("lesson-active");
-        editor.clearMarks?.("lesson-next");
+        clearLessonVisualMarks();
         updateLessonHud();
     }
 
@@ -10516,21 +10508,11 @@ function setLessonStatsLivePolling(active) {
 
 function updateLessonHud() {
     if (!el.lessonHud) return;
-    const activeFile = getActiveFile();
     const active = isLessonSessionActiveForCurrentFile();
-    const headerActive = isLessonFamilyFile(activeFile);
     if (lessonHudLastActiveState !== active) {
         setDataActive(el.lessonHud, active);
         el.lessonHud.hidden = !active;
         lessonHudLastActiveState = active;
-    }
-    if (el.lessonHeaderHud) {
-        if (lessonHeaderHudLastActiveState !== headerActive) {
-            setDataActive(el.lessonHeaderHud, headerActive);
-            el.lessonHeaderHud.hidden = !headerActive;
-            el.lessonHeaderHud.setAttribute("aria-hidden", headerActive ? "false" : "true");
-            lessonHeaderHudLastActiveState = headerActive;
-        }
     }
     if (!active) {
         lessonHudWasActive = false;
@@ -10717,6 +10699,40 @@ function isLessonSessionActiveForCurrentFile() {
     return Boolean(lessonSession && lessonSession.fileId === activeFileId && !lessonSession.completed);
 }
 
+function resetWorkspaceToWelcome() {
+    const welcomeState = createWelcomeWorkspaceState();
+    files = Array.isArray(welcomeState.files) ? welcomeState.files : [];
+    folders = normalizeFolderList(welcomeState.folders);
+    collapsedFolderPaths.clear();
+    activeFileId = String(welcomeState.activeId || files[0]?.id || "");
+    setSingleSelection(activeFileId || null);
+    openTabIds = normalizeOpenTabIds(Array.isArray(welcomeState.openIds) ? welcomeState.openIds : [activeFileId]);
+    const active = getActiveFile();
+    setEditorValue(active?.code ?? DEFAULT_CODE, { silent: true });
+}
+
+function clearLessonVisualMarks() {
+    editor.clearMarks?.("lesson-ghost");
+    editor.clearMarks?.("lesson-active");
+    editor.clearMarks?.("lesson-next");
+}
+
+function resetLessonStreakState({ persistProfile = false } = {}) {
+    if (lessonSession) {
+        lessonSession.streak = 0;
+    }
+    lessonProfile.currentStreak = 0;
+    if (persistProfile) {
+        persistLessonProfile({ force: true });
+    }
+}
+
+function refreshLessonTypingVisualState({ prefix = "Lesson" } = {}) {
+    syncLessonGhostMarks();
+    setLessonCursorToProgress();
+    updateLessonProgressStatus({ prefix });
+}
+
 function syncLessonStateForActiveFile() {
     if (lessonSession) {
         const sessionFile = files.find((entry) => entry.id === lessonSession.fileId);
@@ -10730,9 +10746,7 @@ function syncLessonStateForActiveFile() {
         updateLessonHud();
         return;
     }
-    editor.clearMarks?.("lesson-ghost");
-    editor.clearMarks?.("lesson-active");
-    editor.clearMarks?.("lesson-next");
+    clearLessonVisualMarks();
     updateLessonHud();
 }
 
@@ -10857,9 +10871,7 @@ function markLessonTypedActiveRanges(step, progress) {
 }
 
 function syncLessonGhostMarks() {
-    editor.clearMarks?.("lesson-ghost");
-    editor.clearMarks?.("lesson-active");
-    editor.clearMarks?.("lesson-next");
+    clearLessonVisualMarks();
     const step = getLessonCurrentStep();
     if (!step || lessonSession?.completed) return;
     normalizeLessonProgressToTypeable();
@@ -10891,13 +10903,10 @@ function syncLessonGhostMarks() {
 
 function stopTypingLesson({ announce = true } = {}) {
     if (!lessonSession) return false;
-    lessonProfile.currentStreak = 0;
-    persistLessonProfile({ force: true });
+    resetLessonStreakState({ persistProfile: true });
     lessonSession = null;
     clearPersistedLessonSession();
-    editor.clearMarks?.("lesson-ghost");
-    editor.clearMarks?.("lesson-active");
-    editor.clearMarks?.("lesson-next");
+    clearLessonVisualMarks();
     updateLessonHud();
     if (announce) {
         status.set("Lesson mode stopped");
@@ -10952,11 +10961,8 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
     };
     normalizeLessonProgressToTypeable();
     persistLessonSession({ force: true });
-    syncLessonGhostMarks();
-    setLessonCursorToProgress();
+    refreshLessonTypingVisualState({ prefix: "Lesson started" });
     focusLessonTypingSurface();
-    updateLessonProgressStatus({ prefix: "Lesson started" });
-    updateLessonHud();
     if (announce) {
         logger.append("system", [
             `Lesson mode started in ${file.name} (${steps.length} step${steps.length === 1 ? "" : "s"}). Strict typing is enabled: every character counts.`,
@@ -10998,9 +11004,7 @@ function advanceLessonStep({ announce = true } = {}) {
         persistLessonProfile({ force: true });
         lessonSession.completed = true;
         clearPersistedLessonSession();
-        editor.clearMarks?.("lesson-ghost");
-        editor.clearMarks?.("lesson-active");
-        editor.clearMarks?.("lesson-next");
+        clearLessonVisualMarks();
         updateLessonHud();
         status.set("Lesson complete. Running...");
         logger.append("system", [
@@ -11016,10 +11020,7 @@ function advanceLessonStep({ announce = true } = {}) {
     awardLessonBytes(LESSON_BYTES_STEP_COMPLETE);
     normalizeLessonProgressToTypeable();
     persistLessonSession();
-    syncLessonGhostMarks();
-    setLessonCursorToProgress();
-    updateLessonProgressStatus({ prefix: announce ? "Lesson step" : "Lesson" });
-    updateLessonHud();
+    refreshLessonTypingVisualState({ prefix: announce ? "Lesson step" : "Lesson" });
     return true;
 }
 
@@ -11086,13 +11087,9 @@ function applyLessonInputChar(inputChar = "") {
     if (value === "\b") {
         if (lessonSession.progress > 0) {
             lessonSession.progress -= 1;
-            lessonSession.streak = 0;
-            lessonProfile.currentStreak = 0;
-            persistLessonProfile({ force: true });
+            resetLessonStreakState({ persistProfile: true });
             persistLessonSession();
-            syncLessonGhostMarks();
-            setLessonCursorToProgress();
-            updateLessonProgressStatus();
+            refreshLessonTypingVisualState();
         }
         return { ok: true, reason: "backspace", progress: lessonSession.progress };
     }
@@ -11112,9 +11109,7 @@ function applyLessonInputChar(inputChar = "") {
     if (inputSequence !== expectedSequence) {
         lessonSession.typedChars += 1;
         lessonSession.mistakes += 1;
-        lessonSession.streak = 0;
-        lessonProfile.currentStreak = 0;
-        persistLessonProfile({ force: true });
+        resetLessonStreakState({ persistProfile: true });
         persistLessonSession();
         triggerLessonHaptic(4);
         status.set(`Lesson: expected ${describeLessonExpectedChar(expected)}`);
@@ -11150,9 +11145,7 @@ function applyLessonInputChar(inputChar = "") {
         advanceLessonStep({ announce: true });
         return { ok: true, reason: "step-complete", progress: lessonSession.progress };
     }
-    syncLessonGhostMarks();
-    setLessonCursorToProgress();
-    updateLessonProgressStatus();
+    refreshLessonTypingVisualState();
     return { ok: true, reason: "typed", progress: lessonSession.progress };
 }
 
@@ -12134,12 +12127,7 @@ async function bulkTrashSelectedFiles() {
     }
 
     if (!files.length) {
-        const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
-        files = [fallback];
-        activeFileId = fallback.id;
-        setSingleSelection(fallback.id);
-        openTabIds = [fallback.id];
-        setEditorValue(fallback.code, { silent: true });
+        resetWorkspaceToWelcome();
     } else if (!files.some((file) => file.id === activeFileId)) {
         activeFileId = files[0].id;
         setSingleSelection(activeFileId);
@@ -18652,6 +18640,66 @@ function wirePromptDialog() {
     });
 }
 
+function createWelcomeWorkspaceState() {
+    const welcomeTemplates = Array.isArray(DEFAULT_WELCOME_FILES) ? DEFAULT_WELCOME_FILES : [];
+    const welcomeFiles = welcomeTemplates
+        .map((entry) => {
+            const rawName = String(entry?.name || "").trim();
+            const rawCode = typeof entry?.code === "string" ? entry.code : "";
+            return rawName ? makeFile(rawName, rawCode) : null;
+        })
+        .filter(Boolean);
+
+    if (!welcomeFiles.length) {
+        const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
+        return {
+            files: [fallback],
+            folders: [],
+            activeId: fallback.id,
+            openIds: [fallback.id],
+        };
+    }
+
+    const automation = isAutomationEnvironment();
+    let welcomeIndex = null;
+    let welcomeStyles = null;
+    let welcomeApp = null;
+    for (const file of welcomeFiles) {
+        const lowerName = String(file?.name || "").toLowerCase();
+        if (!welcomeIndex && lowerName.endsWith("/index.html")) {
+            welcomeIndex = file;
+            continue;
+        }
+        if (!welcomeStyles && lowerName.endsWith("/styles.css")) {
+            welcomeStyles = file;
+            continue;
+        }
+        if (!welcomeApp && lowerName.endsWith("/app.js")) {
+            welcomeApp = file;
+        }
+    }
+
+    const preferredActive =
+        (automation ? welcomeApp : null) ||
+        welcomeIndex ||
+        welcomeApp ||
+        welcomeFiles[0];
+    const preferredOpen = [welcomeIndex, welcomeStyles, welcomeApp].filter(Boolean);
+    const preferredOpenIds = [...new Set(preferredOpen.map((file) => file.id))];
+    const derivedFolders = normalizeFolderList(
+        welcomeFiles
+            .map((file) => getFileDirectory(file.name))
+            .filter(Boolean)
+    );
+
+    return {
+        files: welcomeFiles,
+        folders: derivedFolders,
+        activeId: preferredActive.id,
+        openIds: preferredOpenIds.length ? preferredOpenIds : [preferredActive.id],
+    };
+}
+
 async function hydrateFileState() {
     const primary = parseWorkspacePayload(load(STORAGE.FILES));
     const snapshot = parseWorkspacePayload(load(STORAGE.WORKSPACE_SNAPSHOT));
@@ -18691,64 +18739,14 @@ async function hydrateFileState() {
         };
     }
 
-    const welcomeTemplates = Array.isArray(DEFAULT_WELCOME_FILES) ? DEFAULT_WELCOME_FILES : [];
-    const welcomeFiles = welcomeTemplates
-        .map((entry) => {
-            const rawName = String(entry?.name || "").trim();
-            const rawCode = typeof entry?.code === "string" ? entry.code : "";
-            return rawName ? makeFile(rawName, rawCode) : null;
-        })
-        .filter(Boolean);
-
-    if (welcomeFiles.length) {
-        const automation = isAutomationEnvironment();
-        let welcomeIndex = null;
-        let welcomeStyles = null;
-        let welcomeApp = null;
-        for (const file of welcomeFiles) {
-            const lowerName = String(file?.name || "").toLowerCase();
-            if (!welcomeIndex && lowerName.endsWith("/index.html")) {
-                welcomeIndex = file;
-                continue;
-            }
-            if (!welcomeStyles && lowerName.endsWith("/styles.css")) {
-                welcomeStyles = file;
-                continue;
-            }
-            if (!welcomeApp && lowerName.endsWith("/app.js")) {
-                welcomeApp = file;
-            }
-        }
-        const preferredActive =
-            (automation ? welcomeApp : null) ||
-            welcomeIndex ||
-            welcomeApp ||
-            welcomeFiles[0];
-        const preferredOpen = [welcomeIndex, welcomeStyles, welcomeApp].filter(Boolean);
-        const preferredOpenIds = [...new Set(preferredOpen.map((file) => file.id))];
-        const derivedFolders = normalizeFolderList(
-            welcomeFiles
-                .map((file) => getFileDirectory(file.name))
-                .filter(Boolean)
-        );
-        return {
-            files: welcomeFiles,
-            folders: derivedFolders,
-            activeId: preferredActive.id,
-            openIds: preferredOpenIds.length ? preferredOpenIds : [preferredActive.id],
-            trash: [],
-            source: "welcome-default",
-        };
-    }
-
-    const defaultFile = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
+    const welcomeState = createWelcomeWorkspaceState();
     return {
-        files: [defaultFile],
-        folders: [],
-        activeId: defaultFile.id,
-        openIds: [defaultFile.id],
+        files: welcomeState.files,
+        folders: welcomeState.folders,
+        activeId: welcomeState.activeId,
+        openIds: welcomeState.openIds,
         trash: [],
-        source: "default",
+        source: "welcome-default",
     };
 }
 
@@ -22301,13 +22299,9 @@ function exposeDebug() {
             const before = snapshotWorkspaceState();
             queueDeleteUndo("Deleted all files");
             pushFilesToTrash(files);
-            const fallback = makeFile(FILE_DEFAULT_NAME, DEFAULT_CODE);
-            files = [fallback];
-            activeFileId = fallback.id;
-            openTabIds = [fallback.id];
+            resetWorkspaceToWelcome();
             clearInlineRenameState();
             fileMenuTargetId = null;
-            setEditorValue(fallback.code, { silent: true });
             persistFiles();
             renderFileList();
             recordFileHistory("Delete all files", before);

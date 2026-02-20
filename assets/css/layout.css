@@ -437,6 +437,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .strip-right {
     flex: 0 0 auto;
+    width: 100%;
     justify-content: flex-end;
     min-width: max-content;
     overflow: visible;

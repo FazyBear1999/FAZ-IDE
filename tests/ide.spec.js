@@ -6743,7 +6743,7 @@ test("lesson session clears when the lesson file is deleted", async ({ page }) =
   expect(result.afterStateIsNull).toBeTruthy();
 });
 
-test("lesson HUD hides and regular typing stays normal after switching to non-lesson file", async ({ page }) => {
+test("lesson HUD hides but header stats stay visible after switching to non-lesson file", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const prepared = await page.evaluate(async () => {
@@ -6778,8 +6778,8 @@ test("lesson HUD hides and regular typing stays normal after switching to non-le
   expect(prepared.afterActive).toBeFalsy();
   expect(prepared.hudHidden).toBeTruthy();
   expect(prepared.hudActiveAttr).toBe("false");
-  expect(prepared.headerHudHidden).toBeTruthy();
-  expect(prepared.headerHudActiveAttr).toBe("false");
+  expect(prepared.headerHudHidden).toBeFalsy();
+  expect(prepared.headerHudActiveAttr === "").toBeTruthy();
 
   await page.evaluate(() => {
     const cm = document.querySelector(".CodeMirror")?.CodeMirror;
@@ -6865,7 +6865,7 @@ test("lesson HUD rail attaches to editor and stays lesson-only", async ({ page }
   expect(result.activeSnapshot.hudVisible).toBeTruthy();
   expect(result.activeSnapshot.headerVisible).toBeTruthy();
   expect(result.activeSnapshot.hudActive).toBe("true");
-  expect(result.activeSnapshot.headerActive).toBe("true");
+  expect(result.activeSnapshot.headerActive === "").toBeTruthy();
   expect(result.activeSnapshot.verticalProgress.endsWith("%")).toBeTruthy();
   expect(result.activeSnapshot.verticalTop).toBe("0px");
   expect(result.activeSnapshot.verticalBottom).not.toBe("0px");
@@ -6877,9 +6877,88 @@ test("lesson HUD rail attaches to editor and stays lesson-only", async ({ page }
   expect(result.activeSnapshot.hasStreakRail).toBeFalsy();
 
   expect(result.inactiveSnapshot.hudVisible).toBeFalsy();
-  expect(result.inactiveSnapshot.headerVisible).toBeFalsy();
+  expect(result.inactiveSnapshot.headerVisible).toBeTruthy();
   expect(result.inactiveSnapshot.hudActive).toBe("false");
-  expect(result.inactiveSnapshot.headerActive).toBe("false");
+  expect(result.inactiveSnapshot.headerActive === "").toBeTruthy();
+});
+
+test("delete all files resets workspace back to welcome folder files", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.deleteAllFiles || !api?.listFiles) {
+      return { ready: false };
+    }
+
+    const deleted = api.deleteAllFiles();
+    const names = api.listFiles().map((entry) => String(entry?.name || "").toLowerCase());
+    return {
+      ready: true,
+      deleted,
+      hasWelcomeIndex: names.includes("welcome/index.html"),
+      hasWelcomeStyles: names.includes("welcome/styles.css"),
+      hasWelcomeApp: names.includes("welcome/app.js"),
+      fileCount: names.length,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.deleted).toBeTruthy();
+  expect(result.hasWelcomeIndex).toBeTruthy();
+  expect(result.hasWelcomeStyles).toBeTruthy();
+  expect(result.hasWelcomeApp).toBeTruthy();
+  expect(result.fileCount).toBeGreaterThanOrEqual(3);
+});
+
+test("top header lesson stats stay right-aligned and match top header button style baseline", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const stats = document.querySelector("#lessonHeaderHud");
+    const stat = document.querySelector("#lessonHudLevel");
+    const referenceButton = document.querySelector(".top.strip .strip-left .strip-group button");
+    const rightRail = document.querySelector(".top.strip .strip-right");
+    const topHeader = document.querySelector(".top.strip");
+    if (!(stats instanceof HTMLElement) || !(stat instanceof HTMLElement) || !(referenceButton instanceof HTMLElement) || !(rightRail instanceof HTMLElement) || !(topHeader instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const statStyle = getComputedStyle(stat);
+    const buttonStyle = getComputedStyle(referenceButton);
+    const statMinHeight = Number.parseFloat(statStyle.minHeight || "0");
+    const buttonMinHeight = Number.parseFloat(buttonStyle.minHeight || "0");
+    const statFontSize = Number.parseFloat(statStyle.fontSize || "0");
+    const buttonFontSize = Number.parseFloat(buttonStyle.fontSize || "0");
+    const statsRect = stats.getBoundingClientRect();
+    const rightRect = rightRail.getBoundingClientRect();
+    const headerRect = topHeader.getBoundingClientRect();
+
+    return {
+      ready: true,
+      display: statStyle.display,
+      alignItems: statStyle.alignItems,
+      minHeight: statStyle.minHeight,
+      fontSize: statStyle.fontSize,
+      color: statStyle.color,
+      rightJustify: getComputedStyle(rightRail).justifyContent,
+      statsInRightRail: statsRect.width > 0 && rightRect.width > 0 && headerRect.width > 0,
+      styleParity: {
+        minHeight: Math.abs(statMinHeight - buttonMinHeight) <= 1,
+        fontSize: Math.abs(statFontSize - buttonFontSize) <= 0.2,
+        hasColor: String(statStyle.color || "").trim().length > 0,
+      },
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(["inline-flex", "flex"]).toContain(result.display);
+  expect(result.alignItems).toBe("center");
+  expect(result.rightJustify).toBe("flex-end");
+  expect(result.statsInRightRail).toBeTruthy();
+  expect(result.styleParity.minHeight).toBeTruthy();
+  expect(result.styleParity.fontSize).toBeTruthy();
+  expect(result.styleParity.hasColor).toBeTruthy();
 });
 
 test("lesson mode updates XP profile and shows HUD stats", async ({ page }) => {
