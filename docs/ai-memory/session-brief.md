@@ -42,7 +42,6 @@
 
 ## Working Tree
 - README.md
-- desktop/README.md
 - docs/CHANGELOG.md
 - docs/RELEASE_CHECKLIST.md
 - docs/ai-memory/README.md

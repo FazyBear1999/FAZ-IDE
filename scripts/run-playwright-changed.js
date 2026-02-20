@@ -43,9 +43,7 @@ function pickSpecs(changedFiles) {
     if (
       file === "manifest.webmanifest" ||
       file.startsWith("assets/icons/") ||
-      file.startsWith("build/") ||
-      file.startsWith("desktop/") ||
-      file.startsWith("scripts/desktop-")
+      file.startsWith("build/")
     ) {
       specs.add("tests/release.spec.js");
     }

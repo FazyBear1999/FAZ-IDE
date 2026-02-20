@@ -24,7 +24,7 @@ If this command fails, do not upload.
 ## 1b) Final full gate (recommended before production)
 
 - Run: npm run test:all
-- Expected result: all gates pass, including desktop package checks, SiteGround package verification, and privacy validation.
+- Expected result: all gates pass, including SiteGround package verification and privacy validation.
 
 ## 1c) Franklin full orchestration (recommended)
 
@@ -95,5 +95,5 @@ Do not upload dist_site directly for final production release.
 - Package only: npm run deploy:siteground
 - Verify package only: npm run verify:siteground
 - Franklin full orchestration: npm run frank:full
-- Full QA + upload package verification (web + desktop + SiteGround): npm run test:all
+- Full QA + upload package verification (web + SiteGround): npm run test:all
 <!-- docs-sync: 2026-02-20 optimization + command-health pass -->

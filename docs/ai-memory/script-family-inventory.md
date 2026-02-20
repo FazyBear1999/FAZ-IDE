@@ -51,11 +51,6 @@ Use this file as the source of truth for script ownership and command-path refer
 - `scripts/dist-site-map.js`
 - `scripts/prepare-siteground.js`
 - `scripts/verify-siteground-package.js`
-- `scripts/generate-desktop-icon.js`
-- `scripts/desktop-pack.js`
-- `scripts/desktop-pack-clean.js`
-- `scripts/desktop-artifacts-clean.js`
-- `scripts/desktop-dist.js`
 
 ### Developer utilities
 

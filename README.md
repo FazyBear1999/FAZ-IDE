@@ -116,15 +116,6 @@ Production domain stamping note:
 - Before `npm run deploy:siteground`, set `SITE_URL` in PowerShell so packaged canonical/OG/sitemap URLs are correct.
 - Example: `$env:SITE_URL = "https://yourdomain.com"`
 
-## Desktop App (Paused / Optional)
-
-Desktop packaging is intentionally de-prioritized right now so browser quality can stay the main focus.
-Desktop commands remain available for optional/manual use:
-
-- `npm run desktop` launches Electron and serves `dist_site/` internally.
-- `npm run desktop:pack` creates an unpacked desktop build and syncs latest unpacked output to `dist/win-unpacked-latest` (or `dist/win-unpacked-latest-run-*` if locked).
-- `npm run desktop:dist` creates a Windows installer (NSIS) and syncs latest installer artifacts to `dist/`.
-
 ## QA Commands
 
 - `npm run sync:dist-site` copies source web assets into `dist_site/` and removes stale files.
@@ -136,13 +127,7 @@ Desktop commands remain available for optional/manual use:
 - `npm run test` runs the full Playwright E2E suite.
 - `npm run test:quick` runs sync check + AI memory check + test integrity check + full E2E suite.
 - `npm run test:all` runs the browser-first release gate (sync + E2E + SiteGround package prep/verification + privacy checks).
-- `npm run test:all:desktop` runs the browser-first gate plus desktop icon/pack/dist checks when you intentionally want desktop artifacts.
 - `npm run deploy:siteground` supports optional `SITE_URL` rewrite for packaged `canonical`, `og:url`, and `sitemap.xml` `<loc>` entries.
-- `npm run test:desktop:icon` validates desktop icon generation.
-- `npm run test:desktop:pack` validates desktop unpacked build generation.
-- `npm run test:desktop:dist` validates desktop installer generation.
-- `npm run desktop:pack:clean` removes old `dist_pack_check/run-*` folders (skips locked folders safely).
-- `npm run desktop:artifacts:clean` removes old `run-*` folders from desktop artifact dirs (`dist_pack_check`, `dist_release_test`) and skips locked folders safely.
 
 Script-path governance:
 
@@ -202,11 +187,9 @@ Notes:
 - `npm run frank:snapshot:verify` verifies snapshot payload/metadata integrity for the latest snapshot.
 - `npm run frank:cleanup:preview` previews stale Frankleen report/snapshot cleanup targets.
 - `npm run frank:cleanup` applies stale Frankleen report/snapshot cleanup targets.
-- `npm run frank:cleanup:all` runs Frankleen cleanup and desktop artifact run-folder cleanup in one safe pass.
+- `npm run frank:cleanup:all` runs Frankleen cleanup in one safe pass.
 - `npm run frank -- rescue <script>` captures a failing `npm run <script>` into `docs/ai-memory/franklin-fix-request.md`.
 - `npm run frank -- note "message"` appends a dated entry to `docs/ai-memory/decisions.md`.
 - `npm run frank -- error "message"` appends a dated entry to `docs/ai-memory/error-catalog.md`.
 - `npm run frank:status` shows Franklin memory/check status.
-
-Details are in `desktop/README.md`.
 <!-- docs-sync: 2026-02-20 optimization + command-health pass -->

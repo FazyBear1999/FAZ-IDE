@@ -1,18 +1,14 @@
 {
   "name": "faz-ide",
   "version": "0.2.0",
-  "description": "FAZ IDE web project with optional desktop wrapper",
+  "description": "FAZ IDE web-first project",
   "author": "Faz (FazyBear)",
   "license": "MIT",
   "private": true,
-  "main": "desktop/main.js",
   "devDependencies": {
     "@playwright/test": "^1.42.1",
     "acorn": "^8.15.0",
-    "app-builder-lib": "26.8.0",
     "cssnano": "^7.1.2",
-    "electron": "^35.7.5",
-    "electron-builder": "26.8.0",
     "postcss": "^8.5.6",
     "postcss-cli": "^11.0.1",
     "postcss-combine-duplicated-selectors": "^10.0.3",
@@ -24,12 +20,6 @@
   },
   "scripts": {
     "serve": "node scripts/serve.js",
-    "desktop": "electron .",
-    "desktop:icon": "node scripts/generate-desktop-icon.js",
-    "desktop:pack": "node scripts/desktop-pack.js",
-    "desktop:pack:clean": "node scripts/desktop-pack-clean.js",
-    "desktop:artifacts:clean": "node scripts/desktop-artifacts-clean.js",
-    "desktop:dist": "node scripts/desktop-dist.js",
     "deploy:siteground": "node scripts/prepare-siteground.js",
     "verify:siteground": "node scripts/verify-siteground-package.js",
     "sync:dist-site": "node scripts/sync-dist-site.js",
@@ -41,12 +31,8 @@
     "test:css": "npm run css:lint && npm run css:audit:imports",
     "test:all:contract": "node scripts/verify-testall-contract.js",
     "test:sync:dist-site": "node scripts/verify-dist-site-sync.js",
-    "test:desktop:icon": "npm run desktop:icon",
-    "test:desktop:pack": "npm run desktop:pack",
-    "test:desktop:dist": "npm run desktop:dist",
     "test:quick": "npm run test:all:contract && npm run sync:dist-site && npm run test:sync:dist-site && npm run test:memory && npm run test:frank:safety && npm run test:integrity && npm run test:css && npm run test",
     "test:all": "npm run test:all:contract && npm run sync:dist-site && npm run test:sync:dist-site && npm run test:memory && npm run test:frank:safety && npm run test:integrity && npm run test:css && npm run test && npm run deploy:siteground && npm run verify:siteground && npm run test:privacy && echo ALL GOOD FAZYBEAR - FRANKLEEN ONLINE",
-    "test:all:desktop": "npm run test:all && npm run test:desktop:icon && npm run test:desktop:pack && npm run test:desktop:dist && echo ALL GOOD FAZYBEAR - FRANKLEEN DESKTOP+WEB",
     "preupload:safe": "npm run test:all",
     "test:headed": "playwright test --config config/playwright.config.js --headed",
     "test:ui": "playwright test --config config/playwright.config.js --ui",
@@ -72,7 +58,7 @@
     "frank:snapshot:verify": "node scripts/franklin.js snapshot verify latest",
     "frank:cleanup:preview": "node scripts/cleanup-frankleen-artifacts.js",
     "frank:cleanup": "node scripts/cleanup-frankleen-artifacts.js --apply",
-    "frank:cleanup:all": "npm run frank:cleanup && npm run desktop:artifacts:clean",
+    "frank:cleanup:all": "npm run frank:cleanup",
     "workspace:cleanup:preview": "node scripts/workspace-cleanup.js",
     "workspace:cleanup": "node scripts/workspace-cleanup.js --apply",
     "frank:doctor": "node scripts/franklin.js doctor",
@@ -104,28 +90,5 @@
     "css:lint": "stylelint \"assets/css/*.css\"",
     "css:lint:fix": "stylelint \"assets/css/*.css\" --fix",
     "css:audit:imports": "node scripts/audit-css-imports.js"
-  },
-  "build": {
-    "appId": "com.fazide.desktop",
-    "productName": "FAZ IDE",
-    "asar": true,
-    "icon": "build/icon.png",
-    "files": [
-      "desktop/**/*",
-      "dist_site/**/*",
-      "package.json"
-    ],
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        "nsis"
-      ],
-      "signAndEditExecutable": false,
-      "artifactName": "FAZ-IDE-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
   }
 }

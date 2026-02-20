@@ -51,7 +51,7 @@ Release date: 2026-02-18
 ### 5) Docs + Governance
 
 - Expanded release runbook to a launch-grade checklist (`docs/RELEASE_CHECKLIST.md`).
-- Updated README/desktop docs with production `SITE_URL` deployment contract.
+- Updated README/docs with production `SITE_URL` deployment contract.
 - Synchronized AI memory docs (`decisions`, `release-notes`, `handoff`, `session command center`, common mistakes, error catalog, roadmap mapping, and related context files).
 
 ## Validation Summary

@@ -122,9 +122,7 @@ function inferRiskTier(changedFiles = [], changeClass = "behavior") {
     (value) => value === "playwright.config.js" || value === "config/playwright.config.js",
     (value) => value === "assets/js/app.js",
     (value) => value.startsWith("assets/js/sandbox/"),
-    (value) => value === "desktop/main.js",
     (value) => value.startsWith("scripts/franklin"),
-    (value) => value.startsWith("scripts/desktop-"),
     (value) => value.startsWith("scripts/prepare-siteground"),
     (value) => value.startsWith("scripts/codex-ops"),
   ];

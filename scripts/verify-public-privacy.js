@@ -11,14 +11,11 @@ const scanTargets = [
   { relPath: "release/siteground/public_html", required: true },
   { relPath: "release/siteground/DEPLOY.txt", required: true },
   { relPath: "dist", required: false },
-  { relPath: "dist_icon_release", required: false },
 ];
 
 const bannedFiles = [
   "dist/builder-debug.yml",
   "dist/builder-effective-config.yaml",
-  "dist_icon_release/builder-debug.yml",
-  "dist_icon_release/builder-effective-config.yaml",
 ];
 
 const textExtensions = new Set([

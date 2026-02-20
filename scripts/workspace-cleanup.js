@@ -6,12 +6,6 @@ const root = process.cwd();
 const removableDirs = [
   "artifacts",
   "dist",
-  "dist_icon_check",
-  "dist_icon_release",
-  "dist_pack_check",
-  "dist_pack_verify",
-  "dist_release_test",
-  "dist_relocation_check",
   "test-results",
   "build/css/min",
 ];

@@ -95,7 +95,7 @@ Entries should make it easy to understand what changed and why validation gates 
 - Date (UTC): 2026-02-19
 - Summary: Established optimization-first execution mode with full-system validation baseline green.
 - Notable safety/infra updates: Formalized stabilization-before-new-features directive in AI memory, emphasizing cross-surface integration quality (UI controls, commands, panels, runtime, lessons, packaging) and deterministic gate evidence.
-- Validation status: `runTests` full suite passed (540/540), and `npm run test:all` passed end-to-end including integrity, memory, CSS, Playwright, desktop icon/pack/dist, SiteGround package prep/verify, and privacy checks.
+- Validation status: `runTests` full suite passed (540/540), and `npm run test:all` passed end-to-end including integrity, memory, CSS, Playwright, SiteGround package prep/verify, and privacy checks.
 - Follow-up actions: Execute optimization/organization waves in small reversible units, require focused checks plus periodic `test:all`, and postpone net-new feature expansion until stabilization cadence remains consistently green.
 
 - Version: 0.2.0
@@ -360,7 +360,7 @@ Entries should make it easy to understand what changed and why validation gates 
 - Date (UTC): 2026-02-18
 - Summary: Hardened layout customization and docking reliability for deploy-safe release readiness.
 - Notable safety/infra updates: Layout radius setting now propagates through shared radius tokens and key shell surfaces; docking drop logic now prevents transient center pass-through from resetting behavior settings; flaky docking-route stress coverage in IDE tests replaced with deterministic route assertions and stable zoom-tier overlap stress checks.
-- Validation status: Focused `layout-micro` and docking contracts passed; full `npm run test:all` passed end-to-end (`240` Playwright tests, desktop icon/pack/dist, SiteGround package verify, privacy checks).
+- Validation status: Focused `layout-micro` and docking contracts passed; full `npm run test:all` passed end-to-end (`240` Playwright tests, SiteGround package verify, privacy checks).
 - Follow-up actions: Keep roadmap C7 active and require full gate for future layout/docking behavior changes.
 
 
@@ -872,7 +872,7 @@ Entries should make it easy to understand what changed and why validation gates 
 - Date (UTC): 2026-02-18
 - Summary: Completed safe CSS optimization follow-up and reconfirmed full deployment readiness.
 - Notable safety/infra updates: Reduced duplicate selector surface in `assets/css/layout.css` by grouping repeated scrollbar and footer status selectors with `:is(...)` while preserving style behavior.
-- Validation status: `tests/ide.spec.js` + `tests/layout-micro.spec.js` passed (`184 passed, 0 failed`); `tests/release.spec.js` passed (`10 passed, 0 failed`); `npm run test:css` passed; full `npm run test:all` passed end-to-end (`240` Playwright tests + desktop pack/dist + SiteGround verify + privacy check).
+- Validation status: `tests/ide.spec.js` + `tests/layout-micro.spec.js` passed (`184 passed, 0 failed`); `tests/release.spec.js` passed (`10 passed, 0 failed`); `npm run test:css` passed; full `npm run test:all` passed end-to-end (`240` Playwright tests + SiteGround verify + privacy check).
 - Follow-up actions: Continue CSS optimization in behavior-neutral batches and keep full-gate proof as a hard requirement before deploy handoff.
 
 

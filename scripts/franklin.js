@@ -50,7 +50,6 @@ const guardianPaths = {
 const guardianSnapshotTargets = [
   "assets",
   "config",
-  "desktop",
   "scripts",
   "tests",
   "docs/ai-memory",
@@ -1675,34 +1674,7 @@ async function runParallelMode() {
     }
   }
 
-  console.log(styleText("Phase 2: parallel release tail", ansiStyles.dim));
-  const branchDesktop = async () => {
-    const branch = ["test:desktop:icon", "test:desktop:pack", "test:desktop:dist"]
-      .map((scriptName) => fullGateSteps.find((step) => step.script === scriptName))
-      .filter(Boolean);
-    const results = [];
-    for (const step of branch) {
-      const stepStartedAt = Date.now();
-      const absIndex = fullGateSteps.findIndex((entry) => entry.script === step.script) + 1;
-      try {
-        const result = runNpmScript(step.script, { captureOutput: true, printOutput: false, silentNpm: true });
-        const out = `${result.stdout || ""}${result.stderr || ""}`;
-        const durationMs = Date.now() - stepStartedAt;
-        const logPath = writeStageLog(logRun.runDir, absIndex, step.script, "pass", out);
-        results.push({ script: step.script, label: step.label, status: "passed", durationMs, logPath });
-      } catch (error) {
-        const out = `${error?.stdout || ""}${error?.stderr || ""}`;
-        const durationMs = Date.now() - stepStartedAt;
-        const logPath = writeStageLog(logRun.runDir, absIndex, step.script, "fail", out);
-        results.push({ script: step.script, label: step.label, status: "failed", durationMs, logPath });
-        throw Object.assign(new Error(`Parallel desktop branch failed at ${step.script}`), {
-          code: typeof error?.code === "number" ? error.code : 1,
-          stageResults: results,
-        });
-      }
-    }
-    return results;
-  };
+  console.log(styleText("Phase 2: release tail", ansiStyles.dim));
 
   const branchDeploy = async () => {
     const branch = ["deploy:siteground", "verify:siteground", "test:privacy"]
@@ -1733,8 +1705,8 @@ async function runParallelMode() {
   };
 
   try {
-    const [desktopResults, deployResults] = await Promise.all([branchDesktop(), branchDeploy()]);
-    stageResults.push(...desktopResults, ...deployResults);
+    const deployResults = await branchDeploy();
+    stageResults.push(...deployResults);
   } catch (error) {
     if (Array.isArray(error?.stageResults)) {
       stageResults.push(...error.stageResults);
@@ -1798,7 +1770,6 @@ function runRetention(modeRaw) {
   }
 
   runNpmScript("frank:cleanup");
-  runNpmScript("desktop:artifacts:clean");
   runNpmScript("workspace:cleanup");
 }
 
@@ -1931,41 +1902,10 @@ function formatCompletedAt(date = new Date()) {
   return date.toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
-function getLatestDesktopPackOutputPath() {
-  const distPackRoot = path.join(root, "dist_pack_check");
-  if (!fs.existsSync(distPackRoot)) {
-    return "dist_pack_check/(none yet)";
-  }
-
-  const entryNames = fs.readdirSync(distPackRoot);
-  const runDirs = entryNames
-    .map((name) => path.join(distPackRoot, name))
-    .filter((absPath) => {
-      const base = path.basename(absPath);
-      return base.startsWith("run-") && fs.existsSync(absPath) && fs.statSync(absPath).isDirectory();
-    });
-
-  if (!runDirs.length) {
-    return "dist_pack_check/(none yet)";
-  }
-
-  const latestRunDir = runDirs
-    .map((absPath) => ({ absPath, mtimeMs: fs.statSync(absPath).mtimeMs }))
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0].absPath;
-
-  const candidate = path.join(latestRunDir, "win-unpacked");
-  if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-    return path.relative(root, candidate) || ".";
-  }
-
-  return path.relative(root, latestRunDir) || ".";
-}
-
 function buildVictoryReportLines(durationMs, stages = [], options = {}) {
   const elapsed = formatDuration(durationMs);
   const uploadSource = path.relative(root, path.join(root, "release", "siteground", "public_html")) || ".";
   const distSitePath = path.relative(root, path.join(root, "dist_site")) || ".";
-  const desktopPackPath = getLatestDesktopPackOutputPath();
   const logRunDirRel = String(options.logRunDirRel || "").trim();
   const passedStages = stages.filter((stage) => stage.status === "passed").length;
   const totalStages = stages.length || fullGateSteps.length;
@@ -1975,14 +1915,13 @@ function buildVictoryReportLines(durationMs, stages = [], options = {}) {
   return [
     "Release Gate         : PASSED",
     "AI + Integrity       : PASSED",
-    "Desktop + Siteground : PASSED",
+    "Siteground           : PASSED",
     `Gate Stages          : ${passedStages}/${totalStages} passed`,
     `Slowest Stage        : ${slowestStage ? `${slowestStage.script} (${formatDuration(slowestStage.durationMs)})` : "n/a"}`,
     `Total Runtime        : ${elapsed}`,
     `Completed At         : ${formatCompletedAt()}`,
     `Upload Source        : ${uploadSource}`,
     `dist_site Snapshot   : ${distSitePath}`,
-    `Desktop Pack Output  : ${desktopPackPath}`,
     `Stage Log Folder     : ${logRunDirRel || "artifacts/frankleen/reports"}`,
     "Status               : READY TO UPLOAD",
   ];
@@ -2021,7 +1960,7 @@ function printFrankleenVictoryBanner(durationMs, stages = [], options = {}) {
       console.log(styleText(line, ansiStyles.green));
       continue;
     }
-    if (line.includes("Upload Source") || line.includes("Desktop Pack Output")) {
+    if (line.includes("Upload Source")) {
       console.log(styleText(line, ansiStyles.cyan));
       continue;
     }
