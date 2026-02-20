@@ -10482,6 +10482,13 @@ function setLessonCursorToProgress() {
     editor.scrollIntoView?.(pos, 80);
 }
 
+function focusLessonTypingSurface() {
+    editor.focus();
+    requestAnimationFrame(() => {
+        editor.focus();
+    });
+}
+
 function syncLessonGhostMarks() {
     editor.clearMarks?.("lesson-ghost");
     editor.clearMarks?.("lesson-active");
@@ -10588,6 +10595,7 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
     persistLessonSession({ force: true });
     syncLessonGhostMarks();
     setLessonCursorToProgress();
+    focusLessonTypingSurface();
     updateLessonProgressStatus({ prefix: "Lesson started" });
     updateLessonHud();
     if (announce) {

@@ -5410,6 +5410,36 @@ test("lesson mode loads starter and advances through STEP typing markers", async
   expect(result.afterAll?.remaining).toBe(0);
 });
 
+test("loading a lesson from sidebar focuses editor for immediate typing", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#lessonsSelectorToggle").click();
+  await page.locator("#lessonsList [data-lesson-id]").first().click();
+  await page.locator("#lessonLoad").click();
+
+  await expect.poll(async () => {
+    return page.evaluate(() => Boolean(window.fazide?.getLessonState?.()?.active));
+  }).toBeTruthy();
+
+  const result = await page.evaluate(() => {
+    const codeMirrorRoot = document.querySelector("#editorPanel .CodeMirror");
+    const focused = Boolean(
+      (codeMirrorRoot instanceof HTMLElement && codeMirrorRoot.classList.contains("CodeMirror-focused"))
+      || document.activeElement?.closest?.("#editorPanel")
+    );
+    const state = window.fazide?.getLessonState?.();
+    return {
+      ready: Boolean(state),
+      active: Boolean(state?.active),
+      focused,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.active).toBeTruthy();
+  expect(result.focused).toBeTruthy();
+});
+
 test("lesson mode accepts strict real keyboard typing on first line", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
