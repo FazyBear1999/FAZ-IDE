@@ -3406,6 +3406,123 @@ test("beginner tutorial reset restarts from the first step", async ({ page }) =>
   expect(after.seen).toBeFalsy();
 });
 
+test("beginner tutorial reopens header and footer when started from hidden layout", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.runDevTerminal || !api?.openDevTerminal) {
+      return { ready: false };
+    }
+
+    const shell = document.querySelector("#appShell");
+    document.querySelector("#toggleHeader")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document.querySelector("#toggleFooter")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    const hiddenState = {
+      header: String(shell?.getAttribute("data-header") || ""),
+      footer: String(shell?.getAttribute("data-footer") || ""),
+    };
+
+    api.openDevTerminal();
+    await api.runDevTerminal("tutorial start beginner");
+
+    const intro = document.querySelector("#tutorialIntro");
+    const startedState = {
+      header: String(shell?.getAttribute("data-header") || ""),
+      footer: String(shell?.getAttribute("data-footer") || ""),
+      tutorialVisible: Boolean(intro && !intro.hidden),
+      firstStepTitle: String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim(),
+    };
+
+    return {
+      ready: true,
+      hiddenState,
+      startedState,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.hiddenState.header).toBe("closed");
+  expect(result.hiddenState.footer).toBe("closed");
+  expect(result.startedState.header).toBe("open");
+  expect(result.startedState.footer).toBe("open");
+  expect(result.startedState.tutorialVisible).toBeTruthy();
+  expect(result.startedState.firstStepTitle).toContain("Welcome");
+});
+
+test("tutorial intro applies dark focus backdrop while active", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.runDevTerminal || !api?.openDevTerminal) {
+      return { ready: false };
+    }
+
+    api.openDevTerminal();
+    await api.runDevTerminal("tutorial start beginner");
+
+    const backdrop = document.querySelector(".tutorial-intro-backdrop");
+    const highlight = document.querySelector("#tutorialIntroHighlight");
+    const styles = backdrop instanceof HTMLElement ? getComputedStyle(backdrop) : null;
+    const highlightStyles = highlight instanceof HTMLElement ? getComputedStyle(highlight) : null;
+    return {
+      ready: true,
+      hasBackdrop: backdrop instanceof HTMLElement,
+      backgroundImage: String(styles?.backgroundImage || ""),
+      opacity: Number.parseFloat(String(styles?.opacity || "0")),
+      highlightShadow: String(highlightStyles?.boxShadow || ""),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.hasBackdrop).toBeTruthy();
+  expect(result.backgroundImage).not.toBe("none");
+  const usesBackdropDimming = result.opacity >= 0.7;
+  const usesHighlightMaskDimming = result.highlightShadow.includes("9999px");
+  expect(usesBackdropDimming || usesHighlightMaskDimming).toBeTruthy();
+});
+
+test("tutorial galaxy canvas initializes and tutorial can close safely", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.runDevTerminal || !api?.openDevTerminal) {
+      return { ready: false };
+    }
+
+    api.openDevTerminal();
+    await api.runDevTerminal("tutorial start beginner");
+
+    const root = document.querySelector("#tutorialIntro");
+    const canvas = document.querySelector("#tutorialIntroGalaxy");
+    const started = {
+      visible: Boolean(root && !root.hidden),
+      canvasPresent: canvas instanceof HTMLCanvasElement,
+      canvasWidth: Number(canvas instanceof HTMLCanvasElement ? canvas.width : 0),
+      canvasHeight: Number(canvas instanceof HTMLCanvasElement ? canvas.height : 0),
+    };
+
+    document.querySelector("#tutorialIntroSkip")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    return {
+      ready: true,
+      started,
+      closed: Boolean(root?.hidden),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.started.visible).toBeTruthy();
+  expect(result.started.canvasPresent).toBeTruthy();
+  expect(result.started.canvasWidth).toBeGreaterThan(0);
+  expect(result.started.canvasHeight).toBeGreaterThan(0);
+  expect(result.closed).toBeTruthy();
+});
+
 test("layout menu Tutorial button restarts beginner tutorial and matches Reset size", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

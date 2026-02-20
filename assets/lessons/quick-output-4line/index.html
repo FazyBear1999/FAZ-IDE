@@ -9,7 +9,7 @@
     <main id="out">Finish the 4-line lesson block, then this page auto-runs.</main>
     <script>
 // [STEP:quick-output-smoke:START]
-document.body.style.background = "#0b1220";
+document.body.style.background = "var(--fazide-token-bg, var(--fazide-sandbox-bg, #0b1220))";
 const out = document.getElementById("out");
 out.textContent = "Lesson complete output is running!";
 console.log("Quick lesson output ready.");

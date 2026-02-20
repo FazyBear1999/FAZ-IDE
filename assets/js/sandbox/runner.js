@@ -235,6 +235,33 @@ function buildStorageShimScript() {
     return SANDBOX_STORAGE_SHIM_SCRIPT;
 }
 
+function buildSandboxTokenNormalizeStyle(surface) {
+    const panel = surface.panel || surface.background;
+    const border = surface.border || "rgba(148, 163, 184, 0.3)";
+    const accent = surface.accent || "#38bdf8";
+    const muted = surface.muted || "rgba(148, 163, 184, 0.9)";
+    return (
+        `<style data-fazide-theme-normalize="true">` +
+        `:root{--fazide-token-bg:${surface.background};--fazide-token-fg:${surface.foreground};--fazide-token-panel:${panel};--fazide-token-border:${border};--fazide-token-accent:${accent};--fazide-token-muted:${muted};}` +
+        `*,:before,:after{box-sizing:border-box;}` +
+        `html,body{background:var(--fazide-token-bg) !important;color:var(--fazide-token-fg) !important;}` +
+        `body{font-family:var(--font,\"Space Grotesk\",\"Segoe UI\",system-ui,-apple-system,sans-serif) !important;}` +
+        `body{line-height:1.45;}` +
+        `:where(main,section,article,.panel,.card,.app-shell,.game-shell,.converter,.scene){width:min(100%,960px);margin-inline:auto;}` +
+        `:where(main,section,article,.panel,.card,.app-shell,.game-shell,.converter,.scene){padding:clamp(12px,2vw,20px);}` +
+        `:where(h1,h2,h3){margin:0 0 8px;line-height:1.2;}` +
+        `:where(p,small,label,.note,.hint,.sub,.subtitle){margin:0 0 8px;}` +
+        `:where(.top-row,.row,.controls,.actions,.toolbar){display:flex;align-items:center;gap:8px;flex-wrap:wrap;}` +
+        `:where(input,select,button,textarea){min-height:34px;padding:6px 10px;}` +
+        `:where(main,section,article,aside,.panel,.card,.app-shell,.converter,.game-shell,.shell,.scene,.result,.report,.arena){border-radius:0 !important;border-color:var(--fazide-token-border) !important;}` +
+        `:where(button,input,select,textarea){border-radius:0 !important;border:1px solid var(--fazide-token-border) !important;background:var(--fazide-token-panel) !important;color:var(--fazide-token-fg) !important;}` +
+        `:where(button,[role=\"button\"]){cursor:pointer;}` +
+        `:where(button:hover,button:focus-visible){border-color:var(--fazide-token-accent) !important;outline:none;}` +
+        `:where(p,small,label,.note,.hint,.sub,.subtitle){color:var(--fazide-token-muted);}` +
+        `</style>`
+    );
+}
+
 function buildSandboxJsDocument(userCode, token, surface, theme, runContext) {
     const safeCode = sanitizeUserCode(userCode);
     const shellStyle =
@@ -242,12 +269,13 @@ function buildSandboxJsDocument(userCode, token, surface, theme, runContext) {
         `html{color-scheme:${surface.colorScheme};}` +
         `html,body{margin:0;min-height:100%;background:transparent !important;background-image:linear-gradient(${surface.background},${surface.background});color:${surface.foreground};}` +
         `</style>`;
+    const normalizeThemeStyle = buildSandboxTokenNormalizeStyle(surface);
     const cspTag = buildSandboxCspMetaTag();
     const storageShimScript = buildStorageShimScript();
     const securityLockScript = buildSecurityLockScript();
     const backgroundLockScript = buildThemeLockScript(surface, theme);
     return (
-        `<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8" />${cspTag}${shellStyle}</head><body>` +
+        `<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8" />${cspTag}${shellStyle}${normalizeThemeStyle}</head><body>` +
         storageShimScript +
         securityLockScript +
         bridgeScript(token, runContext) +
@@ -281,6 +309,8 @@ function buildSandboxHtmlDocument(userHtml, token, surface, theme, runContext) {
         `html{color-scheme:${surface.colorScheme};}` +
         `html,body{margin:0;min-height:100%;background:transparent !important;background-image:linear-gradient(${surface.background},${surface.background});color:${surface.foreground};}`;
     head.appendChild(shellStyle);
+
+    head.insertAdjacentHTML("beforeend", buildSandboxTokenNormalizeStyle(surface));
 
     head.insertAdjacentHTML("afterbegin", buildStorageShimScript());
     body.insertAdjacentHTML("afterbegin", `${buildSecurityLockScript()}${bridgeScript(token, runContext)}${buildThemeLockScript(surface, theme)}`);

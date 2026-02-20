@@ -6322,7 +6322,11 @@ body[data-resize="row"] {
 
 .runner-shell[data-fullscreen="true"] {
     position: fixed;
-    inset: 24px;
+    top: 50%;
+    left: 50%;
+    width: min(1280px, calc(100vw - 48px));
+    height: calc(100vh - 48px);
+    transform: translate(-50%, -50%);
     z-index: 1000;
     background: var(--bg);
     border-radius: var(--radius);

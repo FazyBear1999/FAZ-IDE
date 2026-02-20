@@ -51,6 +51,14 @@ import { makeTextareaEditor } from "./editors/textarea.js";
 import { makeCodeMirrorEditor } from "./editors/codemirror5.js";
 import { createCommandRegistry } from "./core/commandRegistry.js";
 import { createStateBoundaries } from "./core/stateBoundaries.js";
+import {
+    DEFAULT_TUTORIAL_ID,
+    TUTORIAL_FORCE_START_STORAGE_KEY,
+    buildTutorialDefinitions,
+    getTutorialIdsFromDefinitions,
+    normalizeTutorialIdFromDefinitions,
+    getTutorialDefinitionFromDefinitions,
+} from "./core/tutorialDefinitions.js";
 import { solvePanelRows } from "./core/layoutEngine.js";
 import { rowsToPanelLayout, panelLayoutToRows, normalizePanelLayout } from "./core/panelLayoutModel.js";
 import { parseLessonSteps, normalizeLessonInputChar } from "./core/lessonEngine.js";
@@ -127,202 +135,19 @@ const commandRegistry = createCommandRegistry({
 const formatter = createFormatter({ fallbackFormat: formatBasic });
 const astClient = createAstClient();
 
-const DEFAULT_TUTORIAL_ID = "beginner";
-const TUTORIAL_FORCE_START_STORAGE_KEY = "fazide.tutorial.force-start-once.v1";
-const TUTORIAL_DEFINITIONS = Object.freeze({
-    beginner: Object.freeze({
-        id: "beginner",
-        label: "Beginner Tutorial",
-        seenKey: "fazide.tutorial.beginner.seen.v1",
-        completeMessage: "Beginner tutorial complete. Use 'tutorial start beginner' in Dev Terminal to view it again.",
-        steps: Object.freeze([
-            {
-                id: "welcome",
-                title: "Welcome to FAZ IDE",
-                body: "Welcome! If you're not used to an IDE, it's highly recommended to go through this tutorial first so you can learn the layout and workflow quickly.",
-                target: "#appShell",
-            },
-            {
-                id: "files",
-                title: "Files Panel",
-                body: "This is your project tree. Your Welcome folder is preloaded here so you can learn the IDE on a real starter project.",
-                target: "#filesPanel",
-                onEnter: () => {
-                    setPanelOpen("files", true);
-                    setFilesSectionOpen("files", true);
-                    focusWelcomeProjectInEditor();
-                },
-            },
-            {
-                id: "file-actions-menu",
-                title: "Files Actions",
-                body: "This opens the View section where you can enable or disable file-system tabs and tools you need (or hide what you do not).",
-                target: "#filesMenu [aria-label=\"View actions\"] .files-menu-grid",
-                reveal: { filesMenuView: true },
-                onEnter: () => setPanelOpen("files", true),
-            },
-            {
-                id: "files-tab-open-editors",
-                title: "Files Tab: Open Editors",
-                body: "Open Editors lists files currently open in the editor for quick switching.",
-                target: "#fileList [data-file-section=\"open-editors\"]",
-                reveal: { filesTabFocus: "open-editors" },
-                onEnter: () => setPanelOpen("files", true),
-            },
-            {
-                id: "files-tab-files",
-                title: "Files Tab: Files",
-                body: "Files is your main workspace tree. Next, we continue to the Editor where you'll write and run code.",
-                target: "#fileList [data-file-section=\"files\"]",
-                reveal: { filesTabFocus: "files" },
-                onEnter: () => setPanelOpen("files", true),
-            },
-            {
-                id: "files-tab-games",
-                title: "Files Tab: Games",
-                body: "This Games tab in the file system opens the game library section.",
-                target: "#filesGames",
-                reveal: { filesTabFocus: "games" },
-                onEnter: () => setPanelOpen("files", true),
-            },
-            {
-                id: "files-tab-apps",
-                title: "Files Tab: Applications",
-                body: "This Applications tab opens built-in app templates and runtime examples.",
-                target: "#filesApps",
-                reveal: { filesTabFocus: "applications" },
-                onEnter: () => setPanelOpen("files", true),
-            },
-            {
-                id: "files-tab-lessons",
-                title: "Files Tab: Lessons",
-                body: "This Lessons tab opens guided coding lessons with progress tracking.",
-                target: "#filesLessons",
-                reveal: { filesTabFocus: "lessons" },
-                onEnter: () => setPanelOpen("files", true),
-            },
-            {
-                id: "editor",
-                title: "Editor",
-                body: "Write and edit code here. Use shortcuts like Ctrl/Cmd+S to save and Ctrl/Cmd+Enter to run.",
-                target: "#editorPanel",
-                onEnter: () => {
-                    setPanelOpen("editor", true);
-                    focusWelcomeProjectInEditor();
-                },
-            },
-            {
-                id: "editor-tabs",
-                title: "Open File Tabs",
-                body: "Tabs show your currently open files, so you can move between files quickly.",
-                target: "#editorTabs",
-                onEnter: () => setPanelOpen("editor", true),
-            },
-            {
-                id: "run",
-                title: "Run",
-                body: "Press Run to execute your active file in the sandbox safely.",
-                target: "#run",
-                onEnter: () => setPanelOpen("sandbox", true),
-            },
-            {
-                id: "format",
-                title: "Format",
-                body: "Format keeps your active file clean and consistent before running or saving.",
-                target: "#format",
-                onEnter: () => setPanelOpen("editor", true),
-            },
-            {
-                id: "editor-tools",
-                title: "Editor Tools",
-                body: "These buttons open Find, Symbols, Project Search, Split view, History, and Settings workflows.",
-                target: ".editor-pro-buttons",
-                onEnter: () => setPanelOpen("editor", true),
-            },
-            {
-                id: "sandbox",
-                title: "Sandbox Preview",
-                body: "Now the Welcome project runs in the sandbox so you can see your first live output in FAZ IDE.",
-                target: "#runnerShell",
-                onEnter: () => {
-                    setPanelOpen("sandbox", true);
-                    runWelcomeProjectForTutorial();
-                },
-            },
-            {
-                id: "sandbox-actions",
-                title: "Sandbox Actions",
-                body: "Pop out for a separate window or expand for a larger local preview.",
-                target: "#popoutSandbox",
-                reveal: { sandboxActions: true },
-                onEnter: () => setPanelOpen("sandbox", true),
-            },
-            {
-                id: "console",
-                title: "Console",
-                body: "Console shows logs, warnings, and errors from your runs.",
-                target: "#logPanel",
-                onEnter: () => setPanelOpen("log", true),
-            },
-            {
-                id: "console-actions",
-                title: "Console Actions",
-                body: "Use Copy and Clear to manage output while debugging run-by-run.",
-                target: "#copyLog",
-                onEnter: () => setPanelOpen("log", true),
-            },
-            {
-                id: "search",
-                title: "Command Search",
-                body: "Search commands quickly here (or press Ctrl/Cmd+Shift+P).",
-                target: "#topCommandPaletteInput",
-            },
-            {
-                id: "search-results",
-                title: "Command Results",
-                body: "As you type, matching commands appear in this dropdown so you can run actions quickly.",
-                target: "#topCommandPaletteMenu",
-                reveal: { topCommandMenu: true },
-                onEnter: () => startTutorialCommandSearchDemo(),
-            },
-            {
-                id: "theme",
-                title: "Theme Selector",
-                body: "Change visual theme instantly to match your workflow and readability preference.",
-                target: "#themeSelect",
-            },
-            {
-                id: "layout",
-                title: "Layout Controls",
-                body: "Open Layout to tune panel sizes, docking behavior, and workspace shape.",
-                target: "#layoutToggle",
-            },
-            {
-                id: "lessons-button",
-                title: "Lessons Button",
-                body: "Use Lessons to open progress, streak, and theme unlock stats right from the top header.",
-                target: "#lessonStatsBtn",
-            },
-            {
-                id: "status",
-                title: "Status",
-                body: "Status shows what the IDE is doing. Use it as a quick health signal while working.",
-                target: "#statusText",
-            },
-            {
-                id: "footer-runtime",
-                title: "Footer Runtime Signals",
-                body: "Footer runtime indicators summarize editor, sandbox, problems, storage, and zoom at a glance.",
-                target: "#footerRuntimeStatus",
-            },
-            {
-                id: "footer-editor",
-                title: "Footer Editor Signals",
-                body: "Editor footer stats track file name, cursor position, selection, and save state while coding.",
-                target: "#footerEditorStatus",
-            },
-        ]),
-    }),
+const TUTORIAL_DEFINITIONS = buildTutorialDefinitions({
+    actionMap: {
+        "panel.files.open": () => setPanelOpen("files", true),
+        "panel.editor.open": () => setPanelOpen("editor", true),
+        "panel.sandbox.open": () => setPanelOpen("sandbox", true),
+        "panel.log.open": () => setPanelOpen("log", true),
+        "files.section.main.open": () => setFilesSectionOpen("files", true),
+        "welcome.focus": () => focusWelcomeProjectInEditor(),
+        "welcome.run": () => runWelcomeProjectForTutorial(),
+        "search.demo.start": () => startTutorialCommandSearchDemo(),
+        "header.open": () => setHeaderOpen(true),
+        "footer.open": () => setFooterOpen(true),
+    },
 });
 
 const tutorialState = {
@@ -343,21 +168,33 @@ const tutorialState = {
     typewriterToken: 0,
     motionToken: 0,
     motionSyncScheduled: false,
+    galaxyFrameId: 0,
+    galaxySeed: 0,
+    galaxyStars: [],
+    galaxyMouseX: -1,
+    galaxyMouseY: -1,
+    galaxyBoundsW: 0,
+    galaxyBoundsH: 0,
+    galaxyPointerWired: false,
+    galaxyReducedMotion: false,
+    galaxyLowPower: false,
+    galaxyPixelRatioCap: 2,
+    galaxyStarDensityDivisor: 22000,
+    galaxyFrameInterval: 20,
+    galaxyLastFrameTime: 0,
+    galaxyPointerUpdateAt: 0,
 };
 
 function getTutorialIds() {
-    return Object.keys(TUTORIAL_DEFINITIONS);
+    return getTutorialIdsFromDefinitions(TUTORIAL_DEFINITIONS);
 }
 
 function normalizeTutorialId(value = "", fallback = DEFAULT_TUTORIAL_ID) {
-    const raw = String(value || "").trim().toLowerCase();
-    if (raw && TUTORIAL_DEFINITIONS[raw]) return raw;
-    return fallback;
+    return normalizeTutorialIdFromDefinitions(TUTORIAL_DEFINITIONS, value, fallback);
 }
 
 function getTutorialDefinition(tutorialId = DEFAULT_TUTORIAL_ID) {
-    const resolvedId = normalizeTutorialId(tutorialId, DEFAULT_TUTORIAL_ID);
-    return TUTORIAL_DEFINITIONS[resolvedId] || TUTORIAL_DEFINITIONS[DEFAULT_TUTORIAL_ID];
+    return getTutorialDefinitionFromDefinitions(TUTORIAL_DEFINITIONS, tutorialId, DEFAULT_TUTORIAL_ID);
 }
 
 function getWelcomeProjectHtmlFile() {
@@ -515,6 +352,8 @@ function getTutorialElements() {
     return {
         root,
         highlight: document.getElementById("tutorialIntroHighlight"),
+        backdrop: root.querySelector(".tutorial-intro-backdrop"),
+        galaxy: document.getElementById("tutorialIntroGalaxy"),
         panel: root.querySelector(".tutorial-intro-panel"),
         title: document.getElementById("tutorialIntroTitle"),
         body: document.getElementById("tutorialIntroBody"),
@@ -524,6 +363,25 @@ function getTutorialElements() {
         next: document.getElementById("tutorialIntroNext"),
         skip: document.getElementById("tutorialIntroSkip"),
     };
+}
+
+function setTutorialBackdropHighlightMode(hasActiveHighlight = false, highlightRect = null, ui = getTutorialElements()) {
+    if (!(ui?.backdrop instanceof HTMLElement)) return;
+    if (hasActiveHighlight) {
+        const viewportWidth = Math.max(1, Number(window.innerWidth) || 0);
+        const viewportHeight = Math.max(1, Number(window.innerHeight) || 0);
+        const viewportArea = Math.max(1, viewportWidth * viewportHeight);
+        const rectWidth = Math.max(0, Number(highlightRect?.width) || 0);
+        const rectHeight = Math.max(0, Number(highlightRect?.height) || 0);
+        const coverageRatio = (rectWidth * rectHeight) / viewportArea;
+        if (coverageRatio >= 0.72) {
+            ui.backdrop.style.opacity = "0.96";
+            return;
+        }
+        ui.backdrop.style.opacity = "0";
+        return;
+    }
+    ui.backdrop.style.opacity = "0.96";
 }
 
 function clearTutorialTypewriter() {
@@ -562,6 +420,217 @@ function setTutorialBodyTypewriter(text = "") {
             ui.body.removeAttribute("data-typing");
         }
     }, 14);
+}
+
+function isTutorialReducedMotion() {
+    return typeof window !== "undefined"
+        && typeof window.matchMedia === "function"
+        && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function getTutorialGalaxyExclusionRects(ui = getTutorialElements()) {
+    const rects = [];
+    if (ui?.panel instanceof HTMLElement) {
+        const panelRect = ui.panel.getBoundingClientRect();
+        rects.push({
+            left: panelRect.left - 16,
+            top: panelRect.top - 16,
+            right: panelRect.right + 16,
+            bottom: panelRect.bottom + 16,
+        });
+    }
+    if (ui?.highlight instanceof HTMLElement && !ui.highlight.hidden) {
+        const highlightRect = ui.highlight.getBoundingClientRect();
+        rects.push({
+            left: highlightRect.left - 10,
+            top: highlightRect.top - 10,
+            right: highlightRect.right + 10,
+            bottom: highlightRect.bottom + 10,
+        });
+    }
+    return rects;
+}
+
+function isPointInsideTutorialExclusionRects(x = 0, y = 0, rects = []) {
+    for (let i = 0; i < rects.length; i += 1) {
+        const rect = rects[i];
+        if (!rect) continue;
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function stopTutorialGalaxy() {
+    if (tutorialState.galaxyFrameId) {
+        cancelAnimationFrame(tutorialState.galaxyFrameId);
+        tutorialState.galaxyFrameId = 0;
+    }
+    tutorialState.galaxyLastFrameTime = 0;
+}
+
+function configureTutorialGalaxyPerformance() {
+    const logicalCores = Number(window.navigator?.hardwareConcurrency) || 0;
+    const deviceMemory = Number(window.navigator?.deviceMemory) || 0;
+    const lowPower = (logicalCores > 0 && logicalCores <= 4)
+        || (deviceMemory > 0 && deviceMemory <= 4);
+
+    tutorialState.galaxyLowPower = lowPower;
+    tutorialState.galaxyPixelRatioCap = lowPower ? 1.25 : 1.75;
+    tutorialState.galaxyStarDensityDivisor = lowPower ? 32000 : 26000;
+    tutorialState.galaxyFrameInterval = lowPower ? 34 : 24;
+}
+
+function buildTutorialGalaxyStars(width = 0, height = 0) {
+    const area = Math.max(1, width * height);
+    const starCount = clamp(Math.floor(area / tutorialState.galaxyStarDensityDivisor), 18, tutorialState.galaxyLowPower ? 48 : 68);
+    const stars = [];
+    for (let i = 0; i < starCount; i += 1) {
+        stars.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * (tutorialState.galaxyLowPower ? 0.14 : 0.18),
+            vy: (Math.random() - 0.5) * (tutorialState.galaxyLowPower ? 0.14 : 0.18),
+            radius: 0.6 + (Math.random() * 1.8),
+            alpha: 0.35 + (Math.random() * 0.55),
+            twinkle: Math.random() * Math.PI * 2,
+        });
+    }
+    tutorialState.galaxyStars = stars;
+}
+
+function resizeTutorialGalaxyCanvas(ui = getTutorialElements()) {
+    if (!(ui?.galaxy instanceof HTMLCanvasElement)) return false;
+    const bounds = ui.galaxy.getBoundingClientRect();
+    const width = Math.max(1, Math.round(bounds.width));
+    const height = Math.max(1, Math.round(bounds.height));
+    if (width === tutorialState.galaxyBoundsW && height === tutorialState.galaxyBoundsH && tutorialState.galaxyStars.length) {
+        return true;
+    }
+    tutorialState.galaxyBoundsW = width;
+    tutorialState.galaxyBoundsH = height;
+    const dpr = Math.max(1, Math.min(tutorialState.galaxyPixelRatioCap, window.devicePixelRatio || 1));
+    ui.galaxy.width = Math.round(width * dpr);
+    ui.galaxy.height = Math.round(height * dpr);
+    const ctx = ui.galaxy.getContext("2d", { alpha: true });
+    if (!ctx) return false;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildTutorialGalaxyStars(width, height);
+    return true;
+}
+
+function ensureTutorialGalaxyPointerWired() {
+    if (tutorialState.galaxyPointerWired) return;
+    window.addEventListener("mousemove", (event) => {
+        if (!tutorialState.active) return;
+        const now = performance.now();
+        if (tutorialState.galaxyLowPower && tutorialState.galaxyPointerUpdateAt > 0 && (now - tutorialState.galaxyPointerUpdateAt) < 32) {
+            return;
+        }
+        tutorialState.galaxyPointerUpdateAt = now;
+        tutorialState.galaxyMouseX = Number(event.clientX) || -1;
+        tutorialState.galaxyMouseY = Number(event.clientY) || -1;
+    }, { passive: true });
+    window.addEventListener("mouseleave", () => {
+        tutorialState.galaxyMouseX = -1;
+        tutorialState.galaxyMouseY = -1;
+        tutorialState.galaxyPointerUpdateAt = 0;
+    }, { passive: true });
+    tutorialState.galaxyPointerWired = true;
+}
+
+function renderTutorialGalaxyFrame() {
+    if (!tutorialState.active || tutorialState.galaxyReducedMotion) return;
+    const now = performance.now();
+    if (tutorialState.galaxyLastFrameTime > 0 && (now - tutorialState.galaxyLastFrameTime) < tutorialState.galaxyFrameInterval) {
+        tutorialState.galaxyFrameId = requestAnimationFrame(() => {
+            renderTutorialGalaxyFrame();
+        });
+        return;
+    }
+    tutorialState.galaxyLastFrameTime = now;
+
+    const ui = getTutorialElements();
+    if (!(ui?.galaxy instanceof HTMLCanvasElement) || ui.root?.hidden) return;
+    if (!resizeTutorialGalaxyCanvas(ui)) return;
+    const ctx = ui.galaxy.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
+    const width = tutorialState.galaxyBoundsW;
+    const height = tutorialState.galaxyBoundsH;
+    const stars = tutorialState.galaxyStars;
+    const mx = tutorialState.galaxyMouseX;
+    const my = tutorialState.galaxyMouseY;
+    const exclusionRects = getTutorialGalaxyExclusionRects(ui);
+    const repelRadius = 140;
+    const repelRadiusSq = repelRadius * repelRadius;
+
+    ctx.clearRect(0, 0, width, height);
+
+    for (let i = 0; i < stars.length; i += 1) {
+        const star = stars[i];
+        if (!star) continue;
+
+        if (mx >= 0 && my >= 0) {
+            const dx = star.x - mx;
+            const dy = star.y - my;
+            const distSq = (dx * dx) + (dy * dy);
+            if (distSq > 0 && distSq < repelRadiusSq) {
+                const force = (1 - (distSq / repelRadiusSq)) * 0.22;
+                const invDist = 1 / Math.sqrt(distSq);
+                star.vx += dx * invDist * force;
+                star.vy += dy * invDist * force;
+            }
+        }
+
+        star.vx *= 0.985;
+        star.vy *= 0.985;
+        star.x += star.vx;
+        star.y += star.vy;
+
+        if (star.x < 0) {
+            star.x = 0;
+            star.vx = Math.abs(star.vx) * 0.7;
+        } else if (star.x > width) {
+            star.x = width;
+            star.vx = -Math.abs(star.vx) * 0.7;
+        }
+        if (star.y < 0) {
+            star.y = 0;
+            star.vy = Math.abs(star.vy) * 0.7;
+        } else if (star.y > height) {
+            star.y = height;
+            star.vy = -Math.abs(star.vy) * 0.7;
+        }
+
+        if (isPointInsideTutorialExclusionRects(star.x, star.y, exclusionRects)) {
+            continue;
+        }
+
+        star.twinkle += 0.018;
+        const glow = 0.85 + (Math.sin(star.twinkle) * 0.15);
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(186, 230, 253, ${Math.max(0.1, Math.min(1, star.alpha * glow))})`;
+        ctx.fill();
+    }
+
+    tutorialState.galaxyFrameId = requestAnimationFrame(() => {
+        renderTutorialGalaxyFrame();
+    });
+}
+
+function startTutorialGalaxy() {
+    tutorialState.galaxyReducedMotion = isTutorialReducedMotion();
+    configureTutorialGalaxyPerformance();
+    ensureTutorialGalaxyPointerWired();
+    if (tutorialState.galaxyReducedMotion) {
+        stopTutorialGalaxy();
+        return;
+    }
+    stopTutorialGalaxy();
+    renderTutorialGalaxyFrame();
 }
 
 function rectsOverlap(a, b, gap = 0) {
@@ -888,6 +957,7 @@ function refreshTutorialHighlightPosition({ syncPanel = true } = {}) {
             ui.highlight.hidden = true;
             ui.highlight.style.opacity = "0";
         }
+        setTutorialBackdropHighlightMode(false, ui);
         tutorialState.highlightSignature = "";
         return false;
     }
@@ -997,6 +1067,7 @@ function refreshTutorialHighlightPosition({ syncPanel = true } = {}) {
     if (width <= 0 || height <= 0) {
         ui.highlight.hidden = true;
         ui.highlight.style.opacity = "0";
+        setTutorialBackdropHighlightMode(false, ui);
         tutorialState.highlightSignature = "";
         return false;
     }
@@ -1029,6 +1100,7 @@ function refreshTutorialHighlightPosition({ syncPanel = true } = {}) {
     ui.highlight.style.width = `${ringWidth}px`;
     ui.highlight.style.height = `${ringHeight}px`;
     ui.highlight.style.opacity = "1";
+    setTutorialBackdropHighlightMode(true, { width: ringWidth, height: ringHeight }, ui);
     if (syncPanel) {
         updateTutorialPanelPosition();
     }
@@ -1041,6 +1113,7 @@ function clearTutorialHighlight() {
         ui.highlight.hidden = true;
         ui.highlight.style.opacity = "0";
     }
+    setTutorialBackdropHighlightMode(false, ui);
     tutorialState.highlightNode = null;
     tutorialState.highlightSignature = "";
     updateTutorialPanelPosition();
@@ -1137,8 +1210,12 @@ function closeBeginnerTutorial({ markSeen = true, tutorialId = tutorialState.tut
     tutorialState.stepId = "";
     tutorialState.sandboxDemoRan = false;
     tutorialState.keepFilesMenuOpen = false;
+    tutorialState.galaxyMouseX = -1;
+    tutorialState.galaxyMouseY = -1;
     clearTutorialCommandSearchDemo({ resetInput: true });
     clearTutorialTypewriter();
+    stopTutorialGalaxy();
+    tutorialState.galaxyStars = [];
     clearTutorialHighlight();
     resetTutorialStepReveals();
     if (ui?.root) {
@@ -1193,6 +1270,8 @@ function openBeginnerTutorial({ force = false, tutorialId = DEFAULT_TUTORIAL_ID 
     tutorialState.sandboxDemoRan = false;
     if (resolvedId === "beginner") {
         setPanelOpen("tools", false);
+        setHeaderOpen(true);
+        setFooterOpen(true);
         focusWelcomeProjectInEditor();
     }
     ui.root.hidden = false;
@@ -1201,6 +1280,7 @@ function openBeginnerTutorial({ force = false, tutorialId = DEFAULT_TUTORIAL_ID 
         document.body.setAttribute("data-tutorial-active", "true");
     }
     renderTutorialStep();
+    startTutorialGalaxy();
     status.set("Tutorial started");
     return true;
 }
@@ -1223,11 +1303,20 @@ function wireTutorialIntro() {
         window.addEventListener("resize", () => {
             if (!tutorialState.active) return;
             scheduleTutorialMotionSync();
+            resizeTutorialGalaxyCanvas();
         });
         document.addEventListener("scroll", () => {
             if (!tutorialState.active) return;
             scheduleTutorialMotionSync();
         }, true);
+        document.addEventListener("visibilitychange", () => {
+            if (!tutorialState.active) return;
+            if (document.visibilityState === "hidden") {
+                stopTutorialGalaxy();
+                return;
+            }
+            startTutorialGalaxy();
+        });
         tutorialState.listenersWired = true;
     }
 

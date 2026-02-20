@@ -168,17 +168,6 @@ export const APPLICATIONS = [
         entryFile: "styles.css",
     },
     {
-        id: "roofing-tools-app",
-        name: "Roofing Tools",
-        icon: buildThemedIcon("1f6e0"),
-        files: [
-            { path: "index.html", src: "./assets/apps/roofing-tools/index.html" },
-            { path: "styles.css", src: "./assets/apps/roofing-tools/styles.css" },
-            { path: "app.js", src: "./assets/apps/roofing-tools/app.js" },
-        ],
-        entryFile: "app.js",
-    },
-    {
         id: "calculator-app",
         name: "Calculator",
         icon: buildThemedIcon("1f9ee"),
