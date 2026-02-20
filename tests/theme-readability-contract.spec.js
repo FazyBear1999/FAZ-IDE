@@ -130,7 +130,7 @@ for (const theme of THEMES) {
         status: px("#statusText"),
         fileSearch: px("#fileSearch"),
         editorTab: px(".editor-tab"),
-        footer: px("#footerBrand"),
+        footer: px("#footerStatus"),
       };
     });
 

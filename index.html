@@ -131,12 +131,7 @@
                             </div>
                         </div>
 
-                        <div class="strip-right">
-                            <div class="status" aria-label="Status">
-                                <span class="dot" aria-hidden="true"></span>
-                                <span id="statusText">Ready</span>
-                            </div>
-                        </div>
+                        <div class="strip-right"></div>
                     </header>
 
                     <main id="workspace" class="workspace" aria-label="Main content">
@@ -546,7 +541,10 @@
                     </main>
 
                     <footer class="foot" aria-label="Footer">
-                        <span id="footerBrand">FAZ IDE v0.2.0</span>
+                        <div id="footerStatus" class="status" aria-label="Status">
+                            <span class="dot" aria-hidden="true"></span>
+                            <span id="statusText">Ready</span>
+                        </div>
                         <span id="footerPrivacy" title="Workspace data stays in your browser only">Privacy: Local only</span>
                         <span id="footerEditorStatus" class="foot-editor-status" aria-label="Editor footer status">
                             <span id="footerEditorFile">File Name: -</span>

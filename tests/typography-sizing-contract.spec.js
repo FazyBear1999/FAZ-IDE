@@ -82,7 +82,7 @@ test("typography/sizing: footer status chips remain legible", async ({ page }) =
       return Number.parseFloat(getComputedStyle(node).fontSize || "0");
     };
     return {
-      brand: px("#footerBrand"),
+      brand: px("#footerStatus"),
       dirty: px("#footerEditorDirty"),
       runtime: px("#footerSandbox"),
     };

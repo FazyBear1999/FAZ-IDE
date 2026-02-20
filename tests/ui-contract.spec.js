@@ -28,7 +28,7 @@ const requiredSelectors = [
   "#debugWatchList",
   "#logPanel",
   "#log",
-  "#footerBrand",
+  "#footerStatus",
   "#footerEditorStatus",
   "#footerRuntimeStatus",
   "#themeMenuGroup",

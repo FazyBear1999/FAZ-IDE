@@ -348,10 +348,10 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .top {
     display: grid;
-    grid-template-columns: auto auto auto;
+    grid-template-columns: repeat(3, minmax(max-content, 1fr));
     container-type: inline-size;
     align-items: center;
-    justify-content: center;
+    justify-content: stretch;
     gap: 8px;
     padding-top: 0;
     padding-bottom: 0;
@@ -397,23 +397,23 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 .strip-left {
     flex: 0 0 auto;
-    justify-content: center;
-    justify-self: center;
+    justify-content: flex-start;
+    justify-self: stretch;
 }
 
 .strip-center {
     flex: 0 0 auto;
     justify-content: center;
     min-width: max-content;
-    justify-self: center;
+    justify-self: stretch;
 }
 
 .strip-right {
     flex: 0 0 auto;
-    justify-content: center;
+    justify-content: flex-end;
     min-width: max-content;
     overflow: visible;
-    justify-self: center;
+    justify-self: stretch;
 }
 
 .strip-group {
@@ -613,10 +613,12 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 }
 
 .foot {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 20% 12% 34% 34%;
+    justify-content: stretch;
+    justify-items: center;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     color: var(--text-footer);
     font-size: var(--text-size-2xs);
     line-height: 1.2;
@@ -627,7 +629,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     border-top: 1px solid var(--log-border);
     background: var(--surface-panel);
     min-width: 0;
-    overflow-x: hidden;
+    overflow-x: auto;
     overflow-y: hidden;
     white-space: nowrap;
 }
@@ -638,20 +640,30 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     line-height: 1.2;
 }
 
-.foot > span {
+.foot > * {
     min-width: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    gap: 8px;
-    flex: 1 1 0;
+    gap: 10px;
+    width: 100%;
 }
 
-#footerBrand {
-    font-weight: 600;
-    color: var(--text);
-    margin: 0;
+#footerStatus {
+    justify-content: flex-start;
+    text-align: left;
+    overflow: visible;
+}
+
+#footerStatus .dot {
+    flex: 0 0 auto;
+}
+
+#footerStatus #statusText {
+    flex: 0 1 auto;
+    min-width: 0;
+    text-align: left;
 }
 
 #footerPrivacy {
@@ -662,16 +674,15 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     margin: 0;
 }
 
-#footerBrand,
 #footerPrivacy {
-    flex: 0 0 auto;
+    flex: 1 1 0;
 }
 
 #footerEditorStatus {
     display: inline-flex;
     align-items: center;
-    justify-content: space-evenly;
-    gap: 8px;
+    justify-content: center;
+    gap: 14px;
     min-width: 0;
 }
 
@@ -680,6 +691,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     align-items: center;
     justify-content: center;
     min-width: max-content;
+    padding-inline: 2px;
 }
 
 #footerEditorFile {
@@ -706,8 +718,8 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 #footerRuntimeStatus {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    justify-content: space-evenly;
+    gap: 14px;
+    justify-content: center;
     min-width: 0;
 }
 
@@ -716,6 +728,7 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
     align-items: center;
     justify-content: center;
     min-width: max-content;
+    padding-inline: 2px;
 }
 
 :is(#footerSandbox, #footerStorage, #footerProblems, #footerEditorRuntime, #footerZoom)[data-state="ok"] {
@@ -737,11 +750,10 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 
 @media (max-width: 980px) {
     .foot {
-        justify-content: flex-start;
         overflow-x: auto;
     }
 
-    .foot > span {
+    .foot > * {
         flex: 0 0 auto;
         min-width: max-content;
     }
