@@ -32,7 +32,9 @@ function applySiteUrlOverrides(publicDir, siteUrl) {
     const source = fs.readFileSync(indexPath, "utf8");
     const updated = source
       .replace(/<link rel="canonical" href="[^"]*"\s*\/>/, `<link rel="canonical" href="${canonicalUrl}" />`)
-      .replace(/<meta property="og:url" content="[^"]*"\s*\/>/, `<meta property="og:url" content="${canonicalUrl}" />`);
+      .replace(/<meta property="og:url" content="[^"]*"\s*\/>/, `<meta property="og:url" content="${canonicalUrl}" />`)
+      .replace(/"url"\s*:\s*"\.\/"/g, `"url": "${canonicalUrl}"`)
+      .replace(/"@id"\s*:\s*"\.\/#/g, `"@id": "${canonicalUrl}#`);
     if (updated !== source) {
       fs.writeFileSync(indexPath, updated, "utf8");
     }

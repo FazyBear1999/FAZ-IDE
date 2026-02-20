@@ -12,10 +12,12 @@
         <head>
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>FAZ IDE — Local-First Web IDE for JavaScript, HTML, and CSS</title>
-            <meta name="description" content="FAZ IDE is a local-first web IDE with files, sandbox, diagnostics, and lesson workflows for JavaScript, HTML, and CSS." />
+            <title>Free Online IDE for JavaScript, HTML, and CSS | FAZ IDE</title>
+            <meta name="description" content="FAZ IDE is a free online IDE for JavaScript, HTML, and CSS with local-first files, sandbox execution, diagnostics, and lesson workflows." />
+            <meta name="keywords" content="free online IDE, online code editor, JavaScript IDE, HTML CSS editor, browser IDE, web IDE" />
             <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
             <meta name="application-name" content="FAZ IDE" />
+            <meta name="theme-color" content="#0f1117" />
             <meta name="apple-mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
             <meta name="msapplication-navbutton-color" content="#0f1117" />
@@ -23,14 +25,16 @@
             <link rel="canonical" href="./" />
             <meta property="og:type" content="website" />
             <meta property="og:site_name" content="FAZ IDE" />
-            <meta property="og:title" content="FAZ IDE — Local-First Web IDE" />
-            <meta property="og:description" content="Local-first JavaScript, HTML, and CSS IDE with sandbox execution, diagnostics, and lesson workflows." />
+            <meta property="og:title" content="Free Online IDE for JavaScript, HTML, and CSS | FAZ IDE" />
+            <meta property="og:description" content="Free online IDE with local-first files, sandbox execution, diagnostics, and lesson workflows for JavaScript, HTML, and CSS." />
             <meta property="og:url" content="./" />
             <meta property="og:image" content="./assets/icons/faz-512.png" />
+            <meta property="og:image:alt" content="FAZ IDE interface preview" />
             <meta name="twitter:card" content="summary_large_image" />
-            <meta name="twitter:title" content="FAZ IDE — Local-First Web IDE" />
-            <meta name="twitter:description" content="Local-first JavaScript, HTML, and CSS IDE with sandbox execution, diagnostics, and lesson workflows." />
+            <meta name="twitter:title" content="Free Online IDE for JavaScript, HTML, and CSS | FAZ IDE" />
+            <meta name="twitter:description" content="Free online IDE with local-first files, sandbox execution, diagnostics, and lesson workflows for JavaScript, HTML, and CSS." />
             <meta name="twitter:image" content="./assets/icons/faz-512.png" />
+            <meta name="twitter:image:alt" content="FAZ IDE interface preview" />
             <link rel="manifest" href="./manifest.webmanifest" />
             <link rel="icon" href="./favicon.ico" sizes="any" />
             <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/faz-192.png" />
@@ -57,11 +61,84 @@
             <script src="./assets/vendor/codemirror/mode/javascript/javascript.min.js"></script>
             <script src="./assets/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
 
+            <script type="application/ld+json">
+                {
+                    "@context": "https://schema.org",
+                    "@graph": [
+                        {
+                            "@type": "WebSite",
+                            "@id": "./#website",
+                            "url": "./",
+                            "name": "FAZ IDE",
+                            "description": "Free online IDE for JavaScript, HTML, and CSS with local-first files, sandbox execution, and diagnostics.",
+                            "inLanguage": "en",
+                            "keywords": "free online IDE, JavaScript IDE, HTML editor, CSS editor, browser IDE"
+                        },
+                        {
+                            "@type": "SoftwareApplication",
+                            "@id": "./#app",
+                            "url": "./",
+                            "name": "FAZ IDE",
+                            "applicationCategory": "DeveloperApplication",
+                            "applicationSubCategory": "Online IDE",
+                            "operatingSystem": "Web",
+                            "isAccessibleForFree": true,
+                            "description": "Free online IDE for JavaScript, HTML, and CSS with local-first files, sandbox execution, diagnostics, and lesson workflows.",
+                            "keywords": "free online IDE, code editor, JavaScript, HTML, CSS",
+                            "offers": {
+                                "@type": "Offer",
+                                "price": "0",
+                                "priceCurrency": "USD"
+                            },
+                            "featureList": [
+                                "JavaScript, HTML, and CSS editing",
+                                "Sandbox execution and preview",
+                                "Project files and search",
+                                "Diagnostics and runtime logs",
+                                "Quick Open and command palette",
+                                "Tutorial and lesson workflows"
+                            ]
+                        },
+                        {
+                            "@type": "FAQPage",
+                            "@id": "./#faq",
+                            "mainEntity": [
+                                {
+                                    "@type": "Question",
+                                    "name": "Is FAZ IDE free to use?",
+                                    "acceptedAnswer": {
+                                        "@type": "Answer",
+                                        "text": "Yes. FAZ IDE is a free online IDE for JavaScript, HTML, and CSS."
+                                    }
+                                },
+                                {
+                                    "@type": "Question",
+                                    "name": "What languages can I run in FAZ IDE?",
+                                    "acceptedAnswer": {
+                                        "@type": "Answer",
+                                        "text": "FAZ IDE supports JavaScript execution, HTML preview, and CSS styling workflows in the browser."
+                                    }
+                                },
+                                {
+                                    "@type": "Question",
+                                    "name": "Does FAZ IDE include project tools?",
+                                    "acceptedAnswer": {
+                                        "@type": "Answer",
+                                        "text": "Yes. FAZ IDE includes files, project search, diagnostics, command palette, and lesson workflows."
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            </script>
+
             <!-- App entry -->
             <script type="module" src="./assets/js/app.js"></script>
         </head>
 
         <body>
+            <h1 class="sr-only">Free Online IDE for JavaScript, HTML, and CSS</h1>
             <section id="tutorialIntro" class="tutorial-intro" hidden aria-hidden="true" aria-live="polite">
                 <div id="tutorialIntroHighlight" class="tutorial-intro-highlight" aria-hidden="true" hidden></div>
                 <div class="tutorial-intro-backdrop" aria-hidden="true"></div>

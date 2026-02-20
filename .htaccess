@@ -3,3 +3,31 @@
   AddType application/wasm .wasm
   AddType application/manifest+json .webmanifest
 </IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
+  Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  Header always set Origin-Agent-Cluster "?1"
+  Header always set Cross-Origin-Resource-Policy "same-origin"
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content"
+  Header always set X-XSS-Protection "0"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  RewriteCond %{REQUEST_METHOD} ^TRACE [NC]
+  RewriteRule .* - [F,L]
+
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
+
+<FilesMatch "^(\.env|\.git|composer\.(json|lock)|package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml|webpack\.config\.(js|cjs|mjs)|vite\.config\.(js|ts)|\.htaccess)$">
+  Require all denied
+</FilesMatch>

@@ -116,9 +116,10 @@ Production domain stamping note:
 - Before `npm run deploy:siteground`, set `SITE_URL` in PowerShell so packaged canonical/OG/sitemap URLs are correct.
 - Example: `$env:SITE_URL = "https://yourdomain.com"`
 
-## Desktop App (Safe Path)
+## Desktop App (Paused / Optional)
 
-Run FAZ IDE as a desktop app without changing the web runtime:
+Desktop packaging is intentionally de-prioritized right now so browser quality can stay the main focus.
+Desktop commands remain available for optional/manual use:
 
 - `npm run desktop` launches Electron and serves `dist_site/` internally.
 - `npm run desktop:pack` creates an unpacked desktop build and syncs latest unpacked output to `dist/win-unpacked-latest` (or `dist/win-unpacked-latest-run-*` if locked).
@@ -134,7 +135,8 @@ Run FAZ IDE as a desktop app without changing the web runtime:
 - `npm run test:all:contract` verifies `test:all` still includes all required gates in order.
 - `npm run test` runs the full Playwright E2E suite.
 - `npm run test:quick` runs sync check + AI memory check + test integrity check + full E2E suite.
-- `npm run test:all` runs sync check + E2E + desktop icon + desktop pack + desktop dist checks + SiteGround package prep/verification (full safe release gate).
+- `npm run test:all` runs the browser-first release gate (sync + E2E + SiteGround package prep/verification + privacy checks).
+- `npm run test:all:desktop` runs the browser-first gate plus desktop icon/pack/dist checks when you intentionally want desktop artifacts.
 - `npm run deploy:siteground` supports optional `SITE_URL` rewrite for packaged `canonical`, `og:url`, and `sitemap.xml` `<loc>` entries.
 - `npm run test:desktop:icon` validates desktop icon generation.
 - `npm run test:desktop:pack` validates desktop unpacked build generation.
@@ -191,7 +193,7 @@ Notes:
 - `npm run frank -- help` shows all Franklin commands.
 - `npm run frank:check` runs contract + sync verify + memory verify + Franklin safety + test integrity.
 - `npm run frank:all` is a compatibility alias for `npm run frank:full`.
-- `npm run frank:full` runs the full release gate (`test:all`) with the same organized digest view and writes per-stage logs under `artifacts/frankleen/reports/`.
+- `npm run frank:full` runs the browser-first full release gate (`test:all`) with the same organized digest view and writes per-stage logs under `artifacts/frankleen/reports/`.
 - `npm run frank:guardian` runs full gate with auto preflight snapshot + rollback on failure + fix-request capture.
 - `npm run frank:doctor` runs non-mutating Franklin readiness diagnostics.
 - `npm run frank:snapshot:create` creates a manual guardian snapshot.

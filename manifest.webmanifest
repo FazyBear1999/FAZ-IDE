@@ -2,7 +2,7 @@
   "name": "FAZ IDE",
   "short_name": "FAZ IDE",
   "lang": "en",
-  "description": "Local-first JavaScript IDE with files, sandbox, and pro editor workflows.",
+  "description": "Free online IDE for JavaScript, HTML, and CSS with local-first files, sandbox, and editor workflows.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
