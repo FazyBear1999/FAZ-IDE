@@ -361,16 +361,17 @@ button:focus-visible {
 
 .CodeMirror .cm-lesson-active {
     background: var(--surface-selected-soft);
+    color: var(--text);
 }
 
 .CodeMirror .cm-lesson-ghost {
-    color: var(--text-muted-soft);
-    opacity: 0.38;
-    border-bottom: 1px dashed var(--border-focus-soft);
+    color: var(--text-muted-quiet);
+    opacity: 0.18;
 }
 
 .CodeMirror .cm-lesson-next {
     color: var(--text);
+    background: color-mix(in srgb, var(--surface-selected-soft) 55%, transparent);
     border-bottom: 1px solid var(--border-focus-strong);
     animation: lesson-next-blink 1s steps(1, end) infinite;
 }

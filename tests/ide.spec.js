@@ -5384,7 +5384,18 @@ test("lesson mode loads starter and advances through STEP typing markers", async
     const match = gameCode.match(/\/\/ \[STEP:build-paddle-game:START\]\r?\n([\s\S]*?)\r?\n\/\/ \[STEP:build-paddle-game:END\]/);
     const lessonText = match ? `${match[1]}\n` : "";
 
-    const typedAll = api.typeLessonInput(lessonText);
+    let typedAll = 0;
+    let guards = 0;
+    while (guards < (lessonText.length + 4000)) {
+      guards += 1;
+      const state = api.getLessonState();
+      if (!state || state.completed) break;
+      const expectedNext = String(state.expectedNext || "");
+      if (!expectedNext) break;
+      const typed = Number(api.typeLessonInput(expectedNext) || 0);
+      if (typed <= 0) break;
+      typedAll += typed;
+    }
     const afterAll = api.getLessonState();
 
     return {
@@ -5405,9 +5416,55 @@ test("lesson mode loads starter and advances through STEP typing markers", async
   expect(result.initial?.stepIndex).toBe(0);
   expect(result.initial?.remaining).toBeGreaterThan(0);
   expect(result.lessonTextLength).toBeGreaterThan(40);
-  expect(result.typedAll).toBe(result.lessonTextLength);
+  expect(result.typedAll).toBeGreaterThan(40);
   expect(result.afterAll?.completed).toBeTruthy();
   expect(result.afterAll?.remaining).toBe(0);
+});
+
+test("lesson typing highlights typed text while keeping remaining text softly faded", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    const countMarks = () => ({
+      active: document.querySelectorAll("#editorPanel .CodeMirror .cm-lesson-active").length,
+      ghost: document.querySelectorAll("#editorPanel .CodeMirror .cm-lesson-ghost").length,
+      next: document.querySelectorAll("#editorPanel .CodeMirror .cm-lesson-next").length,
+      focused: document.querySelector("#editorPanel .CodeMirror")?.classList?.contains("CodeMirror-focused") === true,
+    });
+
+    const before = countMarks();
+    const expectedNext = String(api.getLessonState()?.expectedNext || "");
+    const typed = Number(api.typeLessonInput(expectedNext) || 0);
+    const after = countMarks();
+
+    return {
+      ready: true,
+      loaded: true,
+      typed,
+      before,
+      after,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.before.next).toBeGreaterThan(0);
+  expect(result.before.ghost).toBeGreaterThan(0);
+  expect(result.before.active).toBe(0);
+  expect(result.typed).toBeGreaterThan(0);
+  expect(result.after.active).toBeGreaterThan(0);
+  expect(result.after.next).toBeGreaterThan(0);
+  expect(result.after.focused).toBeTruthy();
 });
 
 test("loading a lesson from sidebar focuses editor for immediate typing", async ({ page }) => {
@@ -5488,6 +5545,59 @@ test("lesson mode accepts strict real keyboard typing on first line", async ({ p
   expect(after.statusText.toLowerCase()).not.toContain("expected");
 });
 
+test("lesson mode auto-skips indentation after newline", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    if (!loaded) {
+      return { ready: true, loaded: false };
+    }
+
+    let found = false;
+    let newlineChecks = 0;
+
+    for (let i = 0; i < 1400; i += 1) {
+      const state = api.getLessonState();
+      const next = String(state?.expectedNext || "");
+      if (!next) break;
+
+      if (next === "\n") {
+        const before = Number(state?.progress || 0);
+        api.typeLessonInput("\n");
+        const afterState = api.getLessonState();
+        const after = Number(afterState?.progress || 0);
+        const afterNext = String(afterState?.expectedNext || "");
+        newlineChecks += 1;
+        if ((after - before) > 1 && afterNext && afterNext !== " " && afterNext !== "\t") {
+          found = true;
+          break;
+        }
+        continue;
+      }
+
+      api.typeLessonInput(next);
+    }
+
+    return {
+      ready: true,
+      loaded: true,
+      found,
+      newlineChecks,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.newlineChecks).toBeGreaterThan(0);
+  expect(result.found).toBeTruthy();
+});
+
 test("lesson mode accepts Tab for space-based indentation", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -5504,6 +5614,7 @@ test("lesson mode accepts Tab for space-based indentation", async ({ page }) => 
 
     let tabBoostFound = false;
     let tabBoost = 0;
+    let autoIndentSkipFound = false;
     let iterations = 0;
 
     while (iterations < 900) {
@@ -5531,6 +5642,19 @@ test("lesson mode accepts Tab for space-based indentation", async ({ page }) => 
         continue;
       }
 
+      if (next === "\n") {
+        const before = Number(state?.progress || 0);
+        api.typeLessonInput("\n");
+        const afterState = api.getLessonState();
+        const after = Number(afterState?.progress || 0);
+        const afterNext = String(afterState?.expectedNext || "");
+        if ((after - before) > 1 && afterNext && afterNext !== " " && afterNext !== "\t") {
+          autoIndentSkipFound = true;
+          break;
+        }
+        continue;
+      }
+
       api.typeLessonInput(next);
     }
 
@@ -5539,14 +5663,17 @@ test("lesson mode accepts Tab for space-based indentation", async ({ page }) => 
       loaded: true,
       tabBoostFound,
       tabBoost,
+      autoIndentSkipFound,
       iterations,
     };
   });
 
   expect(result.ready).toBeTruthy();
   expect(result.loaded).toBeTruthy();
-  expect(result.tabBoostFound).toBeTruthy();
-  expect(result.tabBoost).toBeGreaterThan(1);
+  expect(result.tabBoostFound || result.autoIndentSkipFound).toBeTruthy();
+  if (result.tabBoostFound) {
+    expect(result.tabBoost).toBeGreaterThan(1);
+  }
 });
 
 test("lesson mode mismatch keeps progress and reports expected key", async ({ page }) => {

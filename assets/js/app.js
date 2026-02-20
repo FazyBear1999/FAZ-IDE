@@ -10475,11 +10475,51 @@ function syncLessonStateForActiveFile() {
 function setLessonCursorToProgress() {
     const step = getLessonCurrentStep();
     if (!step) return;
+    normalizeLessonProgressToTypeable();
     const index = step.startIndex + Math.max(0, Number(lessonSession.progress) || 0);
     const pos = editor.posFromIndex?.(index);
     if (!pos) return;
     editor.setCursor(pos);
     editor.scrollIntoView?.(pos, 80);
+}
+
+function isLessonIndentationWhitespace(expectedText = "", index = 0) {
+    const source = String(expectedText || "");
+    const target = Math.max(0, Number(index) || 0);
+    const char = source[target] || "";
+    if (char !== " " && char !== "\t") return false;
+    const lineStart = Math.max(0, source.lastIndexOf("\n", Math.max(0, target - 1)) + 1);
+    const linePrefix = source.slice(lineStart, target);
+    return !/[^ \t]/.test(linePrefix);
+}
+
+function normalizeLessonProgressToTypeable() {
+    if (!lessonSession || lessonSession.completed) return 0;
+    const step = getLessonCurrentStep();
+    if (!step) return 0;
+    const expectedText = String(step.expected || "");
+    let progress = clamp(Number(lessonSession.progress) || 0, 0, expectedText.length);
+    let advanced = 0;
+
+    while (progress < expectedText.length) {
+        const next = expectedText[progress] || "";
+        if (next === "\r") {
+            progress += 1;
+            advanced += 1;
+            continue;
+        }
+        if (isLessonIndentationWhitespace(expectedText, progress)) {
+            progress += 1;
+            advanced += 1;
+            continue;
+        }
+        break;
+    }
+
+    if (advanced > 0) {
+        lessonSession.progress = progress;
+    }
+    return advanced;
 }
 
 function focusLessonTypingSurface() {
@@ -10489,12 +10529,50 @@ function focusLessonTypingSurface() {
     });
 }
 
+function markLessonTypedActiveRanges(step, progress) {
+    if (!step) return;
+    const expectedText = String(step.expected || "");
+    const limit = clamp(Number(progress) || 0, 0, expectedText.length);
+    if (limit <= 0) return;
+
+    let runStart = -1;
+    const flushRun = (localEndExclusive) => {
+        if (runStart < 0 || localEndExclusive <= runStart) return;
+        const startPos = editor.posFromIndex?.(step.startIndex + runStart);
+        const endPos = editor.posFromIndex?.(step.startIndex + localEndExclusive);
+        if (!startPos || !endPos) {
+            runStart = -1;
+            return;
+        }
+        editor.markRange?.(startPos, endPos, {
+            className: "cm-lesson-active",
+            kind: "lesson-active",
+            title: `Lesson step: ${step.id}`,
+        });
+        runStart = -1;
+    };
+
+    for (let localIndex = 0; localIndex < limit; localIndex += 1) {
+        const char = expectedText[localIndex] || "";
+        const skip = char === "\n" || char === "\r" || isLessonIndentationWhitespace(expectedText, localIndex);
+        if (skip) {
+            flushRun(localIndex);
+            continue;
+        }
+        if (runStart < 0) {
+            runStart = localIndex;
+        }
+    }
+    flushRun(limit);
+}
+
 function syncLessonGhostMarks() {
     editor.clearMarks?.("lesson-ghost");
     editor.clearMarks?.("lesson-active");
     editor.clearMarks?.("lesson-next");
     const step = getLessonCurrentStep();
     if (!step || lessonSession?.completed) return;
+    normalizeLessonProgressToTypeable();
     const progress = clamp(Number(lessonSession.progress) || 0, 0, step.expected.length);
     const stepStart = editor.posFromIndex?.(step.startIndex);
     const nextCharStartIndex = step.startIndex + progress;
@@ -10502,12 +10580,8 @@ function syncLessonGhostMarks() {
     const typedTo = editor.posFromIndex?.(nextCharStartIndex);
     const nextCharEnd = editor.posFromIndex?.(nextCharEndIndex);
     const stepEnd = editor.posFromIndex?.(step.endIndex);
-    if (stepStart && stepEnd) {
-        editor.markRange?.(stepStart, stepEnd, {
-            className: "cm-lesson-active",
-            kind: "lesson-active",
-            title: `Lesson step: ${step.id}`,
-        });
+    if (stepStart && typedTo && progress > 0) {
+        markLessonTypedActiveRanges(step, progress);
     }
     if (typedTo && nextCharEnd && nextCharStartIndex < step.endIndex) {
         editor.markRange?.(typedTo, nextCharEnd, {
@@ -10518,12 +10592,6 @@ function syncLessonGhostMarks() {
     }
     if (nextCharEnd && stepEnd && nextCharEndIndex < step.endIndex) {
         editor.markRange?.(nextCharEnd, stepEnd, {
-            className: "cm-lesson-ghost",
-            kind: "lesson-ghost",
-            title: "Type this remaining section",
-        });
-    } else if (typedTo && stepEnd && nextCharStartIndex < step.endIndex) {
-        editor.markRange?.(typedTo, stepEnd, {
             className: "cm-lesson-ghost",
             kind: "lesson-ghost",
             title: "Type this remaining section",
@@ -10592,6 +10660,7 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
         mistakes: 0,
         sessionXp: 0,
     };
+    normalizeLessonProgressToTypeable();
     persistLessonSession({ force: true });
     syncLessonGhostMarks();
     setLessonCursorToProgress();
@@ -10655,6 +10724,7 @@ function advanceLessonStep({ announce = true } = {}) {
     lessonSession.sessionXp += LESSON_XP_STEP_COMPLETE;
     awardLessonXp(LESSON_XP_STEP_COMPLETE);
     awardLessonBytes(LESSON_BYTES_STEP_COMPLETE);
+    normalizeLessonProgressToTypeable();
     persistLessonSession();
     syncLessonGhostMarks();
     setLessonCursorToProgress();
@@ -10737,9 +10807,7 @@ function applyLessonInputChar(inputChar = "") {
         return { ok: true, reason: "backspace", progress: lessonSession.progress };
     }
 
-    while (step.expected[lessonSession.progress] === "\r") {
-        lessonSession.progress += 1;
-    }
+    normalizeLessonProgressToTypeable();
 
     const expected = step.expected[lessonSession.progress] || "";
     if (!expected) {
@@ -10768,6 +10836,7 @@ function applyLessonInputChar(inputChar = "") {
     lessonSession.typedChars += matchedLength;
     lessonSession.correctChars += matchedLength;
     lessonSession.progress += matchedLength;
+    normalizeLessonProgressToTypeable();
     lessonSession.streak += matchedLength;
     lessonSession.bestStreak = Math.max(lessonSession.bestStreak, lessonSession.streak);
     lessonSession.sessionXp += LESSON_XP_PER_CHAR * matchedLength;
