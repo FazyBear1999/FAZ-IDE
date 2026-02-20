@@ -330,10 +330,13 @@ const tutorialState = {
     commandDemoToken: 0,
     sandboxDemoRan: false,
     highlightNode: null,
+    highlightSignature: "",
     wired: false,
     listenersWired: false,
     typewriterTimer: null,
     typewriterToken: 0,
+    motionToken: 0,
+    motionSyncScheduled: false,
 };
 
 function getTutorialIds() {
@@ -646,6 +649,38 @@ function updateTutorialPanelPosition() {
     return true;
 }
 
+function syncTutorialMotionStep() {
+    if (!tutorialState.active) return false;
+    refreshTutorialHighlightPosition();
+    updateTutorialPanelPosition();
+    return true;
+}
+
+function runTutorialMotionFrames(frameCount = 8) {
+    tutorialState.motionToken += 1;
+    tutorialState.motionSyncScheduled = false;
+    const localToken = tutorialState.motionToken;
+    let remaining = Math.max(1, Number(frameCount) || 0);
+    const tick = () => {
+        if (!tutorialState.active || localToken !== tutorialState.motionToken) return;
+        syncTutorialMotionStep();
+        remaining -= 1;
+        if (remaining > 0) scheduleFrame(tick);
+    };
+    tick();
+}
+
+function scheduleTutorialMotionSync() {
+    if (!tutorialState.active || tutorialState.motionSyncScheduled) return;
+    tutorialState.motionSyncScheduled = true;
+    const localToken = tutorialState.motionToken;
+    scheduleFrame(() => {
+        tutorialState.motionSyncScheduled = false;
+        if (!tutorialState.active || localToken !== tutorialState.motionToken) return;
+        syncTutorialMotionStep();
+    });
+}
+
 function resetTutorialStepReveals() {
     clearTutorialCommandSearchDemo({ resetInput: true });
     tutorialState.activeFilesTabFocus = "";
@@ -666,18 +701,6 @@ function resetTutorialStepReveals() {
 function applyTutorialStepReveal(step) {
     const reveal = step?.reveal;
     if (!reveal || typeof reveal !== "object") return;
-
-    const syncTutorialMotionFrames = (frameCount = 8) => {
-        let remaining = Math.max(1, Number(frameCount) || 0);
-        const tick = () => {
-            if (!tutorialState.active) return;
-            refreshTutorialHighlightPosition();
-            updateTutorialPanelPosition();
-            remaining -= 1;
-            if (remaining > 0) scheduleFrame(tick);
-        };
-        tick();
-    };
 
     const prefersReducedMotion = typeof window !== "undefined"
         && typeof window.matchMedia === "function"
@@ -737,7 +760,7 @@ function applyTutorialStepReveal(step) {
                     }
                 }
             }
-            syncTutorialMotionFrames(prefersReducedMotion ? 8 : 18);
+            runTutorialMotionFrames(prefersReducedMotion ? 8 : 18);
         };
 
         openFocusedTab();
@@ -751,7 +774,7 @@ function applyTutorialStepReveal(step) {
         if (!(el.filesMenuButton instanceof HTMLElement) || !(el.filesMenu instanceof HTMLElement)) return;
         openFilesMenu(el.filesMenuButton);
         el.filesMenu.scrollTop = 0;
-        syncTutorialMotionFrames(3);
+        runTutorialMotionFrames(3);
         const syncViewSection = ({ smooth = false } = {}) => {
             if (!(el.filesMenu instanceof HTMLElement)) return;
             const viewSection = el.filesMenu.querySelector('[aria-label="View actions"]');
@@ -780,7 +803,7 @@ function applyTutorialStepReveal(step) {
                 tutorialState.highlightNode = viewHighlight;
             }
 
-            syncTutorialMotionFrames(smooth ? 14 : 4);
+            runTutorialMotionFrames(smooth ? 14 : 4);
         };
 
         scheduleFrame(() => {
@@ -799,7 +822,7 @@ function applyTutorialStepReveal(step) {
             openFilesMenu(el.filesMenuButton);
             if (el.filesMenu instanceof HTMLElement) el.filesMenu.scrollTop = 0;
             scheduleFrame(() => {
-                syncTutorialMotionFrames(5);
+                runTutorialMotionFrames(5);
             });
         });
     }
@@ -812,7 +835,7 @@ function applyTutorialStepReveal(step) {
     }
     if (reveal.sandboxActions === true && el.runnerShell instanceof HTMLElement) {
         el.runnerShell.dataset.tutorialActions = "true";
-        syncTutorialMotionFrames(prefersReducedMotion ? 6 : 12);
+        runTutorialMotionFrames(prefersReducedMotion ? 6 : 12);
     }
     if (reveal.topCommandMenu === true) setTopCommandPaletteOpen(true);
     if (reveal.layoutPanel === true) setLayoutPanelOpen(true);
@@ -832,6 +855,7 @@ function refreshTutorialHighlightPosition() {
             ui.highlight.hidden = true;
             ui.highlight.style.opacity = "0";
         }
+        tutorialState.highlightSignature = "";
         return false;
     }
 
@@ -940,6 +964,7 @@ function refreshTutorialHighlightPosition() {
     if (width <= 0 || height <= 0) {
         ui.highlight.hidden = true;
         ui.highlight.style.opacity = "0";
+        tutorialState.highlightSignature = "";
         return false;
     }
 
@@ -955,6 +980,16 @@ function refreshTutorialHighlightPosition() {
     const bottom = Math.round(clamp(paddedBottom, top + 1, Math.max(top + 1, clampBounds.bottom)));
     const ringWidth = Math.max(1, right - left);
     const ringHeight = Math.max(1, bottom - top);
+
+    const nextSignature = `${left}:${top}:${ringWidth}:${ringHeight}`;
+    if (tutorialState.highlightSignature === nextSignature && !ui.highlight.hidden) {
+        if (ui.highlight.style.opacity !== "1") {
+            ui.highlight.style.opacity = "1";
+        }
+        return true;
+    }
+
+    tutorialState.highlightSignature = nextSignature;
     ui.highlight.hidden = false;
     ui.highlight.style.left = `${left}px`;
     ui.highlight.style.top = `${top}px`;
@@ -972,6 +1007,7 @@ function clearTutorialHighlight() {
         ui.highlight.style.opacity = "0";
     }
     tutorialState.highlightNode = null;
+    tutorialState.highlightSignature = "";
     updateTutorialPanelPosition();
 }
 
@@ -1028,17 +1064,6 @@ function renderTutorialStep() {
         const prefersReducedMotion = typeof window !== "undefined"
             && typeof window.matchMedia === "function"
             && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const syncTransition = (frameCount = 10) => {
-            let remaining = Math.max(1, Number(frameCount) || 0);
-            const tick = () => {
-                if (!tutorialState.active) return;
-                refreshTutorialHighlightPosition();
-                updateTutorialPanelPosition();
-                remaining -= 1;
-                if (remaining > 0) scheduleFrame(tick);
-            };
-            tick();
-        };
         scheduleFrame(() => {
             try {
                 target.scrollIntoView({
@@ -1049,7 +1074,7 @@ function renderTutorialStep() {
             } catch {
                 // no-op
             }
-            syncTransition(prefersReducedMotion ? 4 : 12);
+            runTutorialMotionFrames(prefersReducedMotion ? 4 : 12);
         });
     } else {
         refreshTutorialHighlightPosition();
@@ -1072,6 +1097,8 @@ function renderTutorialStep() {
 function closeBeginnerTutorial({ markSeen = true, tutorialId = tutorialState.tutorialId } = {}) {
     const ui = getTutorialElements();
     tutorialState.active = false;
+    tutorialState.motionToken += 1;
+    tutorialState.motionSyncScheduled = false;
     tutorialState.stepId = "";
     tutorialState.sandboxDemoRan = false;
     tutorialState.keepFilesMenuOpen = false;
@@ -1124,6 +1151,8 @@ function openBeginnerTutorial({ force = false, tutorialId = DEFAULT_TUTORIAL_ID 
     if (!force && getTutorialSeen(resolvedId)) return false;
     tutorialState.tutorialId = resolvedId;
     tutorialState.active = true;
+    tutorialState.motionToken += 1;
+    tutorialState.motionSyncScheduled = false;
     tutorialState.index = 0;
     tutorialState.stepId = "";
     tutorialState.sandboxDemoRan = false;
@@ -1158,13 +1187,11 @@ function wireTutorialIntro() {
     if (!tutorialState.listenersWired) {
         window.addEventListener("resize", () => {
             if (!tutorialState.active) return;
-            refreshTutorialHighlightPosition();
-            updateTutorialPanelPosition();
+            scheduleTutorialMotionSync();
         });
         document.addEventListener("scroll", () => {
             if (!tutorialState.active) return;
-            refreshTutorialHighlightPosition();
-            updateTutorialPanelPosition();
+            scheduleTutorialMotionSync();
         }, true);
         tutorialState.listenersWired = true;
     }
@@ -23099,6 +23126,14 @@ async function boot() {
     }
     if (el.layoutBackdrop) {
         el.layoutBackdrop.addEventListener("click", () => setLayoutPanelOpen(false));
+    }
+    if (el.layoutTutorial) {
+        el.layoutTutorial.addEventListener("click", () => {
+            window.fazide.resetTutorial("beginner");
+            window.fazide.startTutorial("beginner");
+            setLayoutPanelOpen(false);
+            status.set("Tutorial restarted");
+        });
     }
     if (el.layoutReset) {
         el.layoutReset.addEventListener("click", () => {

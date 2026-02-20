@@ -3335,6 +3335,60 @@ test("beginner tutorial reset restarts from the first step", async ({ page }) =>
   expect(after.seen).toBeFalsy();
 });
 
+test("layout menu Tutorial button restarts beginner tutorial and matches Reset size", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.resetTutorial || !api?.startTutorial) {
+      return { ready: false };
+    }
+
+    api.resetTutorial("beginner");
+
+    const layoutToggle = document.querySelector("#layoutToggle");
+    if (!(layoutToggle instanceof HTMLElement)) {
+      return { ready: false };
+    }
+    layoutToggle.click();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const tutorialButton = document.querySelector("#layoutTutorial");
+    const resetButton = document.querySelector("#layoutReset");
+    if (!(tutorialButton instanceof HTMLElement) || !(resetButton instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const tutorialRect = tutorialButton.getBoundingClientRect();
+    const resetRect = resetButton.getBoundingClientRect();
+    const widthDelta = Math.abs(tutorialRect.width - resetRect.width);
+    const heightDelta = Math.abs(tutorialRect.height - resetRect.height);
+
+    tutorialButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    const intro = document.querySelector("#tutorialIntro");
+    const title = String(document.querySelector("#tutorialIntroTitle")?.textContent || "").trim();
+    const progress = String(document.querySelector("#tutorialIntroProgress")?.textContent || "").trim().toLowerCase();
+
+    return {
+      ready: true,
+      widthDelta,
+      heightDelta,
+      tutorialVisible: Boolean(intro instanceof HTMLElement && !intro.hidden),
+      title,
+      progress,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.widthDelta).toBeLessThanOrEqual(1);
+  expect(result.heightDelta).toBeLessThanOrEqual(1);
+  expect(result.tutorialVisible).toBeTruthy();
+  expect(result.title).toBe("Welcome to FAZ IDE");
+  expect(result.progress).toContain("step 1 of");
+});
+
 test("beginner tutorial panel follows target without overlapping spotlight", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 

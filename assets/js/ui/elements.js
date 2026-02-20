@@ -253,6 +253,7 @@ export function getRequiredElements() {
         dockOverlay: $("#dockOverlay"),
         layoutToggle: $("#layoutToggle"),
         layoutClose: $("#layoutClose"),
+        layoutTutorial: $("#layoutTutorial"),
         layoutReset: $("#layoutReset"),
         layoutPreset: $("#layoutPreset"),
         layoutOrderLog: $("#layoutOrderLog"),
