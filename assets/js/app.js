@@ -651,7 +651,7 @@ function updateTutorialPanelPosition() {
 
 function syncTutorialMotionStep() {
     if (!tutorialState.active) return false;
-    refreshTutorialHighlightPosition();
+    refreshTutorialHighlightPosition({ syncPanel: false });
     updateTutorialPanelPosition();
     return true;
 }
@@ -848,7 +848,7 @@ function applyTutorialStepReveal(step) {
     if (typeof reveal.consoleView === "string") setConsoleView(reveal.consoleView);
 }
 
-function refreshTutorialHighlightPosition() {
+function refreshTutorialHighlightPosition({ syncPanel = true } = {}) {
     const ui = getTutorialElements();
     if (!ui?.highlight || !tutorialState.active || !(tutorialState.highlightNode instanceof HTMLElement)) {
         if (ui?.highlight) {
@@ -996,7 +996,9 @@ function refreshTutorialHighlightPosition() {
     ui.highlight.style.width = `${ringWidth}px`;
     ui.highlight.style.height = `${ringHeight}px`;
     ui.highlight.style.opacity = "1";
-    updateTutorialPanelPosition();
+    if (syncPanel) {
+        updateTutorialPanelPosition();
+    }
     return true;
 }
 
