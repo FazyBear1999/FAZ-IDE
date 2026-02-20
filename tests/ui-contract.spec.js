@@ -33,6 +33,7 @@ const requiredSelectors = [
   "#footerRuntimeStatus",
   "#themeMenuGroup",
   "#themeSelect",
+  "#buyMeCoffeeBtn",
   "#statusText",
   "#quickOpenPalette",
   "#commandPalette",

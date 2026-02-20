@@ -79,6 +79,7 @@ export function getRequiredElements() {
         topCommandPaletteList: $("#topCommandPaletteList"),
         topCommandPaletteHint: $("#topCommandPaletteHint"),
         btnLessonStats: $("#lessonStatsBtn"),
+        btnBuyMeCoffee: $("#buyMeCoffeeBtn"),
         lessonHeaderStats: $("#lessonHeaderStats"),
         lessonHeaderLevel: $("#lessonHeaderLevel"),
         lessonHeaderXp: $("#lessonHeaderXp"),

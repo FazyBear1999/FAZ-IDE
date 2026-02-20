@@ -23276,6 +23276,11 @@ async function boot() {
             setHeaderOpen(!layoutState.headerOpen);
         });
     }
+    if (el.btnBuyMeCoffee) {
+        el.btnBuyMeCoffee.addEventListener("click", () => {
+            window.open("https://buymeacoffee.com/fazybear", "_blank", "noopener,noreferrer");
+        });
+    }
     if (el.btnToggleFooter) {
         el.btnToggleFooter.addEventListener("click", () => {
             setFooterOpen(!layoutState.footerOpen);
