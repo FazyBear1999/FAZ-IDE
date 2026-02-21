@@ -3216,15 +3216,18 @@ test("renaming a file in a folder keeps its folder path", async ({ page }) => {
   await expect(input).toHaveValue(created.leaf);
 
   await input.fill("renamed");
-  await input.press("Enter");
-
-  const renamedPath = await page.evaluate((id) => {
-    const list = window.fazide?.listFiles?.() || [];
-    const file = list.find((entry) => entry.id === id);
-    return file?.name || "";
+  await page.evaluate((id) => {
+    const renameInput = document.querySelector(`[data-file-rename="${id}"]`);
+    renameInput?.blur?.();
   }, created.id);
 
-  expect(renamedPath).toBe(`${created.folder}/renamed`);
+  await expect
+    .poll(async () => {
+      const list = await page.evaluate(() => window.fazide?.listFiles?.() || []);
+      const file = list.find((entry) => entry.id === created.id);
+      return file?.name || "";
+    })
+    .toBe(`${created.folder}/renamed`);
 });
 
 test("files tree renders folder and file-type icons for html/js entries", async ({ page }) => {
