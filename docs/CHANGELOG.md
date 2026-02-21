@@ -1,6 +1,13 @@
 # Changelog
 
 ## 2026-02-20
+- Added Supabase + Google OAuth account integration with local-first fallback when auth keys are not configured.
+- Reworked Account modal UX: cloud connect controls, sync status metadata, disconnected email hiding, and in-field eye toggle visibility control.
+- Hardened cloud sync trust path with per-user lesson baseline/delta verification to block manipulated local byte/XP uploads.
+- Added SQL account hardening migration for profile/workspace payload constraints, RLS ownership policies, and progression guard trigger windows.
+- Extended production CSP/connect allowances for Supabase + `esm.sh` and added deploy-time auth env injection for SiteGround packaging.
+- Added security guardrails (`test:secrets`, pre-commit privacy/secret hook) plus account micro/live test coverage updates.
+- Verified full readiness with passing integrity/privacy/secrets checks and a green `frank:full` release gate.
 - Completed CSS maintainability hardening pass with shared micro-primitives for stroke/ring/letter-spacing tokens in `assets/css/base.css`.
 - Ran Phase 2 typography consistency refactor by replacing repeated `letter-spacing` literals in `assets/css/components.css` with shared token variables.
 - Refined high-churn layout/component interaction styling to consume shared primitives without visual behavior drift.
