@@ -62,9 +62,42 @@ test("lesson micro: loading a lesson starts an active typed-step session", async
   expect(result.active).toBeTruthy();
   expect(result.completed).toBeFalsy();
   expect(result.stepCount).toBeGreaterThanOrEqual(1);
-  expect(result.stepId).toBe("instant-output-smoke");
+  expect(result.stepId).toBe("instant-output-warmup");
   expect(result.progress).toBe(0);
-  expect(result.expectedLength).toBeGreaterThan(0);
+  expect(result.expectedLength).toBeGreaterThan(80);
+});
+
+test("lesson micro: first beginner lesson uses a modern multi-line warmup step", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    const before = api.getLessonState();
+    const seed = String(before?.expectedNext || "").slice(0, 12);
+    const typed = Number(api.typeLessonInput(seed) || 0);
+    const after = api.getLessonState();
+
+    return {
+      ready: true,
+      loaded: Boolean(loaded),
+      stepId: String(before?.stepId || ""),
+      expectedLength: Number(before?.expectedLength || 0),
+      typed,
+      progressAfter: Number(after?.progress || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.stepId).toBe("instant-output-warmup");
+  expect(result.expectedLength).toBeGreaterThan(80);
+  expect(result.typed).toBeGreaterThan(0);
+  expect(result.progressAfter).toBeGreaterThan(0);
 });
 
 test("lesson micro: typing expected content completes lesson and updates profile", async ({ page }) => {
@@ -172,7 +205,9 @@ test("lesson micro: partial session resumes after reload", async ({ page }) => {
     if (!api?.loadLesson || !api?.typeLessonInput || !api?.getLessonState) return { ready: false };
 
     await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
-    const typed = api.typeLessonInput("0");
+    const firstState = api.getLessonState();
+    const expectedNext = String(firstState?.expectedNext || "");
+    const typed = api.typeLessonInput(expectedNext);
     const state = api.getLessonState();
 
     return {
@@ -186,9 +221,9 @@ test("lesson micro: partial session resumes after reload", async ({ page }) => {
   });
 
   expect(beforeReload.ready).toBeTruthy();
-  expect(beforeReload.typed).toBe(1);
+  expect(beforeReload.typed).toBeGreaterThanOrEqual(1);
   expect(beforeReload.progress).toBeGreaterThanOrEqual(1);
-  expect(beforeReload.stepId).toBe("instant-output-smoke");
+  expect(beforeReload.stepId).toBe("instant-output-warmup");
   expect(beforeReload.active).toBeTruthy();
   expect(beforeReload.completed).toBeFalsy();
 
@@ -211,7 +246,7 @@ test("lesson micro: partial session resumes after reload", async ({ page }) => {
   expect(afterReload.ready).toBeTruthy();
   expect(afterReload.active).toBeTruthy();
   expect(afterReload.completed).toBeFalsy();
-  expect(afterReload.stepId).toBe("instant-output-smoke");
+  expect(afterReload.stepId).toBe("instant-output-warmup");
   expect(afterReload.progress).toBeGreaterThanOrEqual(1);
   expect(afterReload.expectedLength).toBeGreaterThan(afterReload.progress);
 });

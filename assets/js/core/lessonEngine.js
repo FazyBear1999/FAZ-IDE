@@ -1,4 +1,5 @@
-const STEP_MARKER = /\[STEP:([A-Za-z0-9._-]+):(START|END)\]/;
+const LEGACY_STEP_MARKER = /\[STEP:([A-Za-z0-9._-]+):(START|END)\]/;
+const LESSON_MARKER = /\[LESSON:([A-Za-z0-9._-]+)\]/;
 
 function getLineOffsets(source = "") {
     const text = String(source || "");
@@ -13,17 +14,33 @@ function getLineOffsets(source = "") {
 
 export function parseLessonSteps(source = "") {
     const text = String(source || "").replace(/\r\n?/g, "\n");
-    if (!text || text.indexOf("[STEP:") === -1) return [];
+    if (!text || (text.indexOf("[STEP:") === -1 && text.indexOf("[LESSON:") === -1)) return [];
     const lines = text.split("\n");
     const offsets = getLineOffsets(text);
     const openById = new Map();
     let nextOrder = 0;
     const parsed = [];
+    const lessonMarkers = [];
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const line = String(lines[lineIndex] || "");
+        if (line.indexOf("[LESSON:") !== -1) {
+            const lessonMatch = line.match(LESSON_MARKER);
+            if (lessonMatch) {
+                const id = String(lessonMatch[1] || "").trim();
+                if (id) {
+                    lessonMarkers.push({
+                        id,
+                        lineIndex,
+                        order: nextOrder,
+                    });
+                    nextOrder += 1;
+                }
+            }
+        }
+
         if (line.indexOf("[STEP:") === -1) continue;
-        const match = line.match(STEP_MARKER);
+        const match = line.match(LEGACY_STEP_MARKER);
         if (!match) continue;
         const id = String(match[1] || "").trim();
         const kind = String(match[2] || "").trim().toUpperCase();
@@ -57,6 +74,36 @@ export function parseLessonSteps(source = "") {
                 });
             }
             openById.delete(id);
+        }
+    }
+
+    if (lessonMarkers.length > 0) {
+        for (let index = 0; index < lessonMarkers.length; index += 1) {
+            const marker = lessonMarkers[index];
+            const nextMarker = lessonMarkers[index + 1] || null;
+            const startLine = marker.lineIndex + 1;
+            const maxEndLine = nextMarker ? nextMarker.lineIndex : lines.length;
+            let nextLine = maxEndLine;
+            for (let probe = startLine; probe < maxEndLine; probe += 1) {
+                const raw = String(lines[probe] || "");
+                if (!raw.trim()) {
+                    nextLine = probe;
+                    break;
+                }
+            }
+            const startIndex = offsets[startLine] ?? text.length;
+            const endIndex = Math.max(startIndex, offsets[nextLine] ?? text.length);
+            const expected = text.slice(startIndex, endIndex);
+            if (!expected.length) continue;
+            parsed.push({
+                id: marker.id,
+                startIndex,
+                endIndex,
+                expected,
+                startLine: startLine + 1,
+                endLine: nextLine,
+                order: marker.order,
+            });
         }
     }
 

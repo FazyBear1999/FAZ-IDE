@@ -6234,7 +6234,7 @@ test("quick 1-line lesson auto-runs connected html output when completed", async
   expect(result.statusText.toLowerCase()).toContain("ran");
 });
 
-test("instant lesson auto-runs connected html output with 2-key typing", async ({ page }) => {
+test("instant lesson auto-runs connected html output with guided warmup typing", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(async () => {
@@ -6251,7 +6251,7 @@ test("instant lesson auto-runs connected html output with 2-key typing", async (
 
     const loaded = await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
     let typedChars = 0;
-    const deadline = Date.now() + 1800;
+    const deadline = Date.now() + 3600;
     while (Date.now() < deadline) {
       const state = api.getLessonState();
       if (!state || state.completed) break;
@@ -6280,9 +6280,9 @@ test("instant lesson auto-runs connected html output with 2-key typing", async (
   expect(result.ready).toBeTruthy();
   expect(result.hasLesson).toBeTruthy();
   expect(result.loaded).toBeTruthy();
-  expect(result.typedChars).toBeGreaterThan(1);
+  expect(result.typedChars).toBeGreaterThan(8);
   expect(result.completed).toBeTruthy();
-  expect(result.logText).toContain("Instant lesson output ready.");
+  expect(result.logText).toContain("Instant warmup lesson ready.");
 });
 
 test("lesson typing highlights typed text while keeping remaining text softly faded", async ({ page }) => {

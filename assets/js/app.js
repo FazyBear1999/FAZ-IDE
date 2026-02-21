@@ -2999,6 +2999,7 @@ const games = normalizeGames(GAMES);
 const applications = normalizeApplications(APPLICATIONS);
 const lessons = normalizeLessons(LESSONS);
 const lessonsCatalogReport = buildLessonsCatalogReport(LESSONS, lessons);
+const lessonsByTier = buildLessonsByTierMap(lessons);
 if (lessonsCatalogReport.duplicateIds.length || lessonsCatalogReport.invalidTiers.length) {
     console.warn("[FAZ IDE] Lesson catalog issues detected", lessonsCatalogReport);
 }
@@ -9834,13 +9835,30 @@ function normalizeLessonTierModalKey(value = "") {
     return LESSON_TIER_ORDER.includes(raw) ? raw : "";
 }
 
-function getLessonTierCounts() {
-    const counts = { beginner: 0, intermediate: 0, expert: 0 };
-    lessons.forEach((lesson) => {
-        const tier = normalizeLessonTier(lesson.tier);
-        counts[tier] += 1;
+function buildLessonsByTierMap(items = []) {
+    const source = Array.isArray(items) ? items : [];
+    const buckets = {
+        beginner: [],
+        intermediate: [],
+        expert: [],
+    };
+    source.forEach((lesson) => {
+        const tier = normalizeLessonTier(lesson?.tier);
+        buckets[tier].push(lesson);
     });
-    return counts;
+    return Object.freeze({
+        beginner: Object.freeze([...buckets.beginner]),
+        intermediate: Object.freeze([...buckets.intermediate]),
+        expert: Object.freeze([...buckets.expert]),
+    });
+}
+
+function getLessonTierCounts() {
+    return {
+        beginner: Math.max(0, Number(lessonsCatalogReport.tierCounts?.beginner || 0)),
+        intermediate: Math.max(0, Number(lessonsCatalogReport.tierCounts?.intermediate || 0)),
+        expert: Math.max(0, Number(lessonsCatalogReport.tierCounts?.expert || 0)),
+    };
 }
 
 function syncLessonTierMap({ show = true } = {}) {
@@ -9865,7 +9883,7 @@ function syncLessonTierMap({ show = true } = {}) {
 
 function getLessonTierModalEntries(tier = "") {
     const normalizedTier = normalizeLessonTierModalKey(tier);
-    const items = lessons.filter((lesson) => normalizeLessonTier(lesson.tier) === normalizedTier);
+    const items = normalizedTier ? [...(lessonsByTier[normalizedTier] || [])] : [];
     const entries = [];
     for (let index = 0; index < LESSON_TIER_MODAL_SLOT_COUNT; index += 1) {
         const lesson = items[index] || null;
@@ -10074,9 +10092,6 @@ function syncLessonsUI() {
         el.lessonLoad.disabled = true;
     }
     if (!visible) return;
-    LESSON_TIER_ORDER.forEach((tier) => {
-        renderLessonTierModalList(tier);
-    });
 }
 
 async function loadTemplateFilesFromSources(templateFiles = [], contextLabel = "Template") {
@@ -10871,7 +10886,7 @@ async function initAccountAuth() {
     const initResult = await accountAuthClient.init();
     accountAuthReady = Boolean(initResult?.ok);
     if (!accountAuthReady) {
-        setAccountAuthHint("Cloud auth unavailable. Check Supabase URL/anon key and deploy again.");
+        setAccountAuthHint("Cloud sign-in is unavailable right now. Please try again later.");
         renderAccountUi();
         return;
     }
@@ -11602,7 +11617,7 @@ function triggerLessonHudBurst(message = "") {
     }, 620);
 }
 
-function awardLessonXp(amount = 0, { typedChars = 0 } = {}) {
+function awardLessonXp(amount = 0, { typedChars = 0, persist = true } = {}) {
     const delta = Math.max(0, Math.floor(Number(amount) || 0));
     if (!delta) return;
     const previousLevel = lessonProfile.level;
@@ -11619,17 +11634,21 @@ function awardLessonXp(amount = 0, { typedChars = 0 } = {}) {
         triggerLessonEditorLevelUp(lessonProfile.level);
         triggerLessonHaptic(12);
     }
-    persistLessonProfile();
+    if (persist) {
+        persistLessonProfile();
+    }
 }
 
-function awardLessonBytes(amount = 0, { burst = "" } = {}) {
+function awardLessonBytes(amount = 0, { burst = "", persist = true } = {}) {
     const delta = Math.max(0, Math.floor(Number(amount) || 0));
     if (!delta) return;
     lessonProfile.bytes = Math.max(0, Number(lessonProfile.bytes) || 0) + delta;
     if (burst) {
         triggerLessonHudBurst(String(burst));
     }
-    persistLessonProfile();
+    if (persist) {
+        persistLessonProfile();
+    }
 }
 
 function isLessonFamilyFile(file = null) {
@@ -12125,8 +12144,8 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
         : String(file.code || "");
     const steps = parseLessonSteps(source);
     if (!steps.length) {
-        status.set("No lesson STEP markers found");
-        logger.append("warn", ["Lesson mode expects markers like [STEP:id:START] / [STEP:id:END]."]);
+        status.set("No lesson markers found");
+        logger.append("warn", ["Lesson mode expects markers like [LESSON:id] before each practice block."]);
         return false;
     }
 
@@ -12174,8 +12193,8 @@ function advanceLessonStep({ announce = true } = {}) {
         const completionBonus = LESSON_XP_LESSON_COMPLETE + (lessonSession.mistakes === 0 ? LESSON_XP_PERFECT_BONUS : 0);
         const completionBytes = LESSON_BYTES_LESSON_COMPLETE + (lessonSession.mistakes === 0 ? LESSON_BYTES_PERFECT_BONUS : 0);
         lessonSession.sessionXp += completionBonus;
-        awardLessonXp(completionBonus);
-        awardLessonBytes(completionBytes, { burst: `+${completionBytes} Bytes` });
+        awardLessonXp(completionBonus, { persist: false });
+        awardLessonBytes(completionBytes, { burst: `+${completionBytes} Bytes`, persist: false });
         lessonProfile.lessonsCompleted += 1;
         lessonProfile.currentStreak = lessonSession.streak;
         lessonProfile.bestStreak = Math.max(lessonProfile.bestStreak, lessonSession.bestStreak);
@@ -12213,8 +12232,9 @@ function advanceLessonStep({ announce = true } = {}) {
     lessonSession.progress = 0;
     resetLessonMismatchFeedback();
     lessonSession.sessionXp += LESSON_XP_STEP_COMPLETE;
-    awardLessonXp(LESSON_XP_STEP_COMPLETE);
-    awardLessonBytes(LESSON_BYTES_STEP_COMPLETE);
+    awardLessonXp(LESSON_XP_STEP_COMPLETE, { persist: false });
+    awardLessonBytes(LESSON_BYTES_STEP_COMPLETE, { persist: false });
+    persistLessonProfile();
     normalizeLessonProgressToTypeable();
     persistLessonSession();
     refreshLessonTypingVisualState({ prefix: announce ? "Lesson step" : "Lesson" });
@@ -12271,9 +12291,6 @@ function resolveLessonInputSequence(inputChar = "", step = null, progress = 0) {
 
 function applyLessonInputChar(inputChar = "") {
     if (!isLessonSessionActiveForCurrentFile()) return { ok: false, reason: "inactive" };
-    const initialLessonState = getLessonStepRuntimeState();
-    if (!initialLessonState) return { ok: false, reason: "missing-step" };
-    const step = initialLessonState.step;
     const value = String(inputChar || "");
     if (!value) return { ok: false, reason: "empty" };
 
@@ -12296,6 +12313,7 @@ function applyLessonInputChar(inputChar = "") {
 
     const lessonState = getLessonStepRuntimeState({ normalizeProgress: true });
     if (!lessonState) return { ok: false, reason: "missing-step" };
+    const step = lessonState.step;
     const expectedText = lessonState.expectedText;
     const progress = lessonState.progress;
     const expected = expectedText[progress] || "";
@@ -12339,14 +12357,15 @@ function applyLessonInputChar(inputChar = "") {
     lessonSession.sessionXp += LESSON_XP_PER_CHAR * matchedLength;
     lessonProfile.currentStreak = lessonSession.streak;
     lessonProfile.bestStreak = Math.max(lessonProfile.bestStreak, lessonSession.bestStreak);
-    awardLessonXp(LESSON_XP_PER_CHAR * matchedLength, { typedChars: matchedLength });
+    awardLessonXp(LESSON_XP_PER_CHAR * matchedLength, { typedChars: matchedLength, persist: false });
     const milestoneIndex = Math.floor(lessonSession.streak / LESSON_BYTES_STREAK_INTERVAL);
     const previousMilestoneIndex = Math.max(0, Number(lessonSession.coinMilestoneIndex) || 0);
     if (milestoneIndex > previousMilestoneIndex) {
         lessonSession.coinMilestoneIndex = milestoneIndex;
         const streakBytes = LESSON_BYTES_STREAK_MILESTONE * (milestoneIndex - previousMilestoneIndex);
-        awardLessonBytes(streakBytes, { burst: `+${streakBytes} Bytes` });
+        awardLessonBytes(streakBytes, { burst: `+${streakBytes} Bytes`, persist: false });
     }
+    persistLessonProfile();
     if (lessonSession.streak > 0 && lessonSession.streak % 10 === 0) {
         triggerLessonHudBurst(`Streak ${lessonSession.streak}`);
         triggerLessonHaptic(getAdaptiveLessonStreakHapticDuration());
@@ -20004,7 +20023,7 @@ function wireAccountModal() {
             renderAccountUi();
             if (!result?.ok) {
                 status.set("Google sign-in failed");
-                setAccountAuthHint("Google sign-in could not start. Verify OAuth redirect URL and try again.");
+                setAccountAuthHint("Google sign-in could not start. Please try again in a moment.");
             }
         });
     }
