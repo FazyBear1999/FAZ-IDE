@@ -16,6 +16,20 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-21
+- Summary: Completed optimization-wave reliability polish for flaky E2E behavior and rename-path determinism.
+- Notable safety/infra updates: Added Playwright CI retry policy (`retries: process.env.CI ? 1 : 0`) in config; added `test:stable` command for explicit one-retry runs; stabilized `tests/ide.spec.js` folder-rename flow by committing inline rename via blur + poll instead of fragile Enter-key dispatch on re-rendered input nodes.
+- Validation status: Targeted rename test passed via grep run, full Playwright suite passed (331/331), and `npm run frank:full` passed 12/12 after rerun.
+- Follow-up actions: Keep runtime/auth logic untouched during optimization waves; treat repeat-once Playwright failures as deterministic only when the same spec fails consecutively.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-21
+- Summary: Added stable full-gate mode for safer optimization/polish execution.
+- Notable safety/infra updates: Added `scripts/frank-full-stable.js` and npm aliases `frank:full:stable`/`frank:all:stable`; Playwright config now accepts `PLAYWRIGHT_RETRIES` override while keeping default local/CI behavior.
+- Validation status: Contract/integrity/memory checks remained green and stable full-gate run passed end-to-end.
+- Follow-up actions: Use stable full gate during broad polish waves; keep standard `frank:full` as the default fast local signal.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-21
 - Summary: Added optimization safety gate and promoted it into full release orchestration.
 - Notable safety/infra updates: Introduced `scripts/verify-optimization-safety.js` with key file-size budgets and AI memory file-count cap; wired new script into `test:quick`, `test:all`, `test:all:contract`, and Franklin full gate stage flow.
 - Validation status: `npm run test:opt:safety` passed, `npm run test:all:contract` passed with updated ordered-step count, and `npm run frank:full` passed 12/12 stages.

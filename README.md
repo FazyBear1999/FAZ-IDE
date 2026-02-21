@@ -133,6 +133,8 @@ Production domain stamping note:
 - `npm run test:opt:safety` enforces optimization safety budgets (key file-size caps + AI memory file-count cap) before large refactors.
 - `npm run test:all:contract` verifies `test:all` still includes all required gates in order.
 - `npm run test` runs the full Playwright E2E suite.
+- `npm run test:stable` runs Playwright with one retry to reduce transient flake noise during optimization/polish passes.
+- `PLAYWRIGHT_RETRIES` can override retry count (`0` default local, `1` default CI).
 - `npm run test:quick` runs sync check + AI memory check + test integrity check + full E2E suite.
 - `npm run test:all` runs the browser-first release gate (sync + E2E + SiteGround package prep/verification + privacy checks).
 - `npm run deploy:siteground` supports optional `SITE_URL` rewrite for packaged `canonical`, `og:url`, and `sitemap.xml` `<loc>` entries.
@@ -192,6 +194,7 @@ Notes:
 - `npm run frank:check` runs contract + sync verify + memory verify + Franklin safety + test integrity.
 - `npm run frank:all` is a compatibility alias for `npm run frank:full`.
 - `npm run frank:full` runs the browser-first full release gate (`test:all`) with the same organized digest view and writes per-stage logs under `artifacts/frankleen/reports/`.
+- `npm run frank:full:stable` runs full gate with `PLAYWRIGHT_RETRIES=1` for safer polish/reliability passes.
 - `npm run frank:full:cloud` runs full gate in strict cloud mode (`REQUIRE_CLOUD_AUTH=1`) and fails if Supabase env keys are missing.
 - `npm run frank:guardian` runs full gate with auto preflight snapshot + rollback on failure + fix-request capture.
 - `npm run frank:doctor` runs non-mutating Franklin readiness diagnostics.
@@ -206,4 +209,10 @@ Notes:
 - `npm run frank -- note "message"` appends a dated entry to `docs/ai-memory/decisions.md`.
 - `npm run frank -- error "message"` appends a dated entry to `docs/ai-memory/error-catalog.md`.
 - `npm run frank:status` shows Franklin memory/check status.
+
+Reliability note for optimization waves:
+
+- If `frank:full` fails with a single Playwright test while all prior stages are green, rerun `npm run test` once to check for transient flakes.
+- If the rerun is green, rerun `npm run frank:full` before commit/push so release evidence stays current.
+- If the rerun fails again on the same spec, treat as deterministic and fix before merge.
 <!-- docs-sync: 2026-02-20 optimization + command-health pass -->

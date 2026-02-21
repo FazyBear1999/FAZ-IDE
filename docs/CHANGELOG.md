@@ -2,6 +2,11 @@
 
 ## 2026-02-20
 
+- Added CI-safe Playwright retry policy (`retries: 1` on CI, `0` locally) to reduce transient flake failures without slowing local feedback loops.
+- Added `PLAYWRIGHT_RETRIES` override support in Playwright config for deterministic local retry tuning.
+- Added `test:stable` script for explicit one-retry end-to-end runs during optimization/polish waves.
+- Added `frank:full:stable` / `frank:all:stable` commands to run full gate with retry-backed Playwright stage for safer polish loops.
+- Hardened folder rename Playwright coverage by committing inline rename via blur + poll semantics, avoiding Enter-key timing detaches during DOM re-render.
 - Added Supabase + Google OAuth account integration with local-first fallback when auth keys are not configured.
 - Reworked Account modal UX: cloud connect controls, sync status metadata, disconnected email hiding, and in-field eye toggle visibility control.
 - Hardened cloud sync trust path with per-user lesson baseline/delta verification to block manipulated local byte/XP uploads.
