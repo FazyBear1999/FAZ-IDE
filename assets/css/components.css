@@ -362,28 +362,30 @@ button:focus-visible {
 .CodeMirror .cm-lesson-active {
     background: var(--surface-selected-soft);
     color: var(--text);
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .CodeMirror .cm-lesson-ghost {
     color: var(--text-muted-quiet);
-    opacity: 0.18;
+    opacity: 0.34;
+    transition: opacity var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .CodeMirror .cm-lesson-next {
     color: var(--text);
     background: color-mix(in srgb, var(--surface-selected-soft) 55%, transparent);
     border-bottom: 1px solid var(--border-focus-strong);
-    animation: lesson-next-blink 1s steps(1, end) infinite;
+    animation: lesson-next-breathe var(--lesson-next-breathe-ms, 1450ms) ease-in-out infinite;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
-@keyframes lesson-next-blink {
+@keyframes lesson-next-breathe {
     0%,
-    49% {
+    100% {
         opacity: 1;
     }
-    50%,
-    100% {
-        opacity: 0.35;
+    50% {
+        opacity: 0.72;
     }
 }
 

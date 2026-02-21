@@ -3008,6 +3008,11 @@ const LESSON_BYTES_LESSON_COMPLETE = 15;
 const LESSON_BYTES_PERFECT_BONUS = 5;
 const LESSON_BYTES_STREAK_MILESTONE = 3;
 const LESSON_BYTES_STREAK_INTERVAL = 20;
+const LESSON_MISMATCH_FEEDBACK_COOLDOWN_MS = 260;
+const LESSON_MISMATCH_FEEDBACK_COOLDOWN_FAST_MS = 380;
+const LESSON_NEXT_BREATHE_BASE_MS = 1450;
+const LESSON_NEXT_BREATHE_MIN_MS = 980;
+const LESSON_NEXT_BREATHE_MAX_MS = 1700;
 const THEME_BYTE_COSTS = Object.freeze({
     dark: 0,
     light: 120,
@@ -3092,6 +3097,11 @@ let lessonHapticLastAt = 0;
 let lessonCursorLockSyncing = false;
 let lessonStatsView = "overview";
 let lessonShopNotice = "";
+let lessonLastMismatchProgress = -1;
+let lessonLastMismatchAt = 0;
+let lessonLastInputAt = 0;
+let lessonInputCadenceMs = 0;
+let lessonNextBreatheDurationMs = LESSON_NEXT_BREATHE_BASE_MS;
 let lessonProfile = {
     xp: 0,
     level: 1,
@@ -11241,6 +11251,9 @@ function updateLessonHud() {
         lessonHudLastActiveState = active;
     }
     if (!active) {
+        if (el.editorPanel) {
+            el.editorPanel.dataset.lessonStreakTier = "none";
+        }
         lessonHudWasActive = false;
         lessonHudLastRenderKey = "";
         lessonHudLastStepKey = "";
@@ -11301,6 +11314,9 @@ function updateLessonHud() {
     const paceText = `WPM ${metrics.wpm}`;
     const activeStreak = Math.max(0, Number(lessonSession?.streak) || lessonProfile.currentStreak || 0);
     const streakTier = activeStreak >= 25 ? "fire" : activeStreak >= 12 ? "hot" : activeStreak >= 5 ? "warm" : "none";
+    if (el.editorPanel) {
+        el.editorPanel.dataset.lessonStreakTier = streakTier;
+    }
     const stepKey = `${stepId}:${stepIndex}/${stepCount}`;
     if (stepKey !== lessonHudLastStepKey) {
         lessonHudLastStepKey = stepKey;
@@ -11443,11 +11459,80 @@ function clearLessonVisualMarks() {
     editor.clearMarks?.("lesson-next");
 }
 
+function getLessonMotionTargetNode() {
+    if (editor.type === "codemirror" && typeof editor.instance?.getWrapperElement === "function") {
+        const wrapper = editor.instance.getWrapperElement();
+        if (wrapper instanceof HTMLElement) {
+            return wrapper;
+        }
+    }
+    const fallback = document.querySelector("#editorPanel .CodeMirror");
+    return fallback instanceof HTMLElement ? fallback : null;
+}
+
+function updateLessonNextBreatheDuration(durationMs = LESSON_NEXT_BREATHE_BASE_MS) {
+    const next = clamp(Math.round(Number(durationMs) || LESSON_NEXT_BREATHE_BASE_MS), LESSON_NEXT_BREATHE_MIN_MS, LESSON_NEXT_BREATHE_MAX_MS);
+    if (Math.abs(next - lessonNextBreatheDurationMs) < 18) return;
+    lessonNextBreatheDurationMs = next;
+    const motionNode = getLessonMotionTargetNode();
+    if (!motionNode) return;
+    motionNode.style.setProperty("--lesson-next-breathe-ms", `${next}ms`);
+}
+
+function resetLessonTypingCadenceState() {
+    lessonLastInputAt = 0;
+    lessonInputCadenceMs = 0;
+    lessonNextBreatheDurationMs = LESSON_NEXT_BREATHE_BASE_MS;
+    const motionNode = getLessonMotionTargetNode();
+    if (!motionNode) return;
+    motionNode.style.setProperty("--lesson-next-breathe-ms", `${LESSON_NEXT_BREATHE_BASE_MS}ms`);
+}
+
+function trackLessonInputCadence() {
+    const now = Date.now();
+    if (lessonLastInputAt > 0) {
+        const delta = now - lessonLastInputAt;
+        if (delta >= 28 && delta <= 2400) {
+            lessonInputCadenceMs = lessonInputCadenceMs > 0
+                ? Math.round((lessonInputCadenceMs * 0.78) + (delta * 0.22))
+                : delta;
+            const cadence = clamp(lessonInputCadenceMs, 90, 420);
+            const normalized = (cadence - 90) / (420 - 90);
+            const targetBreathe = LESSON_NEXT_BREATHE_MIN_MS
+                + ((LESSON_NEXT_BREATHE_MAX_MS - LESSON_NEXT_BREATHE_MIN_MS) * normalized);
+            updateLessonNextBreatheDuration(targetBreathe);
+        }
+    }
+    lessonLastInputAt = now;
+}
+
+function getAdaptiveLessonMismatchCooldownMs() {
+    if (lessonInputCadenceMs <= 0) return LESSON_MISMATCH_FEEDBACK_COOLDOWN_MS;
+    const cadence = clamp(lessonInputCadenceMs, 90, 420);
+    const normalized = (cadence - 90) / (420 - 90);
+    const cooldown = LESSON_MISMATCH_FEEDBACK_COOLDOWN_FAST_MS
+        - ((LESSON_MISMATCH_FEEDBACK_COOLDOWN_FAST_MS - LESSON_MISMATCH_FEEDBACK_COOLDOWN_MS) * normalized);
+    return Math.round(cooldown);
+}
+
+function getAdaptiveLessonStreakHapticDuration() {
+    if (lessonInputCadenceMs <= 0) return 8;
+    const cadence = clamp(lessonInputCadenceMs, 90, 420);
+    const normalized = (cadence - 90) / (420 - 90);
+    return Math.round(5 + (4 * normalized));
+}
+
+function resetLessonMismatchFeedback() {
+    lessonLastMismatchProgress = -1;
+    lessonLastMismatchAt = 0;
+}
+
 function resetLessonStreakState({ persistProfile = false } = {}) {
     if (lessonSession) {
         lessonSession.streak = 0;
     }
     lessonProfile.currentStreak = 0;
+    resetLessonMismatchFeedback();
     if (persistProfile) {
         persistLessonProfile({ force: true });
     }
@@ -11630,6 +11715,8 @@ function syncLessonGhostMarks() {
 function stopTypingLesson({ announce = true } = {}) {
     if (!lessonSession) return false;
     resetLessonStreakState({ persistProfile: true });
+    resetLessonMismatchFeedback();
+    resetLessonTypingCadenceState();
     lessonSession = null;
     clearPersistedLessonSession();
     clearLessonVisualMarks();
@@ -11685,6 +11772,8 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
         mistakes: 0,
         sessionXp: 0,
     };
+    resetLessonMismatchFeedback();
+    resetLessonTypingCadenceState();
     normalizeLessonProgressToTypeable();
     persistLessonSession({ force: true });
     refreshLessonTypingVisualState({ prefix: "Lesson started" });
@@ -11741,6 +11830,7 @@ function advanceLessonStep({ announce = true } = {}) {
     }
     lessonSession.stepIndex = nextIndex;
     lessonSession.progress = 0;
+    resetLessonMismatchFeedback();
     lessonSession.sessionXp += LESSON_XP_STEP_COMPLETE;
     awardLessonXp(LESSON_XP_STEP_COMPLETE);
     awardLessonBytes(LESSON_BYTES_STEP_COMPLETE);
@@ -11817,8 +11907,11 @@ function applyLessonInputChar(inputChar = "") {
             persistLessonSession();
             refreshLessonTypingVisualState();
         }
+        resetLessonMismatchFeedback();
         return { ok: true, reason: "backspace", progress: lessonSession.progress };
     }
+
+    trackLessonInputCadence();
 
     normalizeLessonProgressToTypeable();
 
@@ -11833,12 +11926,22 @@ function applyLessonInputChar(inputChar = "") {
     const expectedSequence = expectedText.slice(lessonSession.progress, lessonSession.progress + inputSequence.length);
 
     if (inputSequence !== expectedSequence) {
-        lessonSession.typedChars += 1;
-        lessonSession.mistakes += 1;
-        resetLessonStreakState({ persistProfile: true });
+        const now = Date.now();
+        const mismatchCooldownMs = getAdaptiveLessonMismatchCooldownMs();
+        const isRepeatedMismatch = lessonLastMismatchProgress === lessonSession.progress
+            && (now - lessonLastMismatchAt) < mismatchCooldownMs;
+        lessonLastMismatchProgress = lessonSession.progress;
+        lessonLastMismatchAt = now;
+        if (!isRepeatedMismatch) {
+            lessonSession.typedChars += 1;
+            lessonSession.mistakes += 1;
+            resetLessonStreakState({ persistProfile: true });
+        }
         persistLessonSession();
-        triggerLessonHaptic(4);
-        status.set(`Lesson: expected ${describeLessonExpectedChar(expected)}`);
+        if (!isRepeatedMismatch) {
+            triggerLessonHaptic(4);
+            status.set(`Lesson: expected ${describeLessonExpectedChar(expected)}`);
+        }
         updateLessonHud();
         return { ok: false, reason: "mismatch", expected, received: value, progress: lessonSession.progress };
     }
@@ -11847,6 +11950,7 @@ function applyLessonInputChar(inputChar = "") {
     lessonSession.typedChars += matchedLength;
     lessonSession.correctChars += matchedLength;
     lessonSession.progress += matchedLength;
+    resetLessonMismatchFeedback();
     normalizeLessonProgressToTypeable();
     lessonSession.streak += matchedLength;
     lessonSession.bestStreak = Math.max(lessonSession.bestStreak, lessonSession.streak);
@@ -11863,7 +11967,7 @@ function applyLessonInputChar(inputChar = "") {
     }
     if (lessonSession.streak > 0 && lessonSession.streak % 10 === 0) {
         triggerLessonHudBurst(`Streak ${lessonSession.streak}`);
-        triggerLessonHaptic(8);
+        triggerLessonHaptic(getAdaptiveLessonStreakHapticDuration());
     }
     persistLessonSession();
     const finishedStep = lessonSession.progress >= step.expected.length;
