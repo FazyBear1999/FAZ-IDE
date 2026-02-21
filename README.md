@@ -121,6 +121,7 @@ Production domain stamping note:
 - Example: `$env:SITE_URL = "https://yourdomain.com"`
 - For real cloud accounts in the deploy package, also set `SUPABASE_URL` and `SUPABASE_ANON_KEY` before deploy.
 - Example: `$env:SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"` and `$env:SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_PUBLIC_KEY"`
+- Recommended production command: `npm run frank:full:cloud` (requires `SUPABASE_URL` + `SUPABASE_ANON_KEY` and enforces cloud-auth packaging end-to-end).
 
 ## QA Commands
 
@@ -129,12 +130,14 @@ Production domain stamping note:
 - `npm run test:memory` verifies required AI memory docs are present and structured.
 - `npm run test:frank:safety` verifies Franklin command safety (allowlist behavior, sanitized memory writes, and docs/ai-memory path boundaries).
 - `npm run test:integrity` verifies test hygiene (no focused/skipped/fixme tests, no trivial assertions, and assertion presence checks).
+- `npm run test:opt:safety` enforces optimization safety budgets (key file-size caps + AI memory file-count cap) before large refactors.
 - `npm run test:all:contract` verifies `test:all` still includes all required gates in order.
 - `npm run test` runs the full Playwright E2E suite.
 - `npm run test:quick` runs sync check + AI memory check + test integrity check + full E2E suite.
 - `npm run test:all` runs the browser-first release gate (sync + E2E + SiteGround package prep/verification + privacy checks).
 - `npm run deploy:siteground` supports optional `SITE_URL` rewrite for packaged `canonical`, `og:url`, and `sitemap.xml` `<loc>` entries.
 - `npm run deploy:siteground` also supports optional deploy-time auth injection via `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and optional `SUPABASE_OAUTH_REDIRECT_PATH`.
+- `npm run verify:siteground` supports optional strict mode via `REQUIRE_CLOUD_AUTH=1` to fail packaging if cloud auth keys were not injected.
 - `npm run test:secrets` scans tracked git files for high-risk credential patterns.
 - `npm run precommit:guard` runs secret + privacy checks before commit.
 - `npm run hooks:install` enables local git hooks from `.githooks/` (includes `pre-commit` guard).
@@ -149,22 +152,22 @@ Script-path governance:
 Use this flow to keep Codex sessions simple and reversible:
 
 - `npm run codex:scan`
-	- Fast snapshot of branch, changed files, and untracked files.
-	- Add `-- --json` for automation-friendly output.
+  - Fast snapshot of branch, changed files, and untracked files.
+  - Add `-- --json` for automation-friendly output.
 - `npm run codex:checkpoint -- "before-<task>"`
-	- Creates a rollback patch + metadata under `artifacts/codex/checkpoints/`.
-	- Add `-- --json` for machine-readable output.
+  - Creates a rollback patch + metadata under `artifacts/codex/checkpoints/`.
+  - Add `-- --json` for machine-readable output.
 - `npm run codex:savepoint -- "before-<task>"`
-	- Shortcut alias for `codex:checkpoint` during rapid Codex loops.
+  - Shortcut alias for `codex:checkpoint` during rapid Codex loops.
 - Make the change with focused tests first.
 - Run quality gates:
-	- `npm run test:integrity`
-	- `npm run test:memory`
+  - `npm run test:integrity`
+  - `npm run test:memory`
 - If rollback is needed:
-	- Dry-run: `npm run codex:rollback -- artifacts/codex/checkpoints/<file>.patch`
-	- Dry-run latest checkpoint: `npm run codex:rollback:latest`
-	- Apply rollback: `npm run codex:rollback -- artifacts/codex/checkpoints/<file>.patch --apply`
-	- Apply latest rollback: `npm run codex:rollback:latest:apply`
+  - Dry-run: `npm run codex:rollback -- artifacts/codex/checkpoints/<file>.patch`
+  - Dry-run latest checkpoint: `npm run codex:rollback:latest`
+  - Apply rollback: `npm run codex:rollback -- artifacts/codex/checkpoints/<file>.patch --apply`
+  - Apply latest rollback: `npm run codex:rollback:latest:apply`
 
 Checkpoint utilities:
 
@@ -189,6 +192,7 @@ Notes:
 - `npm run frank:check` runs contract + sync verify + memory verify + Franklin safety + test integrity.
 - `npm run frank:all` is a compatibility alias for `npm run frank:full`.
 - `npm run frank:full` runs the browser-first full release gate (`test:all`) with the same organized digest view and writes per-stage logs under `artifacts/frankleen/reports/`.
+- `npm run frank:full:cloud` runs full gate in strict cloud mode (`REQUIRE_CLOUD_AUTH=1`) and fails if Supabase env keys are missing.
 - `npm run frank:guardian` runs full gate with auto preflight snapshot + rollback on failure + fix-request capture.
 - `npm run frank:doctor` runs non-mutating Franklin readiness diagnostics.
 - `npm run frank:snapshot:create` creates a manual guardian snapshot.

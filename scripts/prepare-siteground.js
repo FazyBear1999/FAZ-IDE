@@ -7,6 +7,9 @@ const scriptsDir = __dirname;
 const distDir = path.join(root, "dist_site");
 const outputRoot = path.join(root, "release", "siteground");
 const publicHtmlDir = path.join(outputRoot, "public_html");
+const requireCloudAuth = ["1", "true", "yes", "on"].includes(
+  String(process.env.REQUIRE_CLOUD_AUTH || "").trim().toLowerCase()
+);
 
 function normalizeSiteUrl(raw = "") {
   const text = String(raw || "").trim();
@@ -115,6 +118,9 @@ function main() {
 
   const siteUrl = normalizeSiteUrl(process.env.SITE_URL || "");
   applySiteUrlOverrides(publicHtmlDir, siteUrl);
+  if (requireCloudAuth && (!String(process.env.SUPABASE_URL || "").trim() || !String(process.env.SUPABASE_ANON_KEY || "").trim())) {
+    throw new Error("REQUIRE_CLOUD_AUTH is enabled, but SUPABASE_URL/SUPABASE_ANON_KEY were not both provided. Aborting package generation.");
+  }
   const authOverrideResult = applyAuthOverrides(publicHtmlDir, {
     supabaseUrl: process.env.SUPABASE_URL || "",
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
@@ -141,6 +147,7 @@ function main() {
       authOverrideResult.applied
         ? "Cloud auth values injected into deploy package via SUPABASE_URL + SUPABASE_ANON_KEY."
         : "Cloud auth values not injected (SUPABASE_URL/SUPABASE_ANON_KEY not provided); package stays local-only.",
+      `Cloud auth strict mode: ${requireCloudAuth ? "enabled" : "disabled"}.`,
       "",
     ].join("\n"),
     "utf8"

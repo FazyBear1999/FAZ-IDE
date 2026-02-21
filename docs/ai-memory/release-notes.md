@@ -1,4 +1,4 @@
-# Release Notes Memory
+﻿# Release Notes Memory
 
 Use this file to keep a compact running timeline of meaningful release-impacting changes.
 Entries should make it easy to understand what changed and why validation gates were updated.
@@ -13,6 +13,20 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up actions:
 
 ## Entries
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-21
+- Summary: Added optimization safety gate and promoted it into full release orchestration.
+- Notable safety/infra updates: Introduced `scripts/verify-optimization-safety.js` with key file-size budgets and AI memory file-count cap; wired new script into `test:quick`, `test:all`, `test:all:contract`, and Franklin full gate stage flow.
+- Validation status: `npm run test:opt:safety` passed, `npm run test:all:contract` passed with updated ordered-step count, and `npm run frank:full` passed 12/12 stages.
+- Follow-up actions: Keep budget thresholds conservative and only raise with explicit rationale after module decomposition/re-organization milestones.
+
+- Version: 0.2.0
+- Date (UTC): 2026-02-21
+- Summary: Completed repository-wide diagnostics cleanup and full-system verification pass.
+- Notable safety/infra updates: Added workspace file association for `.htaccess` to prevent false PowerShell parse errors, normalized markdown spacing in key docs/memory files, and removed trailing multi-blank formatting drift in memory notes.
+- Validation status: `npm run test:memory` passed, `npm run test:integrity` passed, and `npm run frank:full` passed all 11 stages (Playwright 331/331).
+- Follow-up actions: Keep `meta[name=theme-color]` compatibility warnings as informational unless browser-support policy changes; continue treating Franklin full gate as upload readiness source of truth.
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-20
@@ -86,7 +100,7 @@ Entries should make it easy to understand what changed and why validation gates 
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-19
-- Summary: Completed optimization-lockdown repository organization Wave 1 docs/script-governance batch (major changes 2–3).
+- Summary: Completed optimization-lockdown repository organization Wave 1 docs/script-governance batch (major changes 2â€“3).
 - Notable safety/infra updates: Added `docs/ai-memory/script-family-inventory.md` as canonical script ownership map; normalized command/path guidance to prefer `frank:full`; synced `file-organization-wave-map.md` and `roadmap-decision-map.md` status notes for C4/C8 traceability.
 - Validation status: `npm run test:memory` passed, `npm run test:integrity` passed, stress contract rechecks passed in focused runs, and Checkpoint A full gate (`npm run frank:full`) passed 14/14.
 - Follow-up actions: Start Wave 2 organization in reversible slices and keep focused validation plus gate-evidence cadence.
@@ -201,7 +215,7 @@ Entries should make it easy to understand what changed and why validation gates 
 - Summary: Closed AI memory traceability loop by checkpoint-linking gaps, issues, and error records.
 - Notable safety/infra updates: Updated `test-gaps.md`, `known-issues.md`, and `error-catalog.md` templates/rules to require checkpoint IDs and validation command context where applicable.
 - Validation status: Memory governance contract validated via `npm run test:memory`.
-- Follow-up actions: Enforce “no unlinked gap/issue entry” during session-close sync.
+- Follow-up actions: Enforce â€œno unlinked gap/issue entryâ€ during session-close sync.
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-17
@@ -265,7 +279,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Notable safety/infra updates: Added `--json` output modes, `--latest` rollback target support, status buckets in scan output, list limiting (`--limit`), and new npm aliases (`codex:status`, `codex:savepoint`, `codex:rollback:latest`, `codex:rollback:latest:apply`).
 - Validation status: `codex:scan -- --json`, `codex:checkpoint:list -- --limit=1 --json`, `codex:savepoint`, and `codex:rollback:latest` executed successfully; `test:memory` and `test:integrity` passed.
 - Follow-up actions: Keep CLI output contracts backward-compatible so Codex automation scripts remain stable.
-
 
 ## 2026-02-18T13:35:16.170Z - AI Verify (standard)
 
@@ -370,7 +383,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: Focused `layout-micro` and docking contracts passed; full `npm run test:all` passed end-to-end (`240` Playwright tests, SiteGround package verify, privacy checks).
 - Follow-up actions: Keep roadmap C7 active and require full gate for future layout/docking behavior changes.
 
-
 ## 2026-02-18T17:02:23.226Z - AI Verify (standard)
 
 - Status:
@@ -383,7 +395,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up:
   - No action required.
 
-
 ## 2026-02-18T17:12:21.572Z - AI Verify (standard)
 
 - Status:
@@ -395,7 +406,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:smoke: PASS (4364ms)
 - Follow-up:
   - No action required.
-
 
 ## 2026-02-18T17:19:19.724Z - AI Verify (standard)
 
@@ -416,7 +426,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`) including footer zoom assertions; `tests/file-contract.spec.js` passed (`9 passed, 0 failed`).
 - Follow-up actions: Implement IndexedDB-backed filesystem payload read/write through the new adapter without breaking sync call sites.
 
-
 ## 2026-02-18T18:17:06.993Z - AI Verify (standard)
 
 - Status:
@@ -428,7 +437,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:smoke: PASS (4457ms)
 - Follow-up:
   - No action required.
-
 
 ## 2026-02-18T19:18:00.000Z - AI Verify (standard)
 
@@ -456,7 +464,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: Zoom/layout focused regressions in `tests/ide.spec.js` passed (`3 passed, 0 failed`) and full `npm run ai:verify` passed (`130 passed changed-suite`, smoke pass).
 - Follow-up actions: Preserve live-drag normalization behavior and keep high-zoom splitter stress tests required.
 
-
 ## 2026-02-18T18:22:29.262Z - AI Verify (standard)
 
 - Status:
@@ -475,7 +482,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Notable safety/infra updates: Added row width-fit enforcement that reflows overflow panels between top/bottom rows when minimum width budgets exceed row capacity; integrated this guard into both layout normalization and panel ordering so splitter bounds never start from impossible overlap states.
 - Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`) with max-zoom row non-overlap assertions, `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
 - Follow-up actions: Keep width-fit + row-cap enforcement in lockstep and retain max-zoom overlap checks in regression suites.
-
 
 ## 2026-02-18T18:47:30.444Z - AI Verify (standard)
 
@@ -496,7 +502,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`) with max-zoom out-of-view checks, `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
 - Follow-up actions: Keep adaptive min-width budget checks and max-zoom viewport assertions active for all future layout/zoom changes.
 
-
 ## 2026-02-18T18:51:24.008Z - AI Verify (standard)
 
 - Status:
@@ -515,7 +520,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Notable safety/infra updates: Added horizontal shell compensation for UI zoom (`appShell` width/min-width inverse to zoom scale) so workspace geometry remains viewport-aligned; expanded zoom regression checks to validate shell width/height fit plus no overlap/out-of-view panels at 110%, 160%, and 70%.
 - Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`), `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
 - Follow-up actions: Preserve symmetric zoom compensation and first-step zoom geometry assertions in all future layout/zoom changes.
-
 
 ## 2026-02-18T19:00:09.010Z - AI Verify (standard)
 
@@ -536,7 +540,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: `tests/ide.spec.js` passed (`72 passed, 0 failed`), `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed.
 - Follow-up actions: Introduce dual-state `columns/stacks` model next while preserving `panelRows` compatibility until renderer migration completes.
 
-
 ## 2026-02-18T19:15:34.003Z - AI Verify (standard)
 
 - Status:
@@ -555,7 +558,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Notable safety/infra updates: Added `panelLayout` (`columns/stacks`) model adapters in `assets/js/core/panelLayoutModel.js`; app now dual-syncs legacy `panelRows` and model state through sanitize/layout/docking paths; exposed `fazide.getPanelLayout()` for migration inspection and added synchronization regression coverage.
 - Validation status: `tests/ide.spec.js` passed (`73 passed, 0 failed`), `tests/file-contract.spec.js` passed (`9 passed, 0 failed`), and `npm run ai:verify` passed (`125 passed changed-suite`, smoke pass).
 - Follow-up actions: Start Slice C with ratio-first persistence and state-upgrade migration while preserving legacy layout snapshot compatibility.
-
 
 ## 2026-02-18T19:26:28.992Z - AI Verify (standard)
 
@@ -583,7 +585,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: `tests/ide.spec.js` + `tests/file-contract.spec.js` passed (`83 passed, 0 failed`), and `npm run ai:verify` passed (`126 passed changed-suite`, smoke pass).
 - Follow-up actions: Continue Slice D renderer migration and keep overlap/zoom regressions mandatory on every layout-engine change.
 
-
 ## 2026-02-18T19:34:40.737Z - AI Verify (standard)
 
 - Status:
@@ -594,7 +595,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:changed: FAIL (code 1) (41582ms)
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
-
 
 ## 2026-02-18T19:35:49.232Z - AI Verify (standard)
 
@@ -607,7 +607,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:smoke: PASS (4512ms)
 - Follow-up:
   - No action required.
-
 
 ## 2026-02-18T19:42:05.198Z - AI Verify (standard)
 
@@ -628,7 +627,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: Targeted IDE regressions passed (preset/reset + zoom overlap paths, `3 passed, 0 failed`), and `npm run ai:verify` passed (`127 passed changed-suite`, smoke pass).
 - Follow-up actions: Keep ratio reset behavior and row-scoped guide rendering as non-regression requirements while advancing Slice D.
 
-
 ## 2026-02-18T19:50:01.350Z - AI Verify (standard)
 
 - Status:
@@ -648,7 +646,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: Focused IDE regressions passed (`3 passed, 0 failed`) including new 160%-zoom splitter resize test, and `npm run ai:verify` passed (`128 passed changed-suite`, smoke pass).
 - Follow-up actions: Keep zoom-aware splitter math and feasible min-budget checks as required contracts for future layout tuning.
 
-
 ## 2026-02-18T19:58:00.663Z - AI Verify (standard)
 
 - Status:
@@ -660,7 +657,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:smoke: PASS (4577ms)
 - Follow-up:
   - No action required.
-
 
 ## 2026-02-18T20:04:50.580Z - AI Verify (standard)
 
@@ -674,7 +670,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up:
   - No action required.
 
-
 ## 2026-02-18T20:07:42.683Z - AI Verify (standard)
 
 - Status:
@@ -686,7 +681,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:smoke: PASS (4407ms)
 - Follow-up:
   - No action required.
-
 
 ## 2026-02-18T20:13:23.330Z - AI Verify (standard)
 
@@ -708,7 +702,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: `npm run test:css` passed, `tests/release.spec.js` passed (`4 passed, 0 failed`), and `npm run test:integrity` passed.
 - Follow-up actions: Keep CSS gate contracts synchronized with package/script changes and preserve micro-tests as mandatory for verification-flow edits.
 
-
 ## 2026-02-18T20:17:32.915Z - AI Verify (standard)
 
 - Status:
@@ -721,7 +714,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
 
-
 ## 2026-02-18T20:18:46.298Z - AI Verify (standard)
 
 - Status:
@@ -733,7 +725,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:changed: FAIL (code 1) (45711ms)
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
-
 
 ## 2026-02-18T20:20:05.308Z - AI Verify (standard)
 
@@ -748,7 +739,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up:
   - No action required.
 
-
 ## 2026-02-18T20:23:10.076Z - AI Verify (standard)
 
 - Status:
@@ -760,7 +750,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:changed: FAIL (code 1) (44280ms)
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
-
 
 ## 2026-02-18T20:24:10.729Z - AI Verify (standard)
 
@@ -774,7 +763,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
 
-
 ## 2026-02-18T20:25:07.682Z - AI Verify (standard)
 
 - Status:
@@ -786,7 +774,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:changed: FAIL (code 1) (44523ms)
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
-
 
 ## 2026-02-18T20:26:19.681Z - AI Verify (standard)
 
@@ -808,7 +795,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: `npm run test:css` passed, `tests/release.spec.js` passed (`5 passed, 0 failed`), and `npm run ai:verify` passed (integrity/memory/css/changed/smoke all green).
 - Follow-up actions: Keep modal selector dedupe contracts and stress-layout determinism checks mandatory for future CSS/layout optimization waves.
 
-
 ## 2026-02-18T20:30:16.580Z - AI Verify (standard)
 
 - Status:
@@ -820,7 +806,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:changed: FAIL (code 1) (44320ms)
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
-
 
 ## 2026-02-18T20:31:29.559Z - AI Verify (standard)
 
@@ -834,7 +819,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
 
-
 ## 2026-02-18T20:32:46.905Z - AI Verify (standard)
 
 - Status:
@@ -847,7 +831,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
 
-
 ## 2026-02-18T20:34:59.470Z - AI Verify (standard)
 
 - Status:
@@ -859,7 +842,6 @@ Entries should make it easy to understand what changed and why validation gates 
   - test:changed: FAIL (code 1) (75601ms)
 - Follow-up:
   - Inspect failing step and rerun ai:verify after fix.
-
 
 - Version: 0.2.0
 - Date (UTC): 2026-02-18
@@ -881,7 +863,6 @@ Entries should make it easy to understand what changed and why validation gates 
 - Notable safety/infra updates: Reduced duplicate selector surface in `assets/css/layout.css` by grouping repeated scrollbar and footer status selectors with `:is(...)` while preserving style behavior.
 - Validation status: `tests/ide.spec.js` + `tests/layout-micro.spec.js` passed (`184 passed, 0 failed`); `tests/release.spec.js` passed (`10 passed, 0 failed`); `npm run test:css` passed; full `npm run test:all` passed end-to-end (`240` Playwright tests + SiteGround verify + privacy check).
 - Follow-up actions: Continue CSS optimization in behavior-neutral batches and keep full-gate proof as a hard requirement before deploy handoff.
-
 
 ## 2026-02-18T22:38:11.793Z - AI Verify (standard)
 
@@ -945,3 +926,4 @@ Entries should make it easy to understand what changed and why validation gates 
 - Validation status: `npm run frank:full` passed all 14 stages; focused release contracts in `tests/release.spec.js` passed (`10 passed`), including new Franklin full-gate CSS and SEO metadata/file presence contracts.
 - Follow-up actions: Use `SITE_URL` during `npm run deploy:siteground` so packaged canonical/OG/sitemap URLs are stamped with the live production domain.
 <!-- docs-sync: 2026-02-20 optimization + command-health pass -->
+

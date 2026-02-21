@@ -11,6 +11,7 @@ This guide turns FAZ IDE accounts from local-only into real cloud accounts with 
 - Supabase SQL: `config/supabase-account-profiles.sql`
 
 Default behavior remains safe:
+
 - If auth keys are empty, app stays in local mode.
 - After keys are configured, cloud auth activates automatically.
 
@@ -45,6 +46,7 @@ Default behavior remains safe:
 7. Paste these into Supabase Google provider settings and save.
 
 Important:
+
 - URI must match exactly (protocol, domain, path, trailing slash behavior).
 - Use production domain for production.
 
@@ -75,6 +77,7 @@ If you test staging previews, add those URLs too.
 4. Verify RLS is enabled and policies exist.
 
 Why this matters:
+
 - Users can only read/write their own profile row.
 - Users can only read/write their own workspace cloud state row.
 - Prevents cross-user data leaks.
@@ -97,7 +100,17 @@ $env:SUPABASE_OAUTH_REDIRECT_PATH = "/"
 Then run:
 
 ```powershell
+npm run frank:full:cloud
+```
+
+This command runs the full release gate and enforces cloud-auth packaging (`REQUIRE_CLOUD_AUTH=1`) so local-only builds cannot be uploaded by mistake.
+
+If you want to run only package generation + verification (without the full gate), use:
+
+```powershell
+$env:REQUIRE_CLOUD_AUTH = "1"
 npm run deploy:siteground
+npm run verify:siteground
 ```
 
 The deploy script injects those values only into `release/siteground/public_html/assets/js/config.js`.
@@ -126,6 +139,7 @@ In SiteGround Site Tools:
    - Ensure daily backups are active.
 
 If using Cloudflare/CDN:
+
 - Keep SSL mode Full (strict).
 - Do not cache dynamic auth responses.
 
@@ -178,18 +192,22 @@ Test each item on desktop + mobile:
 ## 10) Troubleshooting quick map
 
 ### Google button disabled
+
 - Cause: missing `SUPABASE_URL` or `SUPABASE_ANON_KEY`
 - Fix: set deploy env vars (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) and redeploy.
 
 ### OAuth starts but returns signed out
+
 - Cause: redirect URL mismatch
 - Fix: align Google redirect URI + Supabase Site URL/Additional Redirect URLs exactly.
 
 ### Cloud profile save fails
+
 - Cause: table/policy mismatch
 - Fix: rerun `config/supabase-account-profiles.sql`, confirm RLS policies.
 
 ### Works locally, fails on SiteGround
+
 - Cause: domain/caching mismatch
 - Fix: verify production domain URLs in Supabase and disable full-page caching for auth return flow.
 

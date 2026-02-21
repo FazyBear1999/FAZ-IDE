@@ -2,9 +2,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = process.cwd();
+const distDir = path.join(root, "dist_site");
 const outputRoot = path.join(root, "release", "siteground");
 const publicHtmlDir = path.join(outputRoot, "public_html");
 const configPath = path.join(root, "assets", "js", "config.js");
+const deployedConfigPath = path.join(publicHtmlDir, "assets", "js", "config.js");
+const requireCloudAuth = ["1", "true", "yes", "on"].includes(
+  String(process.env.REQUIRE_CLOUD_AUTH || "").trim().toLowerCase()
+);
+
+const allowedMutableFiles = new Set([
+  "index.html",
+  "sitemap.xml",
+  "assets/js/config.js",
+]);
 
 const requiredFiles = [
   "index.html",
@@ -30,6 +41,7 @@ const requiredDirs = [
 ];
 
 const failures = [];
+let parityComparedFiles = 0;
 
 function fail(message) {
   failures.push(message);
@@ -85,6 +97,93 @@ function assertTemplateSourcesDeployed() {
   }
 }
 
+function collectFiles(baseDir) {
+  const out = [];
+  const stack = [baseDir];
+
+  while (stack.length) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const abs = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(abs);
+      } else if (entry.isFile()) {
+        out.push(path.relative(baseDir, abs).replace(/\\/g, "/"));
+      }
+    }
+  }
+
+  out.sort();
+  return out;
+}
+
+function sha256(filePath) {
+  const crypto = require("node:crypto");
+  const hash = crypto.createHash("sha256");
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest("hex");
+}
+
+function assertDistToPublicParity() {
+  if (!fs.existsSync(distDir)) {
+    fail("Missing dist_site directory for parity verification.");
+    return;
+  }
+  if (!fs.existsSync(publicHtmlDir)) {
+    fail("Missing public_html directory for parity verification.");
+    return;
+  }
+
+  const distFiles = collectFiles(distDir);
+  const publicFiles = collectFiles(publicHtmlDir);
+
+  const distOnly = distFiles.filter((rel) => !publicFiles.includes(rel));
+  const publicOnly = publicFiles.filter((rel) => !distFiles.includes(rel));
+
+  for (const rel of distOnly) {
+    fail(`Missing deployed file from dist_site: public_html/${rel}`);
+  }
+  for (const rel of publicOnly) {
+    fail(`Extra deployed file not present in dist_site: public_html/${rel}`);
+  }
+
+  const commonFiles = distFiles.filter((rel) => publicFiles.includes(rel));
+  for (const rel of commonFiles) {
+    if (allowedMutableFiles.has(rel)) continue;
+    const distAbs = path.join(distDir, rel);
+    const publicAbs = path.join(publicHtmlDir, rel);
+    parityComparedFiles += 1;
+    if (sha256(distAbs) !== sha256(publicAbs)) {
+      fail(`Content mismatch between dist_site and public_html: ${rel}`);
+    }
+  }
+}
+
+function assertCloudAuthConfiguredWhenRequired() {
+  if (!requireCloudAuth) return;
+  if (!fs.existsSync(deployedConfigPath)) {
+    fail("Cloud auth verification failed: missing public_html/assets/js/config.js.");
+    return;
+  }
+
+  const source = fs.readFileSync(deployedConfigPath, "utf8");
+  const urlMatch = source.match(/SUPABASE_URL:\s*"([^"]*)"/);
+  const anonMatch = source.match(/SUPABASE_ANON_KEY:\s*"([^"]*)"/);
+  const supabaseUrl = String(urlMatch?.[1] || "").trim();
+  const supabaseAnon = String(anonMatch?.[1] || "").trim();
+
+  if (!supabaseUrl || !supabaseAnon) {
+    fail("Cloud auth verification failed: REQUIRE_CLOUD_AUTH=1 but packaged SUPABASE_URL/SUPABASE_ANON_KEY are empty.");
+    return;
+  }
+
+  const looksLikeUrl = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(supabaseUrl);
+  if (!looksLikeUrl) {
+    fail(`Cloud auth verification failed: SUPABASE_URL looks invalid (${supabaseUrl}).`);
+  }
+}
+
 if (!fs.existsSync(outputRoot)) {
   fail("release/siteground folder was not found.");
 }
@@ -102,6 +201,8 @@ for (const relFile of requiredFiles) {
 }
 
 assertTemplateSourcesDeployed();
+assertDistToPublicParity();
+assertCloudAuthConfiguredWhenRequired();
 
 const deployNotePath = path.join(outputRoot, "DEPLOY.txt");
 if (!fs.existsSync(deployNotePath)) {
@@ -120,3 +221,5 @@ console.log("SiteGround package verification passed.");
 console.log(`- Verified root: ${publicHtmlDir}`);
 console.log(`- Required directories: ${requiredDirs.length}`);
 console.log(`- Required files: ${requiredFiles.length}`);
+console.log(`- Dist/public parity files compared: ${parityComparedFiles}`);
+console.log(`- Cloud auth required: ${requireCloudAuth ? "yes" : "no"}`);
