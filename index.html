@@ -304,19 +304,17 @@
                                             data-files-section-id="lessons"
                                             draggable="true"
                                             aria-expanded="false"
-                                            aria-controls="lessonsList"
+                                            aria-controls="lessonTierMap"
                                         >
                                             <span class="file-section-caret" aria-hidden="true"></span>
                                             <span class="file-section-label">Lessons</span>
                                         </button>
-                                        <div id="lessonTierMap" class="lesson-tier-map" role="group" aria-label="Lesson progression map">
-                                            <button id="lessonTierFilterAll" type="button" class="lesson-tier-chip" data-lesson-tier-filter="all" aria-pressed="true">All <span class="lesson-tier-chip-count" data-lesson-tier-count="all">0</span></button>
-                                            <button id="lessonTierFilterBeginner" type="button" class="lesson-tier-chip" data-lesson-tier-filter="beginner" aria-pressed="false">Beginner <span class="lesson-tier-chip-count" data-lesson-tier-count="beginner">0</span></button>
-                                            <button id="lessonTierFilterIntermediate" type="button" class="lesson-tier-chip" data-lesson-tier-filter="intermediate" aria-pressed="false">Intermediate <span class="lesson-tier-chip-count" data-lesson-tier-count="intermediate">0</span></button>
-                                            <button id="lessonTierFilterExpert" type="button" class="lesson-tier-chip" data-lesson-tier-filter="expert" aria-pressed="false">Expert <span class="lesson-tier-chip-count" data-lesson-tier-count="expert">0</span></button>
+                                        <div id="lessonTierMap" class="lesson-tier-map" role="group" aria-label="Lesson tier modals">
+                                            <button id="lessonTierOpenBeginner" type="button" class="lesson-tier-chip" data-lesson-tier-modal-open="beginner" aria-haspopup="dialog" aria-controls="lessonTierBeginnerPanel" aria-expanded="false">Beginner <span class="lesson-tier-chip-count" data-lesson-tier-count="beginner">20</span></button>
+                                            <button id="lessonTierOpenIntermediate" type="button" class="lesson-tier-chip" data-lesson-tier-modal-open="intermediate" aria-haspopup="dialog" aria-controls="lessonTierIntermediatePanel" aria-expanded="false">Intermediate <span class="lesson-tier-chip-count" data-lesson-tier-count="intermediate">20</span></button>
+                                            <button id="lessonTierOpenExpert" type="button" class="lesson-tier-chip" data-lesson-tier-modal-open="expert" aria-haspopup="dialog" aria-controls="lessonTierExpertPanel" aria-expanded="false">Expert <span class="lesson-tier-chip-count" data-lesson-tier-count="expert">20</span></button>
                                         </div>
                                         <ul id="lessonsList" class="files-games-list files-lessons-list" role="listbox" aria-label="Available lessons" aria-hidden="true"></ul>
-                                        <button id="lessonLoad" type="button" title="Load selected lesson into editor" hidden>LOAD</button>
                                     </div>
                                 </div>
                                 <ul id="fileList" class="file-list" role="listbox" aria-label="Saved files"></ul>
@@ -1046,6 +1044,48 @@
                         <ul id="lessonStatsShopList" class="lesson-shop-list" role="list"></ul>
                         <p id="lessonStatsShopHint" class="lesson-stats-safety">Buy themes using Bytes earned from lessons.</p>
                     </div>
+                </div>
+            </section>
+
+            <div id="lessonTierBeginnerBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="lessonTierBeginnerPanel" class="layout-panel lesson-tier-panel" data-open="false" aria-hidden="true" aria-label="Beginner lessons" role="dialog" aria-modal="true">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Beginner Lessons</p>
+                        <p class="layout-sub">20 prepared slots. Existing lessons are ready now; remaining slots are staged.</p>
+                    </div>
+                    <button id="lessonTierBeginnerClose" type="button">Close</button>
+                </header>
+                <div class="layout-body lesson-tier-modal-body">
+                    <ul id="lessonTierBeginnerList" class="lesson-tier-modal-list" role="list"></ul>
+                </div>
+            </section>
+
+            <div id="lessonTierIntermediateBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="lessonTierIntermediatePanel" class="layout-panel lesson-tier-panel" data-open="false" aria-hidden="true" aria-label="Intermediate lessons" role="dialog" aria-modal="true">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Intermediate Lessons</p>
+                        <p class="layout-sub">20 prepared slots. Existing lessons are ready now; remaining slots are staged.</p>
+                    </div>
+                    <button id="lessonTierIntermediateClose" type="button">Close</button>
+                </header>
+                <div class="layout-body lesson-tier-modal-body">
+                    <ul id="lessonTierIntermediateList" class="lesson-tier-modal-list" role="list"></ul>
+                </div>
+            </section>
+
+            <div id="lessonTierExpertBackdrop" class="layout-backdrop" aria-hidden="true"></div>
+            <section id="lessonTierExpertPanel" class="layout-panel lesson-tier-panel" data-open="false" aria-hidden="true" aria-label="Expert lessons" role="dialog" aria-modal="true">
+                <header class="layout-header">
+                    <div>
+                        <p class="layout-title">Expert Lessons</p>
+                        <p class="layout-sub">20 prepared slots. Existing lessons are ready now; remaining slots are staged.</p>
+                    </div>
+                    <button id="lessonTierExpertClose" type="button">Close</button>
+                </header>
+                <div class="layout-body lesson-tier-modal-body">
+                    <ul id="lessonTierExpertList" class="lesson-tier-modal-list" role="list"></ul>
                 </div>
             </section>
 

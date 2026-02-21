@@ -2,8 +2,10 @@
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const crypto = require("node:crypto");
+const { loadLocalReleaseEnv } = require("./load-local-release-env");
 
 const root = process.cwd();
+loadLocalReleaseEnv({ rootDir: root, silent: true });
 const packageJsonPath = path.join(root, "package.json");
 const memoryRoot = path.join(root, "docs", "ai-memory");
 const frankleenReportsRoot = path.join(root, "artifacts", "frankleen", "reports");

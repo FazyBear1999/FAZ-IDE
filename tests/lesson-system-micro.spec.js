@@ -1,5 +1,40 @@
 const { test, expect } = require("@playwright/test");
 
+test("lesson micro: catalog report stays authoring-safe", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.listLessons || !api?.getLessonsCatalogReport) {
+      return { ready: false };
+    }
+
+    const lessons = api.listLessons();
+    const report = api.getLessonsCatalogReport();
+    const tiers = new Set(lessons.map((entry) => String(entry?.tier || "")));
+
+    return {
+      ready: true,
+      totalLessons: Number(lessons.length || 0),
+      allHaveTier: lessons.every((entry) => ["beginner", "intermediate", "expert"].includes(String(entry?.tier || ""))),
+      tierCount: tiers.size,
+      reportTotalConfigured: Number(report?.totalConfigured || 0),
+      reportTotalAvailable: Number(report?.totalAvailable || 0),
+      duplicateCount: Number((report?.duplicateIds || []).length || 0),
+      invalidTierCount: Number((report?.invalidTiers || []).length || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.totalLessons).toBeGreaterThan(0);
+  expect(result.allHaveTier).toBeTruthy();
+  expect(result.tierCount).toBeGreaterThan(0);
+  expect(result.reportTotalConfigured).toBeGreaterThanOrEqual(result.reportTotalAvailable);
+  expect(result.reportTotalAvailable).toBe(result.totalLessons);
+  expect(result.duplicateCount).toBe(0);
+  expect(result.invalidTierCount).toBe(0);
+});
+
 test("lesson micro: loading a lesson starts an active typed-step session", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -77,6 +112,58 @@ test("lesson micro: typing expected content completes lesson and updates profile
   expect(result.level).toBeGreaterThanOrEqual(1);
 });
 
+test("lesson micro: non-js lesson files lock during typing and unlock after completion", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.listFiles || !api?.nextLessonStep || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    const lessonId = "paddle-lesson-1";
+    await api.loadLesson(lessonId, { startTyping: true, run: false });
+
+    const filesBefore = api.listFiles().filter((file) => file.family === "lesson" && file.lessonId === lessonId);
+    const otherLessonFilesBefore = api.listFiles().filter((file) => file.family === "lesson" && file.lessonId !== lessonId);
+    const lockableBefore = filesBefore.filter((file) => /\.(html|css)$/i.test(String(file.name || "")));
+    const jsBefore = filesBefore.filter((file) => /\.(js|mjs|cjs|jsx)$/i.test(String(file.name || "")));
+    const activeBefore = filesBefore.find((file) => file.active);
+
+    const advanced = api.nextLessonStep();
+    const stateAfter = api.getLessonState();
+
+    const filesAfter = api.listFiles().filter((file) => file.family === "lesson" && file.lessonId === lessonId);
+    const lockableAfter = filesAfter.filter((file) => /\.(html|css)$/i.test(String(file.name || "")));
+
+    return {
+      ready: true,
+      lessonFileCount: filesBefore.length,
+      lockableCount: lockableBefore.length,
+      jsCount: jsBefore.length,
+      activeIsJs: Boolean(activeBefore && /\.(js|mjs|cjs|jsx)$/i.test(String(activeBefore.name || ""))),
+      lockableLockedDuring: lockableBefore.every((file) => Boolean(file.locked) && Boolean(file.lessonLocked)),
+      jsUnlockedDuring: jsBefore.every((file) => !file.locked),
+      otherLessonsUnlockedDuring: otherLessonFilesBefore.every((file) => !file.lessonLocked),
+      advanced: Boolean(advanced),
+      completed: Boolean(stateAfter?.completed),
+      lockableUnlockedAfter: lockableAfter.every((file) => !file.lessonLocked),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.lessonFileCount).toBeGreaterThan(0);
+  expect(result.lockableCount).toBeGreaterThan(0);
+  expect(result.jsCount).toBeGreaterThan(0);
+  expect(result.activeIsJs).toBeTruthy();
+  expect(result.lockableLockedDuring).toBeTruthy();
+  expect(result.jsUnlockedDuring).toBeTruthy();
+  expect(result.otherLessonsUnlockedDuring).toBeTruthy();
+  expect(result.advanced).toBeTruthy();
+  expect(result.completed).toBeTruthy();
+  expect(result.lockableUnlockedAfter).toBeTruthy();
+});
+
 test("lesson micro: partial session resumes after reload", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -127,4 +214,37 @@ test("lesson micro: partial session resumes after reload", async ({ page }) => {
   expect(afterReload.stepId).toBe("instant-output-smoke");
   expect(afterReload.progress).toBeGreaterThanOrEqual(1);
   expect(afterReload.expectedLength).toBeGreaterThan(afterReload.progress);
+});
+
+test("lesson micro: malformed stored lesson day is sanitized on load", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("fazide.lesson-profile.v1", JSON.stringify({
+      xp: 50,
+      level: 1,
+      bytes: 10,
+      totalTypedChars: 12,
+      lessonsCompleted: 1,
+      bestStreak: 2,
+      currentStreak: 1,
+      dailyStreak: 1,
+      lastActiveDay: "2026-99-77-extra",
+    }));
+  });
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.getLessonProfile) return { ready: false };
+    const profile = api.getLessonProfile();
+    return {
+      ready: true,
+      xp: Number(profile?.xp || 0),
+      lastActiveDay: String(profile?.lastActiveDay || ""),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.xp).toBe(50);
+  expect(result.lastActiveDay).toBe("");
 });

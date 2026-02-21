@@ -2995,10 +2995,13 @@ let fileHistory = [];
 let fileHistoryIndex = -1;
 let historyDepth = 0;
 const LESSON_TIER_ORDER = Object.freeze(["beginner", "intermediate", "expert"]);
-const LESSON_TIER_FILTER_ORDER = Object.freeze(["all", ...LESSON_TIER_ORDER]);
 const games = normalizeGames(GAMES);
 const applications = normalizeApplications(APPLICATIONS);
 const lessons = normalizeLessons(LESSONS);
+const lessonsCatalogReport = buildLessonsCatalogReport(LESSONS, lessons);
+if (lessonsCatalogReport.duplicateIds.length || lessonsCatalogReport.invalidTiers.length) {
+    console.warn("[FAZ IDE] Lesson catalog issues detected", lessonsCatalogReport);
+}
 const LESSON_XP_PER_CHAR = 1;
 const LESSON_XP_STEP_COMPLETE = 12;
 const LESSON_XP_LESSON_COMPLETE = 80;
@@ -3013,6 +3016,7 @@ const LESSON_MISMATCH_FEEDBACK_COOLDOWN_FAST_MS = 380;
 const LESSON_NEXT_BREATHE_BASE_MS = 1450;
 const LESSON_NEXT_BREATHE_MIN_MS = 980;
 const LESSON_NEXT_BREATHE_MAX_MS = 1700;
+const LESSON_TIER_MODAL_SLOT_COUNT = 20;
 const THEME_BYTE_COSTS = Object.freeze({
     dark: 0,
     light: 120,
@@ -3031,7 +3035,7 @@ let selectedApplicationId = applications[0]?.id ?? "";
 let applicationsSelectorOpen = false;
 let selectedLessonId = lessons[0]?.id ?? "";
 let lessonsSelectorOpen = false;
-let lessonTierFilter = "all";
+let lessonTierModalOpen = "";
 const ACCOUNT_TYPES = Object.freeze(["test", "sandbox"]);
 const DEFAULT_ACCOUNT_PROFILE = Object.freeze({
     displayName: "",
@@ -3102,6 +3106,8 @@ let lessonLastMismatchAt = 0;
 let lessonLastInputAt = 0;
 let lessonInputCadenceMs = 0;
 let lessonNextBreatheDurationMs = LESSON_NEXT_BREATHE_BASE_MS;
+let lessonSessionPersistedSnapshot = "";
+let lessonProfilePersistedSnapshot = "";
 let lessonProfile = {
     xp: 0,
     level: 1,
@@ -3899,6 +3905,10 @@ function setFilesAppsOpen(open) {
 
 function setFilesLessonsOpen(open) {
     layoutState.filesLessonsOpen = Boolean(open);
+    if (!layoutState.filesLessonsOpen) {
+        lessonsSelectorOpen = false;
+        closeLessonTierModal({ focusEditor: false });
+    }
     applyFilesLayout();
     persistLayout();
     renderFileList();
@@ -8848,7 +8858,7 @@ async function deleteFolderPath(folderPath, { confirm = true, focus = true } = {
 function moveFileToFolder(fileId, folderPath) {
     const file = getFileById(fileId);
     if (!file) return false;
-    if (file.locked) {
+    if (isFileLockedForActions(file)) {
         status.set("File locked");
         logger.append("system", ["File is locked. Unlock to move."]);
         return false;
@@ -9718,8 +9728,10 @@ function normalizeTemplateList(list, { fallbackLabel = "Template" } = {}) {
         .map((entry, index) => normalizeTemplate(entry, index, { fallbackLabel }))
         .filter(Boolean)
         .filter((entry) => {
-            if (seen.has(entry.id)) return false;
-            seen.add(entry.id);
+            const idKey = String(entry.id || "").trim().toLowerCase();
+            if (!idKey) return false;
+            if (seen.has(idKey)) return false;
+            seen.add(idKey);
             return true;
         });
 }
@@ -9746,10 +9758,69 @@ function normalizeLessons(list) {
         })
         .filter(Boolean)
         .filter((entry) => {
-            if (seen.has(entry.id)) return false;
-            seen.add(entry.id);
+            const idKey = String(entry.id || "").trim().toLowerCase();
+            if (!idKey) return false;
+            if (seen.has(idKey)) return false;
+            seen.add(idKey);
             return true;
         });
+}
+
+function buildLessonsCatalogReport(sourceLessons = [], normalizedLessons = []) {
+    const source = Array.isArray(sourceLessons) ? sourceLessons : [];
+    const normalized = Array.isArray(normalizedLessons) ? normalizedLessons : [];
+    const seenIds = new Set();
+    const duplicateIds = new Set();
+    const invalidTiers = [];
+
+    source.forEach((entry, index) => {
+        const normalizedEntry = normalizeTemplate(entry, index, { fallbackLabel: "Lesson" });
+        if (!normalizedEntry) return;
+        const id = String(normalizedEntry.id || "").trim();
+        const idKey = id.toLowerCase();
+        if (seenIds.has(idKey)) {
+            duplicateIds.add(id);
+        } else {
+            seenIds.add(idKey);
+        }
+        const rawTier = String(entry?.tier ?? "").trim().toLowerCase();
+        if (rawTier && !LESSON_TIER_ORDER.includes(rawTier)) {
+            invalidTiers.push({ id, tier: rawTier });
+        }
+    });
+
+    const tierCounts = { beginner: 0, intermediate: 0, expert: 0 };
+    normalized.forEach((lesson) => {
+        const tier = normalizeLessonTier(lesson?.tier);
+        tierCounts[tier] += 1;
+    });
+
+    return Object.freeze({
+        totalConfigured: source.length,
+        totalAvailable: normalized.length,
+        duplicateIds: [...duplicateIds],
+        invalidTiers,
+        tierCounts,
+    });
+}
+
+function getLessonsCatalogReportSnapshot() {
+    return {
+        totalConfigured: Number(lessonsCatalogReport.totalConfigured || 0),
+        totalAvailable: Number(lessonsCatalogReport.totalAvailable || 0),
+        duplicateIds: Array.isArray(lessonsCatalogReport.duplicateIds) ? [...lessonsCatalogReport.duplicateIds] : [],
+        invalidTiers: Array.isArray(lessonsCatalogReport.invalidTiers)
+            ? lessonsCatalogReport.invalidTiers.map((entry) => ({
+                id: String(entry?.id || ""),
+                tier: String(entry?.tier || ""),
+            }))
+            : [],
+        tierCounts: {
+            beginner: Math.max(0, Number(lessonsCatalogReport.tierCounts?.beginner || 0)),
+            intermediate: Math.max(0, Number(lessonsCatalogReport.tierCounts?.intermediate || 0)),
+            expert: Math.max(0, Number(lessonsCatalogReport.tierCounts?.expert || 0)),
+        },
+    };
 }
 
 function normalizeLessonTier(value = "") {
@@ -9758,24 +9829,13 @@ function normalizeLessonTier(value = "") {
     return "beginner";
 }
 
-function normalizeLessonTierFilter(value = "all") {
+function normalizeLessonTierModalKey(value = "") {
     const raw = String(value ?? "").trim().toLowerCase();
-    if (LESSON_TIER_FILTER_ORDER.includes(raw)) return raw;
-    return "all";
-}
-
-function getVisibleLessonsByTier() {
-    if (lessonTierFilter === "all") return lessons;
-    return lessons.filter((lesson) => lesson.tier === lessonTierFilter);
+    return LESSON_TIER_ORDER.includes(raw) ? raw : "";
 }
 
 function getLessonTierCounts() {
-    const counts = {
-        all: lessons.length,
-        beginner: 0,
-        intermediate: 0,
-        expert: 0,
-    };
+    const counts = { beginner: 0, intermediate: 0, expert: 0 };
     lessons.forEach((lesson) => {
         const tier = normalizeLessonTier(lesson.tier);
         counts[tier] += 1;
@@ -9788,22 +9848,77 @@ function syncLessonTierMap({ show = true } = {}) {
     setAriaHidden(el.lessonTierMap, !show);
     if (!show) return;
     const counts = getLessonTierCounts();
-    const buttons = el.lessonTierMap.querySelectorAll("[data-lesson-tier-filter]");
+    const buttons = el.lessonTierMap.querySelectorAll("[data-lesson-tier-modal-open]");
     buttons.forEach((button) => {
-        const tier = normalizeLessonTierFilter(button.dataset.lessonTierFilter || "all");
-        const active = tier === lessonTierFilter;
-        button.setAttribute("aria-pressed", toBooleanAttribute(active));
-        if (tier !== "all") {
-            button.disabled = counts[tier] <= 0;
-        } else {
-            button.disabled = counts.all <= 0;
-        }
+        const tier = normalizeLessonTierModalKey(button.dataset.lessonTierModalOpen || "");
+        const active = tier && tier === lessonTierModalOpen;
+        button.setAttribute("aria-expanded", toBooleanAttribute(Boolean(active)));
+        button.disabled = !tier;
     });
     const chips = el.lessonTierMap.querySelectorAll("[data-lesson-tier-count]");
     chips.forEach((chip) => {
-        const tier = normalizeLessonTierFilter(chip.dataset.lessonTierCount || "all");
-        chip.textContent = String(counts[tier] ?? 0);
+        const tier = normalizeLessonTierModalKey(chip.dataset.lessonTierCount || "");
+        const readyCount = tier ? Math.max(0, Number(counts[tier] || 0)) : 0;
+        chip.textContent = String(Math.max(LESSON_TIER_MODAL_SLOT_COUNT, readyCount));
     });
+}
+
+function getLessonTierModalEntries(tier = "") {
+    const normalizedTier = normalizeLessonTierModalKey(tier);
+    const items = lessons.filter((lesson) => normalizeLessonTier(lesson.tier) === normalizedTier);
+    const entries = [];
+    for (let index = 0; index < LESSON_TIER_MODAL_SLOT_COUNT; index += 1) {
+        const lesson = items[index] || null;
+        entries.push({
+            tier: normalizedTier,
+            slot: index + 1,
+            lesson,
+        });
+    }
+    return entries;
+}
+
+function renderLessonTierModalList(tier = "") {
+    const normalizedTier = normalizeLessonTierModalKey(tier);
+    if (!normalizedTier) return;
+    const tierLabel = normalizedTier.slice(0, 1).toUpperCase() + normalizedTier.slice(1);
+    const listNode = normalizedTier === "beginner"
+        ? el.lessonTierBeginnerList
+        : normalizedTier === "intermediate"
+            ? el.lessonTierIntermediateList
+            : el.lessonTierExpertList;
+    if (!listNode) return;
+    const entries = getLessonTierModalEntries(normalizedTier);
+    const fragment = document.createDocumentFragment();
+    entries.forEach((entry) => {
+        const row = document.createElement("li");
+        row.className = "lesson-tier-modal-item";
+        const slotLabel = String(entry.slot).padStart(2, "0");
+
+        const label = document.createElement("div");
+        label.className = "lesson-tier-modal-label";
+        const title = document.createElement("strong");
+        title.textContent = entry.lesson ? entry.lesson.name : `${tierLabel} Placeholder ${slotLabel}`;
+        const sub = document.createElement("span");
+        sub.textContent = entry.lesson ? `Ready now • slot ${slotLabel}` : `Planned slot ${slotLabel} • coming soon`;
+        label.append(title, sub);
+
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = "lesson-tier-modal-action";
+        if (entry.lesson) {
+            action.textContent = "Open";
+            action.dataset.lessonTierModalLessonId = entry.lesson.id;
+        } else {
+            action.textContent = "Staged";
+            action.disabled = true;
+        }
+
+        row.append(label, action);
+        fragment.appendChild(row);
+    });
+    listNode.innerHTML = "";
+    listNode.appendChild(fragment);
 }
 
 function renderLessonSelectorOptions(listNode, items = [], selectedId = "") {
@@ -9932,41 +10047,36 @@ function syncApplicationsUI() {
 
 function syncLessonsUI() {
     if (!el.filesLessons || !el.lessonsSelectorToggle || !el.lessonsList) return;
-    lessonTierFilter = normalizeLessonTierFilter(lessonTierFilter);
-    const visibleLessons = getVisibleLessonsByTier();
-    const hasVisibleSelection = visibleLessons.some((lesson) => lesson.id === selectedLessonId);
-    if (!hasVisibleSelection) {
-        selectedLessonId = visibleLessons[0]?.id ?? lessons[0]?.id ?? "";
+    const hasSelection = lessons.some((lesson) => lesson.id === selectedLessonId);
+    if (!hasSelection) {
+        selectedLessonId = lessons[0]?.id ?? "";
     }
-    const nextHasSelection = visibleLessons.some((lesson) => lesson.id === selectedLessonId);
     const visible = syncTemplateSelectorShell({
         section: el.filesLessons,
         toggle: el.lessonsSelectorToggle,
         list: el.lessonsList,
-        loadButton: el.lessonLoad,
+        loadButton: null,
         sectionId: "lessons",
         sectionOpen: layoutState.filesLessonsOpen,
         listOpen: lessonsSelectorOpen,
         hasItems: lessons.length > 0,
-        hasSelection: nextHasSelection,
+        hasSelection: Boolean(selectedLessonId),
     });
     const showTierMap = Boolean(visible && lessonsSelectorOpen && lessons.length > 0);
     syncLessonTierMap({ show: showTierMap });
+    if (el.lessonsList) {
+        setAriaHidden(el.lessonsList, true);
+        el.lessonsList.innerHTML = "";
+        el.lessonsList.removeAttribute("aria-activedescendant");
+    }
+    if (el.lessonLoad) {
+        el.lessonLoad.hidden = true;
+        el.lessonLoad.disabled = true;
+    }
     if (!visible) return;
-
-    syncTemplateSelectorShell({
-        section: el.filesLessons,
-        toggle: el.lessonsSelectorToggle,
-        list: el.lessonsList,
-        loadButton: el.lessonLoad,
-        sectionId: "lessons",
-        sectionOpen: layoutState.filesLessonsOpen,
-        listOpen: lessonsSelectorOpen,
-        hasItems: lessons.length > 0,
-        hasSelection: nextHasSelection,
+    LESSON_TIER_ORDER.forEach((tier) => {
+        renderLessonTierModalList(tier);
     });
-
-    renderLessonSelectorOptions(el.lessonsList, visibleLessons, selectedLessonId);
 }
 
 async function loadTemplateFilesFromSources(templateFiles = [], contextLabel = "Template") {
@@ -10130,6 +10240,23 @@ function getLessonCurrentStep() {
     return lessonSession.steps[index] || null;
 }
 
+function getLessonStepRuntimeState({ normalizeProgress = false } = {}) {
+    if (!lessonSession || lessonSession.completed) return null;
+    const step = getLessonCurrentStep();
+    if (!step) return null;
+    if (normalizeProgress) {
+        normalizeLessonProgressToTypeable();
+    }
+    const expectedText = String(step.expected || "");
+    const progress = clamp(Number(lessonSession.progress) || 0, 0, expectedText.length);
+    return {
+        step,
+        expectedText,
+        progress,
+        stepLength: expectedText.length,
+    };
+}
+
 function computeLessonLevel(xp = 0) {
     const safeXp = Math.max(0, Number(xp) || 0);
     return Math.floor(safeXp / 250) + 1;
@@ -10150,7 +10277,7 @@ function sanitizeLessonProfile(raw = null) {
     const bestStreak = Math.max(0, Math.floor(Number(source.bestStreak) || 0));
     const currentStreak = Math.max(0, Math.floor(Number(source.currentStreak) || 0));
     const dailyStreak = Math.max(0, Math.floor(Number(source.dailyStreak) || 0));
-    const lastActiveDay = String(source.lastActiveDay || "").trim();
+    const lastActiveDay = normalizeLessonDayString(source.lastActiveDay);
     return {
         xp,
         level: Math.max(1, Math.floor(Number(source.level) || computeLessonLevel(xp))),
@@ -10163,6 +10290,21 @@ function sanitizeLessonProfile(raw = null) {
         dailyStreak,
         lastActiveDay,
     };
+}
+
+function normalizeLessonDayString(value = "") {
+    const normalized = String(value || "").trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return "";
+    const [yearRaw, monthRaw, dayRaw] = normalized.split("-");
+    const year = Number(yearRaw);
+    const month = Number(monthRaw);
+    const day = Number(dayRaw);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return "";
+    const probe = new Date(Date.UTC(year, month - 1, day));
+    if (probe.getUTCFullYear() !== year || (probe.getUTCMonth() + 1) !== month || probe.getUTCDate() !== day) {
+        return "";
+    }
+    return normalized;
 }
 
 function parseStoredJson(raw) {
@@ -10223,7 +10365,7 @@ function buildAccountLessonStatsSnapshot() {
         lesson_best_streak: Math.max(0, Math.floor(Number(lessonProfile?.bestStreak) || 0)),
         lesson_daily_streak: Math.max(0, Math.floor(Number(lessonProfile?.dailyStreak) || 0)),
         lesson_total_typed_chars: Math.max(0, Math.floor(Number(lessonProfile?.totalTypedChars) || 0)),
-        lesson_last_active_day: String(lessonProfile?.lastActiveDay || "").trim().slice(0, 16),
+        lesson_last_active_day: normalizeLessonDayString(lessonProfile?.lastActiveDay),
     };
 }
 
@@ -10263,7 +10405,7 @@ function normalizeLessonStatsPayload(stats = null) {
         lesson_best_streak: Math.max(0, Math.floor(Number(source.lesson_best_streak) || 0)),
         lesson_daily_streak: Math.max(0, Math.floor(Number(source.lesson_daily_streak) || 0)),
         lesson_total_typed_chars: Math.max(0, Math.floor(Number(source.lesson_total_typed_chars) || 0)),
-        lesson_last_active_day: String(source.lesson_last_active_day || "").trim().slice(0, 16),
+        lesson_last_active_day: normalizeLessonDayString(source.lesson_last_active_day),
     };
 }
 
@@ -10535,23 +10677,59 @@ async function flushAccountCloudStateSync({ force = false } = {}) {
             renderAccountUi();
             return false;
         }
-        const currentLessonStats = buildAccountLessonStatsSnapshot();
-        const profileBaseline = readAccountCloudProfileBaseline(userId);
-        if (!isCloudLessonStatsDeltaTrusted(currentLessonStats, profileBaseline)) {
-            setAccountAuthHint("Progress verification required. Reconnect your cloud account to refresh trusted profile baseline.");
-            renderAccountUi();
-            return false;
+        const currentLessonStats = normalizeLessonStatsPayload(buildAccountLessonStatsSnapshot());
+        let profileBaseline = readAccountCloudProfileBaseline(userId);
+        if (!profileBaseline) {
+            const remoteProfile = await accountAuthClient.loadRemoteProfile(userId);
+            if (remoteProfile) {
+                profileBaseline = normalizeLessonStatsPayload({
+                    lesson_level: remoteProfile.lesson_level,
+                    lesson_xp: remoteProfile.lesson_xp,
+                    lesson_bytes: remoteProfile.lesson_bytes,
+                    lessons_completed: remoteProfile.lessons_completed,
+                    lesson_best_streak: remoteProfile.lesson_best_streak,
+                    lesson_daily_streak: remoteProfile.lesson_daily_streak,
+                    lesson_total_typed_chars: remoteProfile.lesson_total_typed_chars,
+                    lesson_last_active_day: remoteProfile.lesson_last_active_day,
+                });
+            } else {
+                profileBaseline = normalizeLessonStatsPayload(currentLessonStats);
+            }
+            writeAccountCloudProfileBaseline(profileBaseline, userId);
         }
+
+        let trustedLessonStats = currentLessonStats;
+        if (!isCloudLessonStatsDeltaTrusted(currentLessonStats, profileBaseline)) {
+            const baseline = normalizeLessonStatsPayload(profileBaseline);
+            trustedLessonStats = normalizeLessonStatsPayload({
+                lesson_level: Math.max(currentLessonStats.lesson_level, baseline.lesson_level),
+                lesson_xp: Math.min(
+                    Math.max(currentLessonStats.lesson_xp, baseline.lesson_xp),
+                    baseline.lesson_xp + ACCOUNT_CLOUD_XP_DELTA_MAX
+                ),
+                lesson_bytes: Math.min(
+                    Math.max(currentLessonStats.lesson_bytes, baseline.lesson_bytes),
+                    baseline.lesson_bytes + ACCOUNT_CLOUD_BYTES_DELTA_MAX
+                ),
+                lessons_completed: Math.max(currentLessonStats.lessons_completed, baseline.lessons_completed),
+                lesson_best_streak: Math.max(currentLessonStats.lesson_best_streak, baseline.lesson_best_streak),
+                lesson_daily_streak: Math.max(0, currentLessonStats.lesson_daily_streak),
+                lesson_total_typed_chars: Math.max(currentLessonStats.lesson_total_typed_chars, baseline.lesson_total_typed_chars),
+                lesson_last_active_day: currentLessonStats.lesson_last_active_day || baseline.lesson_last_active_day,
+            });
+            setAccountAuthHint("Cloud sync protected your lesson profile by applying safe progression limits.");
+        }
+
         const trustedProfileSyncResult = await accountAuthClient.upsertRemoteProfile({
             userId,
             displayName: accountProfile.displayName,
             accountType: accountProfile.accountType,
-            lessonStats: currentLessonStats,
+            lessonStats: trustedLessonStats,
         });
         if (!trustedProfileSyncResult?.ok) {
             setAccountAuthHint("Cloud state synced, but profile stats refresh failed. Try Sync now.");
         } else {
-            writeAccountCloudProfileBaseline(currentLessonStats, userId);
+            writeAccountCloudProfileBaseline(trustedLessonStats, userId);
         }
         clearAccountCloudRetryTimer();
         accountCloudRetryAttempt = 0;
@@ -10739,22 +10917,9 @@ function sanitizeStoredLessonSession(raw = null) {
     };
 }
 
-function clearPersistedLessonSession() {
-    if (persistenceWritesLocked) return;
-    lessonSessionDirtyWrites = 0;
-    save(STORAGE.LESSON_SESSION, "");
-}
-
-function persistLessonSession({ force = false } = {}) {
-    if (persistenceWritesLocked) return;
-    if (!lessonSession || lessonSession.completed) {
-        clearPersistedLessonSession();
-        return;
-    }
-    lessonSessionDirtyWrites += 1;
-    if (!force && lessonSessionDirtyWrites < 5) return;
-    lessonSessionDirtyWrites = 0;
-    const payload = {
+function buildPersistableLessonSessionPayload() {
+    if (!lessonSession || lessonSession.completed) return null;
+    return {
         fileId: lessonSession.fileId,
         fileName: lessonSession.fileName,
         lessonId: String(selectedLessonId || ""),
@@ -10769,7 +10934,35 @@ function persistLessonSession({ force = false } = {}) {
         mistakes: Math.max(0, Math.floor(Number(lessonSession.mistakes) || 0)),
         sessionXp: Math.max(0, Math.floor(Number(lessonSession.sessionXp) || 0)),
     };
-    save(STORAGE.LESSON_SESSION, JSON.stringify(payload));
+}
+
+function buildPersistableLessonProfilePayload() {
+    return sanitizeLessonProfile(lessonProfile);
+}
+
+function clearPersistedLessonSession() {
+    if (persistenceWritesLocked) return;
+    lessonSessionDirtyWrites = 0;
+    lessonSessionPersistedSnapshot = "";
+    save(STORAGE.LESSON_SESSION, "");
+}
+
+function persistLessonSession({ force = false } = {}) {
+    if (persistenceWritesLocked) return;
+    const payload = buildPersistableLessonSessionPayload();
+    if (!payload) {
+        clearPersistedLessonSession();
+        return;
+    }
+    lessonSessionDirtyWrites += 1;
+    if (!force && lessonSessionDirtyWrites < 5) return;
+    lessonSessionDirtyWrites = 0;
+    const serialized = JSON.stringify(payload);
+    if (serialized === lessonSessionPersistedSnapshot) {
+        return;
+    }
+    lessonSessionPersistedSnapshot = serialized;
+    save(STORAGE.LESSON_SESSION, serialized);
     if (force) queueAccountCloudStateSync({ immediate: true });
     else queueAccountCloudStateSync();
 }
@@ -10840,6 +11033,7 @@ function restoreLessonSessionFromStorage() {
         updateLessonHud();
     }
 
+    lessonSessionPersistedSnapshot = JSON.stringify(buildPersistableLessonSessionPayload() || {});
     persistLessonSession({ force: true });
     return true;
 }
@@ -10858,7 +11052,13 @@ function persistLessonProfile({ force = false } = {}) {
     lessonProfileDirtyWrites += 1;
     if (!force && lessonProfileDirtyWrites < 8) return;
     lessonProfileDirtyWrites = 0;
-    save(STORAGE.LESSON_PROFILE, JSON.stringify(lessonProfile));
+    const payload = buildPersistableLessonProfilePayload();
+    const serialized = JSON.stringify(payload);
+    if (serialized === lessonProfilePersistedSnapshot) {
+        return;
+    }
+    lessonProfilePersistedSnapshot = serialized;
+    save(STORAGE.LESSON_PROFILE, serialized);
     if (force) queueAccountCloudStateSync({ immediate: true });
     else queueAccountCloudStateSync();
 }
@@ -10869,6 +11069,7 @@ function loadLessonProfile() {
     if (storedTheme && !lessonProfile.unlockedThemes.includes(storedTheme)) {
         lessonProfile.unlockedThemes = [...new Set([...lessonProfile.unlockedThemes, storedTheme])];
     }
+    lessonProfilePersistedSnapshot = JSON.stringify(buildPersistableLessonProfilePayload());
     persistLessonProfile({ force: true });
     updateLessonHeaderStats();
 }
@@ -11301,12 +11502,13 @@ function updateLessonHud() {
         lessonHudLastMood = "focus";
     }
 
-    const step = getLessonCurrentStep();
+    const lessonState = getLessonStepRuntimeState();
+    const step = lessonState?.step || null;
     const stepId = step?.id || "lesson";
     const stepIndex = Math.max(1, (Number(lessonSession?.stepIndex) || 0) + 1);
     const stepCount = Math.max(1, Number(lessonSession?.steps?.length) || 1);
-    const progress = Math.max(0, Number(lessonSession?.progress) || 0);
-    const total = Math.max(1, Number(step?.expected?.length) || 1);
+    const progress = lessonState?.progress ?? Math.max(0, Number(lessonSession?.progress) || 0);
+    const total = Math.max(1, lessonState?.stepLength || 0);
     const progressPercent = clamp(Math.round((progress / total) * 100), 0, 100);
     const mistakes = Math.max(0, Number(lessonSession?.mistakes) || 0);
     const metrics = getLessonSessionMetrics(lessonSession);
@@ -11433,6 +11635,184 @@ function awardLessonBytes(amount = 0, { burst = "" } = {}) {
 function isLessonFamilyFile(file = null) {
     if (!file || typeof file !== "object") return false;
     return String(file.family || "workspace") === "lesson";
+}
+
+function isJavaScriptLessonFile(file = null) {
+    if (!file || typeof file !== "object") return false;
+    const name = String(file.name || "").toLowerCase();
+    return name.endsWith(".js") || name.endsWith(".mjs") || name.endsWith(".cjs") || name.endsWith(".jsx");
+}
+
+function getLessonWorkspaceFiles(lessonId = "") {
+    const normalizedLessonId = String(lessonId || "").trim();
+    if (!normalizedLessonId) return [];
+    return files.filter((file) => (
+        isLessonFamilyFile(file) && String(file.lessonId || "").trim() === normalizedLessonId
+    ));
+}
+
+function isLessonFileTemporarilyLocked(file = null) {
+    if (!isLessonFamilyFile(file)) return false;
+    if (isJavaScriptLessonFile(file)) return false;
+    if (!lessonSession || lessonSession.completed) return false;
+    const sessionFile = getFileById(lessonSession.fileId);
+    if (!isLessonFamilyFile(sessionFile)) return false;
+    if (file.id === sessionFile.id) return false;
+
+    const sessionLessonId = String(sessionFile.lessonId || selectedLessonId || "").trim();
+    const fileLessonId = String(file.lessonId || "").trim();
+    if (sessionLessonId && fileLessonId !== sessionLessonId) {
+        return false;
+    }
+    if (!sessionLessonId && fileLessonId) {
+        return false;
+    }
+
+    return true;
+}
+
+function isLessonFileDuplicationLocked(file = null) {
+    if (!isLessonFamilyFile(file)) return false;
+    if (!lessonSession || lessonSession.completed) return false;
+    const sessionFile = getFileById(lessonSession.fileId);
+    if (!isLessonFamilyFile(sessionFile)) return false;
+
+    const sessionLessonId = String(sessionFile.lessonId || selectedLessonId || "").trim();
+    const fileLessonId = String(file.lessonId || "").trim();
+    if (sessionLessonId) {
+        return fileLessonId === sessionLessonId;
+    }
+
+    return file.id === sessionFile.id;
+}
+
+function isFileLockedForDuplication(file = null) {
+    if (!file || typeof file !== "object") return false;
+    return Boolean(file.locked || isLessonFileDuplicationLocked(file));
+}
+
+function isFileLockedForActions(file = null) {
+    if (!file || typeof file !== "object") return false;
+    return Boolean(file.locked || isLessonFileTemporarilyLocked(file));
+}
+
+function getLessonDeletionScope(file = null) {
+    if (!isLessonFamilyFile(file)) return null;
+    const lessonId = String(file.lessonId || "").trim();
+    const scopedById = new Map();
+    const lessonFiles = lessonId ? getLessonWorkspaceFiles(lessonId) : [];
+    [...lessonFiles, file].forEach((entry) => {
+        if (!entry || typeof entry !== "object" || !entry.id) return;
+        scopedById.set(entry.id, entry);
+    });
+    const scopedFiles = [...scopedById.values()];
+    if (!scopedFiles.length) return null;
+
+    const rawFolderScopes = normalizeFolderList(
+        scopedFiles
+            .map((entry) => getFileDirectory(entry.name))
+            .filter(Boolean)
+    );
+    const folderScopes = rawFolderScopes.filter((path, index, all) => (
+        !all.some((other, otherIndex) => otherIndex !== index && path.startsWith(`${other}/`))
+    ));
+
+    return {
+        lessonId,
+        files: scopedFiles,
+        folderScopes,
+    };
+}
+
+function removeFolderScopes(folderScopes = [], { remainingFiles = files } = {}) {
+    const normalizedScopes = normalizeFolderList(folderScopes).filter(Boolean);
+    if (!normalizedScopes.length) return;
+
+    const fileNames = (Array.isArray(remainingFiles) ? remainingFiles : [])
+        .map((entry) => String(entry?.name || ""))
+        .filter(Boolean);
+    const removableScopes = normalizedScopes.filter((scope) => (
+        !fileNames.some((name) => name.startsWith(`${scope}/`))
+    ));
+    if (!removableScopes.length) return;
+
+    const shouldRemoveFolderPath = (path = "") => removableScopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
+
+    folders = normalizeFolderList(
+        folders.filter((entry) => {
+            const normalized = normalizeFolderPath(entry, { allowEmpty: true });
+            if (!normalized) return false;
+            return !shouldRemoveFolderPath(normalized);
+        })
+    );
+    [...collapsedFolderPaths].forEach((path) => {
+        if (shouldRemoveFolderPath(path)) {
+            collapsedFolderPaths.delete(path);
+        }
+    });
+    selectedFolderPaths = new Set(
+        [...selectedFolderPaths].filter((path) => !shouldRemoveFolderPath(path))
+    );
+    if (editingFolderPath && shouldRemoveFolderPath(editingFolderPath)) {
+        clearFolderRenameState();
+    }
+}
+
+function deleteLessonPackage(scope = null, {
+    historyLabel = "Delete lesson package",
+    undoLabel = "Deleted lesson package",
+    announce = false,
+    focus = false,
+} = {}) {
+    if (!scope || !Array.isArray(scope.files) || !scope.files.length) return false;
+
+    const lessonFiles = scope.files.filter((entry) => entry && typeof entry === "object" && entry.id);
+    if (!lessonFiles.length) return false;
+    const lessonFileCount = lessonFiles.length;
+
+    const before = snapshotWorkspaceState();
+    flushEditorAutosave();
+    stashActiveFile();
+
+    queueDeleteUndo(undoLabel);
+    pushFilesToTrash(lessonFiles, {
+        deletedFolderPath: scope.folderScopes?.length === 1 ? scope.folderScopes[0] : "",
+        deletedGroupId: lessonFileCount > 1 ? makeTrashGroupId() : "",
+    });
+
+    const removedIds = new Set(lessonFiles.map((entry) => entry.id));
+    files = files.filter((entry) => !removedIds.has(entry.id));
+    openTabIds = openTabIds.filter((tabId) => !removedIds.has(tabId));
+    removeFolderScopes(scope.folderScopes, { remainingFiles: files });
+
+    if (!files.length) {
+        resetWorkspaceToWelcome();
+    } else if (!files.some((entry) => entry.id === activeFileId)) {
+        activeFileId = files[0].id;
+        setSingleSelection(activeFileId);
+        ensureTabOpen(activeFileId);
+        const fallback = getActiveFile();
+        setEditorValue(fallback?.code ?? "", { silent: true });
+    }
+
+    if (editingFileId && removedIds.has(editingFileId)) {
+        clearFileRenameState();
+    }
+
+    reconcileFolderSelection();
+    reconcileFileSelection({ ensureOne: selectedFolderPaths.size === 0 });
+    persistFiles();
+    renderFileList();
+
+    if (announce) {
+        status.set(`Deleted lesson package (${lessonFileCount} ${lessonFileCount === 1 ? "file" : "files"})`);
+        logger.append("system", [
+            `Deleted lesson package and moved ${lessonFileCount} ${lessonFileCount === 1 ? "file" : "files"} to Trash. Undo available for 15s.`,
+        ]);
+    }
+    recordFileHistory(`${historyLabel} (${lessonFileCount})`, before);
+    if (focus) editor.focus();
+    return true;
 }
 
 function isLessonSessionActiveForCurrentFile() {
@@ -11562,10 +11942,9 @@ function syncLessonStateForActiveFile() {
 }
 
 function setLessonCursorToProgress() {
-    const step = getLessonCurrentStep();
-    if (!step) return false;
-    normalizeLessonProgressToTypeable();
-    const index = step.startIndex + Math.max(0, Number(lessonSession.progress) || 0);
+    const lessonState = getLessonStepRuntimeState({ normalizeProgress: true });
+    if (!lessonState) return false;
+    const index = lessonState.step.startIndex + lessonState.progress;
     const pos = editor.posFromIndex?.(index);
     if (!pos) return false;
     editor.setCursor(pos);
@@ -11683,10 +12062,9 @@ function markLessonTypedActiveRanges(step, progress) {
 
 function syncLessonGhostMarks() {
     clearLessonVisualMarks();
-    const step = getLessonCurrentStep();
-    if (!step || lessonSession?.completed) return;
-    normalizeLessonProgressToTypeable();
-    const progress = clamp(Number(lessonSession.progress) || 0, 0, step.expected.length);
+    const lessonState = getLessonStepRuntimeState({ normalizeProgress: true });
+    if (!lessonState) return;
+    const { step, progress } = lessonState;
     const stepStart = editor.posFromIndex?.(step.startIndex);
     const nextCharStartIndex = step.startIndex + progress;
     const nextCharEndIndex = Math.min(step.endIndex, nextCharStartIndex + 1);
@@ -11721,6 +12099,7 @@ function stopTypingLesson({ announce = true } = {}) {
     clearPersistedLessonSession();
     clearLessonVisualMarks();
     updateLessonHud();
+    renderFileList();
     if (announce) {
         status.set("Lesson mode stopped");
     }
@@ -11777,6 +12156,7 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
     normalizeLessonProgressToTypeable();
     persistLessonSession({ force: true });
     refreshLessonTypingVisualState({ prefix: "Lesson started" });
+    renderFileList();
     focusLessonTypingSurface();
     if (announce) {
         logger.append("system", [
@@ -11821,6 +12201,7 @@ function advanceLessonStep({ announce = true } = {}) {
         clearPersistedLessonSession();
         clearLessonVisualMarks();
         updateLessonHud();
+        renderFileList();
         status.set("Lesson complete. Running...");
         logger.append("system", [
             `Lesson complete: ${lessonSession.fileName} • +${completionBonus} XP • +${completionBytes} Bytes • session XP ${lessonSession.sessionXp} • ${metrics.accuracy}% acc • ${metrics.wpm} WPM • daily streak ${lessonProfile.dailyStreak}`,
@@ -11851,14 +12232,13 @@ function describeLessonExpectedChar(char = "") {
 }
 
 function updateLessonProgressStatus({ prefix = "Lesson" } = {}) {
-    if (!lessonSession || lessonSession.completed) return;
-    const step = getLessonCurrentStep();
-    if (!step) return;
+    const lessonState = getLessonStepRuntimeState();
+    if (!lessonState) return;
+    const { step, expectedText, progress, stepLength } = lessonState;
     const stepNumber = Math.max(1, Number(lessonSession.stepIndex) + 1);
     const stepTotal = Math.max(1, Number(lessonSession.steps?.length) || 1);
-    const progress = Math.max(0, Number(lessonSession.progress) || 0);
-    const total = Math.max(1, Number(step.expected?.length) || 1);
-    const nextExpected = String(step.expected?.[progress] || "");
+    const total = Math.max(1, stepLength || 0);
+    const nextExpected = String(expectedText[progress] || "");
     const needsHint = nextExpected === " " || nextExpected === "\t" || nextExpected === "\n";
     const hint = needsHint ? ` • next ${describeLessonExpectedChar(nextExpected)}` : "";
     status.set(`${prefix}: ${step.id} (${stepNumber}/${stepTotal}) ${progress}/${total}${hint}`);
@@ -11891,8 +12271,9 @@ function resolveLessonInputSequence(inputChar = "", step = null, progress = 0) {
 
 function applyLessonInputChar(inputChar = "") {
     if (!isLessonSessionActiveForCurrentFile()) return { ok: false, reason: "inactive" };
-    const step = getLessonCurrentStep();
-    if (!step) return { ok: false, reason: "missing-step" };
+    const initialLessonState = getLessonStepRuntimeState();
+    if (!initialLessonState) return { ok: false, reason: "missing-step" };
+    const step = initialLessonState.step;
     const value = String(inputChar || "");
     if (!value) return { ok: false, reason: "empty" };
 
@@ -11913,24 +12294,25 @@ function applyLessonInputChar(inputChar = "") {
 
     trackLessonInputCadence();
 
-    normalizeLessonProgressToTypeable();
-
-    const expected = step.expected[lessonSession.progress] || "";
+    const lessonState = getLessonStepRuntimeState({ normalizeProgress: true });
+    if (!lessonState) return { ok: false, reason: "missing-step" };
+    const expectedText = lessonState.expectedText;
+    const progress = lessonState.progress;
+    const expected = expectedText[progress] || "";
     if (!expected) {
         advanceLessonStep({ announce: true });
         return { ok: true, reason: "step-complete", progress: lessonSession.progress };
     }
 
-    const inputSequence = resolveLessonInputSequence(value, step, lessonSession.progress) || value;
-    const expectedText = String(step.expected || "");
-    const expectedSequence = expectedText.slice(lessonSession.progress, lessonSession.progress + inputSequence.length);
+    const inputSequence = resolveLessonInputSequence(value, step, progress) || value;
+    const expectedSequence = expectedText.slice(progress, progress + inputSequence.length);
 
     if (inputSequence !== expectedSequence) {
         const now = Date.now();
         const mismatchCooldownMs = getAdaptiveLessonMismatchCooldownMs();
-        const isRepeatedMismatch = lessonLastMismatchProgress === lessonSession.progress
+        const isRepeatedMismatch = lessonLastMismatchProgress === progress
             && (now - lessonLastMismatchAt) < mismatchCooldownMs;
-        lessonLastMismatchProgress = lessonSession.progress;
+        lessonLastMismatchProgress = progress;
         lessonLastMismatchAt = now;
         if (!isRepeatedMismatch) {
             lessonSession.typedChars += 1;
@@ -11943,7 +12325,7 @@ function applyLessonInputChar(inputChar = "") {
             status.set(`Lesson: expected ${describeLessonExpectedChar(expected)}`);
         }
         updateLessonHud();
-        return { ok: false, reason: "mismatch", expected, received: value, progress: lessonSession.progress };
+        return { ok: false, reason: "mismatch", expected, received: value, progress };
     }
 
     const matchedLength = Math.max(1, inputSequence.length);
@@ -11970,7 +12352,7 @@ function applyLessonInputChar(inputChar = "") {
         triggerLessonHaptic(getAdaptiveLessonStreakHapticDuration());
     }
     persistLessonSession();
-    const finishedStep = lessonSession.progress >= step.expected.length;
+    const finishedStep = lessonSession.progress >= expectedText.length;
     if (finishedStep) {
         advanceLessonStep({ announce: true });
         return { ok: true, reason: "step-complete", progress: lessonSession.progress };
@@ -12093,6 +12475,40 @@ async function loadLessonById(id, { startTyping = true, runAfter = false } = {})
     status.set(`Loading ${lesson.name}...`);
 
     try {
+        const existingLessonFiles = getLessonWorkspaceFiles(lesson.id);
+        if (existingLessonFiles.length) {
+            const entryLeaf = getFileBaseName(String(lesson.entryFile || existingLessonFiles[0]?.name || "")).toLowerCase();
+            const activeTarget = existingLessonFiles.find(
+                (file) => getFileBaseName(file.name).toLowerCase() === entryLeaf
+            ) || existingLessonFiles.find((file) => isJavaScriptLessonFile(file)) || existingLessonFiles[0];
+
+            stashActiveFile();
+            activeFileId = activeTarget.id;
+            setSingleSelection(activeTarget.id);
+            ensureTabOpen(activeTarget.id);
+            expandFolderAncestors(activeTarget.name);
+            activeTarget.touchedAt = Date.now();
+            setEditorValue(activeTarget.code, { silent: true });
+            renderFileList();
+            renderEditorMirror();
+
+            const loadedMessage = `${lesson.name} is already in your files. Reusing existing lesson files.`;
+            status.set(loadedMessage);
+            logger.append("system", [loadedMessage]);
+
+            if (startTyping) {
+                startTypingLessonForFile(activeTarget.id, { announce: false });
+                const step = getLessonCurrentStep();
+                if (step) {
+                    status.set(`${loadedMessage} • step ${step.id}`);
+                }
+            }
+            if (runAfter) {
+                run();
+            }
+            return true;
+        }
+
         const before = snapshotWorkspaceState();
         const loadedFiles = await loadTemplateFilesFromSources(lesson.files, "Lesson template");
         if (!loadedFiles.length) {
@@ -12873,7 +13289,7 @@ async function bulkTrashSelectedFiles() {
     const removableFolders = [];
     selectedFolders.forEach((folderPath) => {
         const nestedFiles = files.filter((file) => file.name.startsWith(`${folderPath}/`));
-        const lockedNested = nestedFiles.filter((file) => file.locked);
+        const lockedNested = nestedFiles.filter((file) => isFileLockedForActions(file));
         if (lockedNested.length) {
             blockedFolders.push({
                 path: folderPath,
@@ -12888,8 +13304,8 @@ async function bulkTrashSelectedFiles() {
     });
 
     const filesFromRemovableFolders = removableFolders.flatMap((entry) => entry.nestedFiles);
-    const standaloneLocked = standaloneFiles.filter((file) => file.locked);
-    const standaloneUnlocked = standaloneFiles.filter((file) => !file.locked);
+    const standaloneLocked = standaloneFiles.filter((file) => isFileLockedForActions(file));
+    const standaloneUnlocked = standaloneFiles.filter((file) => !isFileLockedForActions(file));
     const unlockedById = new Map();
     [...filesFromRemovableFolders, ...standaloneUnlocked].forEach((file) => {
         unlockedById.set(file.id, file);
@@ -13041,8 +13457,22 @@ function bulkSetLocked(value) {
 }
 
 function duplicateSelectedFiles() {
-    const selected = getSelectedFiles();
+    const {
+        selectedFolders,
+        standaloneFiles,
+    } = getSelectedWorkspaceEntries();
+    const selected = standaloneFiles;
     if (!selected.length) return false;
+    const lockedStandalone = selected.filter((file) => isFileLockedForDuplication(file));
+    const lockedFolderCount = selectedFolders.reduce((count, folderPath) => {
+        const hasLocked = files.some((file) => file.name.startsWith(`${folderPath}/`) && isFileLockedForDuplication(file));
+        return count + (hasLocked ? 1 : 0);
+    }, 0);
+    if (lockedStandalone.length || lockedFolderCount > 0) {
+        status.set("Selection is locked");
+        logger.append("warn", ["Lesson-locked files/folders cannot be duplicated until the active lesson is complete."]);
+        return false;
+    }
     const before = snapshotWorkspaceState();
     const ordered = files.filter((file) => selectedFileIds.has(file.id));
     if (!ordered.length) return false;
@@ -13320,6 +13750,7 @@ function openAccountModal() {
     closeEditorSettings({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
     closeLessonStats({ focusEditor: false });
+    closeLessonTierModal({ focusEditor: false });
     setLayoutPanelOpen(false);
     setAccountModalOpen(true);
 }
@@ -13340,6 +13771,7 @@ function openShortcutHelp() {
     closeEditorHistory({ focusEditor: false });
     closeEditorSettings({ focusEditor: false });
     closeLessonStats({ focusEditor: false });
+    closeLessonTierModal({ focusEditor: false });
     closeAccountModal({ focusEditor: false });
     setShortcutHelpOpen(true);
 }
@@ -13361,6 +13793,7 @@ function openLessonStats({ view = "overview" } = {}) {
     closeEditorSettings({ focusEditor: false });
     closeShortcutHelp({ focusEditor: false });
     closeAccountModal({ focusEditor: false });
+    closeLessonTierModal({ focusEditor: false });
     closeLessonStats({ focusEditor: false });
     setLessonStatsView(view);
     setLessonStatsOpen(true);
@@ -13369,6 +13802,68 @@ function openLessonStats({ view = "overview" } = {}) {
 function closeLessonStats({ focusEditor = true } = {}) {
     if (!lessonStatsOpen) return;
     setLessonStatsOpen(false);
+    if (focusEditor) editor.focus();
+}
+
+function setLessonTierModalOpenState(tier = "", open = false) {
+    const normalizedTier = normalizeLessonTierModalKey(tier);
+    if (!normalizedTier) return;
+    const isOpen = Boolean(open);
+    const panel = normalizedTier === "beginner"
+        ? el.lessonTierBeginnerPanel
+        : normalizedTier === "intermediate"
+            ? el.lessonTierIntermediatePanel
+            : el.lessonTierExpertPanel;
+    const backdrop = normalizedTier === "beginner"
+        ? el.lessonTierBeginnerBackdrop
+        : normalizedTier === "intermediate"
+            ? el.lessonTierIntermediateBackdrop
+            : el.lessonTierExpertBackdrop;
+    if (!panel || !backdrop) return;
+    setOpenStateAttributes(panel, isOpen);
+    setOpenStateAttributes(backdrop, isOpen);
+}
+
+function setLessonTierModalOpen(nextTier = "") {
+    const normalizedTier = normalizeLessonTierModalKey(nextTier);
+    LESSON_TIER_ORDER.forEach((tier) => {
+        setLessonTierModalOpenState(tier, tier === normalizedTier);
+    });
+    lessonTierModalOpen = normalizedTier;
+    syncLessonTierMap({ show: Boolean(layoutState.filesLessonsOpen && lessonsSelectorOpen && lessons.length > 0) });
+    if (!lessonTierModalOpen) return;
+    renderLessonTierModalList(lessonTierModalOpen);
+    requestAnimationFrame(() => {
+        const closeButton = lessonTierModalOpen === "beginner"
+            ? el.lessonTierBeginnerClose
+            : lessonTierModalOpen === "intermediate"
+                ? el.lessonTierIntermediateClose
+                : el.lessonTierExpertClose;
+        closeButton?.focus();
+    });
+}
+
+function openLessonTierModal(tier = "") {
+    const normalizedTier = normalizeLessonTierModalKey(tier);
+    if (!normalizedTier) return;
+    closeFileMenus();
+    closeQuickOpen({ focusEditor: false });
+    closeCommandPalette({ focusEditor: false });
+    closeEditorSearch({ focusEditor: false });
+    closeSymbolPalette({ focusEditor: false });
+    closeProjectSearch({ focusEditor: false });
+    closeEditorHistory({ focusEditor: false });
+    closeEditorSettings({ focusEditor: false });
+    closeShortcutHelp({ focusEditor: false });
+    closeLessonStats({ focusEditor: false });
+    closeAccountModal({ focusEditor: false });
+    closeLessonTierModal({ focusEditor: false });
+    setLessonTierModalOpen(normalizedTier);
+}
+
+function closeLessonTierModal({ focusEditor = true } = {}) {
+    if (!lessonTierModalOpen) return;
+    setLessonTierModalOpen("");
     if (focusEditor) editor.focus();
 }
 
@@ -19425,6 +19920,24 @@ function wireLessonStats() {
     if (el.lessonStatsBackdrop) {
         el.lessonStatsBackdrop.addEventListener("click", () => closeLessonStats({ focusEditor: false }));
     }
+    if (el.lessonTierBeginnerClose) {
+        el.lessonTierBeginnerClose.addEventListener("click", () => closeLessonTierModal({ focusEditor: true }));
+    }
+    if (el.lessonTierIntermediateClose) {
+        el.lessonTierIntermediateClose.addEventListener("click", () => closeLessonTierModal({ focusEditor: true }));
+    }
+    if (el.lessonTierExpertClose) {
+        el.lessonTierExpertClose.addEventListener("click", () => closeLessonTierModal({ focusEditor: true }));
+    }
+    if (el.lessonTierBeginnerBackdrop) {
+        el.lessonTierBeginnerBackdrop.addEventListener("click", () => closeLessonTierModal({ focusEditor: false }));
+    }
+    if (el.lessonTierIntermediateBackdrop) {
+        el.lessonTierIntermediateBackdrop.addEventListener("click", () => closeLessonTierModal({ focusEditor: false }));
+    }
+    if (el.lessonTierExpertBackdrop) {
+        el.lessonTierExpertBackdrop.addEventListener("click", () => closeLessonTierModal({ focusEditor: false }));
+    }
     if (el.lessonStatsOverviewTab) {
         el.lessonStatsOverviewTab.addEventListener("click", () => setLessonStatsView("overview"));
     }
@@ -20399,6 +20912,11 @@ function toggleFileLock(fileId) {
 function duplicateFile(fileId) {
     const source = getFileById(fileId);
     if (!source) return;
+    if (isFileLockedForDuplication(source)) {
+        status.set("File locked");
+        logger.append("warn", ["File is lesson-locked. Complete the active lesson file before duplicating."]);
+        return;
+    }
     const before = snapshotWorkspaceState();
     const copyName = makeCopyName(source.name);
     const copy = makeFile(copyName, source.code);
@@ -20420,7 +20938,7 @@ function duplicateFile(fileId) {
 function renameFile(fileId) {
     const file = getFileById(fileId);
     if (!file) return;
-    if (file.locked) {
+    if (isFileLockedForActions(file)) {
         status.set("File locked");
         logger.append("system", ["File is locked. Unlock to rename."]);
         return;
@@ -20449,13 +20967,15 @@ function syncFileRowMenuActions(file) {
     const duplicateBtn = el.fileRowMenu.querySelector('[data-file-menu-action="duplicate"]');
     const deleteBtn = el.fileRowMenu.querySelector('[data-file-menu-action="delete"]');
     const deleteSelection = shouldDeleteSelectionFromFileMenu(file.id);
+    const lockedForActions = isFileLockedForActions(file);
+    const lockedForDuplication = isFileLockedForDuplication(file);
     if (pinBtn) pinBtn.textContent = file.pinned ? "Unpin" : "Pin";
     if (lockBtn) lockBtn.textContent = file.locked ? "Unlock" : "Lock";
-    if (renameBtn) renameBtn.disabled = file.locked;
-    if (duplicateBtn) duplicateBtn.disabled = false;
+    if (renameBtn) renameBtn.disabled = lockedForActions;
+    if (duplicateBtn) duplicateBtn.disabled = lockedForDuplication;
     if (deleteBtn) {
         deleteBtn.textContent = deleteSelection ? "Delete Selected Items" : "Delete";
-        deleteBtn.disabled = deleteSelection ? false : file.locked || files.length === 1;
+        deleteBtn.disabled = deleteSelection ? false : lockedForActions || files.length === 1;
     }
 }
 
@@ -20463,7 +20983,7 @@ function syncFolderMenuActions(normalizedFolderPath) {
     if (!el.fileFolderMenu) return;
     const knownFolders = collectFolderPaths(files);
     const folderFiles = files.filter((file) => file.name.startsWith(`${normalizedFolderPath}/`));
-    const hasLockedFiles = folderFiles.some((file) => file.locked);
+    const hasLockedFiles = folderFiles.some((file) => isFileLockedForActions(file));
     const renameBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="rename"]');
     const newFileBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-file"]');
     const newFolderBtn = el.fileFolderMenu.querySelector('[data-folder-menu-action="new-folder"]');
@@ -20549,6 +21069,12 @@ function syncFilesMenuActions() {
     const selection = getSelectedWorkspaceEntries();
     const selectedFiles = getSelectedFiles();
     const selectedFileCount = selectedFiles.length;
+    const selectedHasLockedFiles = selectedFiles.some((file) => isFileLockedForDuplication(file));
+    const selectedFoldersHaveLockedFiles = selection.selectedFolders.some((folderPath) => {
+        const nestedFiles = files.filter((file) => file.name.startsWith(`${folderPath}/`));
+        return nestedFiles.some((file) => isFileLockedForDuplication(file));
+    });
+    const selectionHasLockedEntries = selectedHasLockedFiles || selectedFoldersHaveLockedFiles;
     const selectedCount = selection.selectedEntryCount;
     const visibleCount = getVisibleFileIdsForSelection().length;
     const anyLocked = files.some((file) => file.locked);
@@ -20575,7 +21101,7 @@ function syncFilesMenuActions() {
     const restoreBtn = el.filesMenu.querySelector('[data-files-menu="restore-last"]');
     const restoreAllBtn = el.filesMenu.querySelector('[data-files-menu="restore-all"]');
     const emptyTrashBtn = el.filesMenu.querySelector('[data-files-menu="empty-trash"]');
-    if (duplicateBtn) duplicateBtn.disabled = !active;
+    if (duplicateBtn) duplicateBtn.disabled = !active || isFileLockedForDuplication(active);
     if (renameBtn) renameBtn.disabled = !active || active.locked;
     if (saveFileBtn) saveFileBtn.disabled = !active || !isFileDirty(active);
     if (saveAllBtn) {
@@ -20603,7 +21129,7 @@ function syncFilesMenuActions() {
         moveSelectedBtn.textContent = selectedCount ? `Move (${selectedCount})` : "Move";
     }
     if (duplicateSelectedBtn) {
-        duplicateSelectedBtn.disabled = selectedFileCount === 0;
+        duplicateSelectedBtn.disabled = selectedFileCount === 0 || selectionHasLockedEntries;
         duplicateSelectedBtn.textContent = selectedFileCount ? `Duplicate (${selectedFileCount})` : "Duplicate";
     }
     if (pinSelectedBtn) pinSelectedBtn.disabled = selectedFileCount === 0;
@@ -21102,16 +21628,19 @@ function renderFileList() {
         const selected = selectedFileIds.has(file.id);
         const dirty = isFileDirty(file);
         const editing = allowEditing && file.id === editingFileId;
-        const isLocked = Boolean(file.locked);
+        const lessonLocked = isLessonFileTemporarilyLocked(file);
+        const isLocked = Boolean(file.locked || lessonLocked);
         const errorBlock = editing && editingError
             ? `<span class="file-error">${escapeHTML(editingError)}</span>`
             : "";
         const draftValue = editing ? (editingDraft ?? getFileBaseName(file.name)) : file.name;
         const invalid = editing && Boolean(editingError);
         const label = displayName || file.name;
-        const activeTag = !editing && active
-            ? `<span class="file-active-tag" aria-label="Active file">ACTIVE</span>`
-            : "";
+        const activeTag = !editing && lessonLocked
+            ? `<span class="file-active-tag" aria-label="Lesson locked">🔒</span>`
+            : (!editing && active
+                ? `<span class="file-active-tag" aria-label="Active file">ACTIVE</span>`
+                : "");
         const iconPath = getFileIconPath(file.name);
         const iconBlock = `<img class="file-row-icon" src="${escapeHTML(iconPath)}" alt="" aria-hidden="true" loading="lazy" decoding="async" />`;
         const nameBlock = editing
@@ -21126,8 +21655,8 @@ function renderFileList() {
             ? `draggable="true" data-draggable-file="true"`
             : "";
         const rowAttrs = editing
-            ? `class="file-row" role="option" aria-selected="${selected}" aria-current="${active ? "true" : "false"}" id="${rowId}" data-file-id="${file.id}" data-active="${active}" data-selected="${selected}" data-dirty="${dirty}" data-editing="true" data-pinned="${file.pinned}" data-locked="${isLocked}" data-file-row-section="${sectionId}" data-file-depth="${depthValue}" ${depthStyle} ${titleAttr}`
-            : `type="button" class="file-row" role="option" aria-selected="${selected}" aria-current="${active ? "true" : "false"}" id="${rowId}" data-file-id="${file.id}" data-active="${active}" data-selected="${selected}" data-dirty="${dirty}" data-pinned="${file.pinned}" data-locked="${isLocked}" data-file-row-section="${sectionId}" data-file-depth="${depthValue}" ${depthStyle} ${titleAttr} ${draggableAttr}`;
+            ? `class="file-row" role="option" aria-selected="${selected}" aria-current="${active ? "true" : "false"}" id="${rowId}" data-file-id="${file.id}" data-active="${active}" data-selected="${selected}" data-dirty="${dirty}" data-editing="true" data-pinned="${file.pinned}" data-locked="${isLocked}" data-lesson-locked="${lessonLocked}" data-file-row-section="${sectionId}" data-file-depth="${depthValue}" ${depthStyle} ${titleAttr}`
+            : `type="button" class="file-row" role="option" aria-selected="${selected}" aria-current="${active ? "true" : "false"}" id="${rowId}" data-file-id="${file.id}" data-active="${active}" data-selected="${selected}" data-dirty="${dirty}" data-pinned="${file.pinned}" data-locked="${isLocked}" data-lesson-locked="${lessonLocked}" data-file-row-section="${sectionId}" data-file-depth="${depthValue}" ${depthStyle} ${titleAttr} ${draggableAttr}`;
         const guides = Array.isArray(guideLevels) && guideLevels.length
             ? `<span class="file-tree-guides" aria-hidden="true">${guideLevels.map((level) => `<span class="file-tree-guide" style="left:${8 + (level * 12)}px"></span>`).join("")}</span>`
             : "";
@@ -21427,6 +21956,11 @@ function selectFile(id) {
     }
     const nextFile = files.find((f) => f.id === id);
     if (!nextFile) return;
+    if (isLessonFileTemporarilyLocked(nextFile)) {
+        status.set("Lesson lock: complete the active JS lesson file first");
+        logger.append("warn", [`Lesson lock blocked ${nextFile.name}. Complete ${lessonSession?.fileName || "the active JS lesson file"} first.`]);
+        return;
+    }
 
     stashActiveFile();
     activeFileId = nextFile.id;
@@ -21458,6 +21992,7 @@ function selectFile(id) {
 function updateActiveFileCode(newCode, { scheduleAutosaveNow = true } = {}) {
     const file = getActiveFile();
     if (!file) return;
+    if (isLessonFileTemporarilyLocked(file)) return;
     file.code = String(newCode ?? "");
     file.touchedAt = Date.now();
     syncEditorStatusBar();
@@ -21574,15 +22109,49 @@ function createFolder(parentPath = "") {
 }
 
 async function deleteFile(id) {
+    const index = files.findIndex((f) => f.id === id);
+    if (index === -1) return;
+    const file = files[index];
+
+    const lessonDeletionScope = getLessonDeletionScope(file);
+    if (lessonDeletionScope) {
+        const lockedLessonFiles = lessonDeletionScope.files.filter((entry) => Boolean(entry?.locked));
+        if (lockedLessonFiles.length) {
+            status.set("Lesson files locked");
+            logger.append("system", [
+                `${lockedLessonFiles.length} locked lesson file${lockedLessonFiles.length === 1 ? "" : "s"}. Unlock before deleting lesson package.`,
+            ]);
+            return;
+        }
+
+        const lessonFileCount = lessonDeletionScope.files.length;
+        const lessonFolderCount = lessonDeletionScope.folderScopes.length;
+        const folderPreview = lessonDeletionScope.folderScopes.map((path) => `${path}/`);
+        const previewItems = [...folderPreview, ...lessonDeletionScope.files.map((entry) => entry.name)];
+        const title = lessonFolderCount === 1
+            ? `Delete lesson folder "${lessonDeletionScope.folderScopes[0]}" and ${lessonFileCount} file${lessonFileCount === 1 ? "" : "s"}?`
+            : `Delete this lesson package and ${lessonFileCount} file${lessonFileCount === 1 ? "" : "s"}?`;
+        const detail = lessonFolderCount > 0
+            ? "Deleting any lesson file removes the lesson folder and all lesson files."
+            : "Deleting any lesson file removes all files belonging to this lesson.";
+        const confirmDelete = await confirmWithFilePreview(title, previewItems, { detail, limit: 12 });
+        if (!confirmDelete) return;
+
+        deleteLessonPackage(lessonDeletionScope, {
+            historyLabel: "Delete lesson package",
+            undoLabel: `Deleted lesson ${lessonDeletionScope.lessonId || file.name}`,
+            announce: true,
+            focus: true,
+        });
+        return;
+    }
+
     if (files.length === 1) {
         logger.append("system", ["Keep at least one file."]); 
         return;
     }
 
-    const index = files.findIndex((f) => f.id === id);
-    if (index === -1) return;
-    const file = files[index];
-    if (file.locked) {
+    if (isFileLockedForActions(file)) {
         status.set("File locked");
         logger.append("system", ["File is locked. Unlock to delete."]);
         return;
@@ -21916,7 +22485,7 @@ function buildSelectedMovePayload() {
     return {
         folderPaths: selectedFolders,
         fileIds: standaloneFiles
-            .filter((file) => !file.locked)
+            .filter((file) => !isFileLockedForActions(file))
             .map((file) => file.id),
     };
 }
@@ -21947,7 +22516,7 @@ function canMoveFolderToTarget(folderPath, targetFolderPath = "") {
 
 function canMoveFileToTarget(fileId, targetFolderPath = "") {
     const file = getFileById(fileId);
-    if (!file || file.locked) return false;
+    if (!file || isFileLockedForActions(file)) return false;
     const target = normalizeFolderPath(targetFolderPath, { allowEmpty: true });
     const current = getFileDirectory(file.name);
     return current !== target;
@@ -22152,7 +22721,7 @@ function onFileListDragStart(event) {
     }
     const fileId = row.dataset.fileId;
     const file = getFileById(fileId);
-    if (!file || file.locked) {
+    if (!file || isFileLockedForActions(file)) {
         event.preventDefault();
         status.set("File locked");
         return;
@@ -22498,7 +23067,7 @@ function selectBaseName(input) {
 
 function startRename(fileId) {
     const file = files.find((item) => item.id === fileId);
-    if (file?.locked) {
+    if (isFileLockedForActions(file)) {
         status.set("File locked");
         logger.append("system", ["File is locked. Unlock to rename."]);
         return;
@@ -22523,7 +23092,7 @@ function commitRename(fileId, value, { cancel = false, reason = "manual" } = {})
         renderFileList();
         return;
     }
-    if (file.locked) {
+    if (isFileLockedForActions(file)) {
         status.set("File locked");
         logger.append("system", ["File is locked. Unlock to rename."]);
         return;
@@ -22735,7 +23304,12 @@ function onFileListKey(event) {
     if (event.key === "Delete" && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
         event.preventDefault();
         const selectedCount = getSelectedWorkspaceEntries().selectedEntryCount;
-        if (isFilesSection && selectedCount > 1 && selectedFileIds.has(fileId)) {
+        const selectedFile = getFileById(fileId);
+        const shouldDeleteSelection = isFilesSection
+            && selectedCount > 1
+            && selectedFileIds.has(fileId)
+            && !isLessonFamilyFile(selectedFile);
+        if (shouldDeleteSelection) {
             bulkTrashSelectedFiles();
             return;
         }
@@ -23114,11 +23688,15 @@ function exposeDebug() {
             return lessons.map((lesson) => ({
                 id: lesson.id,
                 name: lesson.name,
+                tier: lesson.tier,
                 folder: lesson.folder,
                 entryFile: lesson.entryFile,
                 files: lesson.files.map((file) => ({ path: file.path, src: file.src })),
                 iconSources: [...(lesson.iconSources || [])],
             }));
+        },
+        getLessonsCatalogReport() {
+            return getLessonsCatalogReportSnapshot();
         },
         loadLesson(id, { startTyping = true, run = false } = {}) {
             selectedLessonId = String(id || selectedLessonId || "");
@@ -23186,6 +23764,10 @@ function exposeDebug() {
                 name: f.name,
                 active: f.id === activeFileId,
                 dirty: isFileDirty(f),
+                family: String(f.family || "workspace"),
+                lessonId: String(f.lessonId || ""),
+                locked: isFileLockedForActions(f),
+                lessonLocked: isLessonFileTemporarilyLocked(f),
             }));
         },
         listDirtyFiles() {
@@ -23269,8 +23851,20 @@ function exposeDebug() {
         deleteFile(name) {
             const target = files.find((f) => f.name === name);
             if (!target) return false;
+
+            const lessonDeletionScope = getLessonDeletionScope(target);
+            if (lessonDeletionScope) {
+                if (lessonDeletionScope.files.some((entry) => Boolean(entry?.locked))) return false;
+                return deleteLessonPackage(lessonDeletionScope, {
+                    historyLabel: "Delete lesson package",
+                    undoLabel: `Deleted lesson ${lessonDeletionScope.lessonId || target.name}`,
+                    announce: false,
+                    focus: false,
+                });
+            }
+
             if (files.length === 1) return false;
-            if (target.locked) return false;
+            if (isFileLockedForActions(target)) return false;
             const before = snapshotWorkspaceState();
             queueDeleteUndo(`Deleted ${target.name}`);
             pushFilesToTrash([target]);
@@ -24440,7 +25034,10 @@ async function boot() {
             if (action === "rename") renameFile(fileId);
             if (action === "duplicate") duplicateFile(fileId);
             if (action === "delete") {
-                const shouldDeleteSelection = selectedFileIds.has(fileId) && getSelectedWorkspaceEntries().selectedEntryCount > 1;
+                const targetFile = getFileById(fileId);
+                const shouldDeleteSelection = selectedFileIds.has(fileId)
+                    && getSelectedWorkspaceEntries().selectedEntryCount > 1
+                    && !isLessonFamilyFile(targetFile);
                 if (shouldDeleteSelection) {
                     bulkTrashSelectedFiles();
                 } else {
@@ -24593,17 +25190,19 @@ async function boot() {
     if (el.lessonsSelectorToggle) {
         el.lessonsSelectorToggle.addEventListener("click", () => {
             lessonsSelectorOpen = !lessonsSelectorOpen;
+            if (!lessonsSelectorOpen) {
+                closeLessonTierModal({ focusEditor: false });
+            }
             syncLessonsUI();
         });
     }
     if (el.lessonTierMap) {
         el.lessonTierMap.addEventListener("click", (event) => {
-            const target = event.target instanceof Element ? event.target.closest("[data-lesson-tier-filter]") : null;
+            const target = event.target instanceof Element ? event.target.closest("[data-lesson-tier-modal-open]") : null;
             if (!target) return;
-            const nextTier = normalizeLessonTierFilter(target.dataset.lessonTierFilter || "all");
-            if (nextTier === lessonTierFilter) return;
-            lessonTierFilter = nextTier;
-            syncLessonsUI();
+            const nextTier = normalizeLessonTierModalKey(target.dataset.lessonTierModalOpen || "");
+            if (!nextTier) return;
+            openLessonTierModal(nextTier);
         });
     }
     if (el.applicationsList) {
@@ -24682,13 +25281,19 @@ async function boot() {
             await loadApplicationById(id, { runAfter: false });
         });
     }
-    if (el.lessonLoad) {
-        el.lessonLoad.addEventListener("click", async () => {
-            const id = selectedLessonId;
-            if (!id) return;
-            await loadLessonById(id, { startTyping: true, runAfter: false });
-        });
-    }
+    const onLessonTierModalListClick = async (event) => {
+        const target = event.target instanceof Element ? event.target.closest("[data-lesson-tier-modal-lesson-id]") : null;
+        if (!target) return;
+        const id = String(target.dataset.lessonTierModalLessonId || "");
+        if (!id) return;
+        selectedLessonId = id;
+        closeLessonTierModal({ focusEditor: false });
+        await loadLessonById(id, { startTyping: true, runAfter: false });
+        focusLessonTypingSurface();
+    };
+    el.lessonTierBeginnerList?.addEventListener("click", onLessonTierModalListClick);
+    el.lessonTierIntermediateList?.addEventListener("click", onLessonTierModalListClick);
+    el.lessonTierExpertList?.addEventListener("click", onLessonTierModalListClick);
     el.btnRunnerFull.addEventListener("click", toggleRunnerFullscreen);
     el.btnRunnerExit.addEventListener("click", exitRunnerFullscreen);
     if (el.btnPopoutSandbox) {
@@ -25125,6 +25730,11 @@ async function boot() {
         if (e.key === "Escape" && lessonStatsOpen) {
             e.preventDefault();
             closeLessonStats({ focusEditor: true });
+            return;
+        }
+        if (e.key === "Escape" && lessonTierModalOpen) {
+            e.preventDefault();
+            closeLessonTierModal({ focusEditor: true });
             return;
         }
         if (e.key === "Escape" && accountModalOpen) {

@@ -10,6 +10,21 @@ function clampNonNegativeInteger(value, fallback = 0, min = 0) {
     return Math.max(min, parsed);
 }
 
+function normalizeLessonDayString(value = "") {
+    const normalized = String(value || "").trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return "";
+    const [yearRaw, monthRaw, dayRaw] = normalized.split("-");
+    const year = Number(yearRaw);
+    const month = Number(monthRaw);
+    const day = Number(dayRaw);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return "";
+    const probe = new Date(Date.UTC(year, month - 1, day));
+    if (probe.getUTCFullYear() !== year || (probe.getUTCMonth() + 1) !== month || probe.getUTCDate() !== day) {
+        return "";
+    }
+    return normalized;
+}
+
 function normalizeLessonStats(source = null) {
     const input = source && typeof source === "object" ? source : {};
     return {
@@ -20,7 +35,7 @@ function normalizeLessonStats(source = null) {
         lesson_best_streak: clampNonNegativeInteger(input.lesson_best_streak, 0),
         lesson_daily_streak: clampNonNegativeInteger(input.lesson_daily_streak, 0),
         lesson_total_typed_chars: clampNonNegativeInteger(input.lesson_total_typed_chars, 0),
-        lesson_last_active_day: clampString(input.lesson_last_active_day, 16),
+        lesson_last_active_day: normalizeLessonDayString(input.lesson_last_active_day),
     };
 }
 

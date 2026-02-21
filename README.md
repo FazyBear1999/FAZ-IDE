@@ -123,6 +123,16 @@ Production domain stamping note:
 - Example: `$env:SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"` and `$env:SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_PUBLIC_KEY"`
 - Recommended production command: `npm run frank:full:cloud` (requires `SUPABASE_URL` + `SUPABASE_ANON_KEY` and enforces cloud-auth packaging end-to-end).
 
+Persistent local release env (one-time setup):
+
+- Create `.env.release.local` at repo root (gitignored by default).
+- Add your values once:
+  - `SITE_URL=https://yourdomain.com`
+  - `SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co`
+  - `SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_PUBLIC_KEY`
+  - `SUPABASE_OAUTH_REDIRECT_PATH=/`
+- After that, `npm run frank:full`, `npm run frank:full:cloud`, and `npm run deploy:siteground` auto-load these values when shell env vars are not already set.
+
 ## QA Commands
 
 - `npm run sync:dist-site` copies source web assets into `dist_site/` and removes stale files.

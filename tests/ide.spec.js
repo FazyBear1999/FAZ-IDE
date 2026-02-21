@@ -1977,18 +1977,20 @@ test("lessons catalog populated keeps section available and collapsed by default
     const lessons = api?.listLessons?.() || [];
     const section = document.querySelector("#filesLessons");
     const toggle = document.querySelector("#lessonsSelectorToggle");
-    const list = document.querySelector("#lessonsList");
-    const load = document.querySelector("#lessonLoad");
+    const tierMap = document.querySelector("#lessonTierMap");
+    const beginnerBtn = document.querySelector("#lessonTierOpenBeginner");
+    const intermediateBtn = document.querySelector("#lessonTierOpenIntermediate");
+    const expertBtn = document.querySelector("#lessonTierOpenExpert");
 
     return {
       count: lessons.length,
       sectionHidden: section?.getAttribute("aria-hidden") === "true",
       toggleDisabled: Boolean(toggle?.disabled),
       toggleExpanded: String(toggle?.getAttribute("aria-expanded") || ""),
-      listHidden: list?.getAttribute("aria-hidden") === "true",
-      listCount: Number(list?.children?.length || 0),
-      loadHidden: Boolean(load?.hidden),
-      loadDisabled: Boolean(load?.disabled),
+      tierMapHidden: tierMap?.getAttribute("aria-hidden") === "true",
+      beginnerReady: Boolean(beginnerBtn),
+      intermediateReady: Boolean(intermediateBtn),
+      expertReady: Boolean(expertBtn),
     };
   });
 
@@ -1996,10 +1998,102 @@ test("lessons catalog populated keeps section available and collapsed by default
   expect(result.sectionHidden).toBeFalsy();
   expect(result.toggleDisabled).toBeFalsy();
   expect(result.toggleExpanded).toBe("false");
-  expect(result.listHidden).toBeTruthy();
-  expect(result.listCount).toBe(result.count);
-  expect(result.loadHidden).toBeTruthy();
-  expect(result.loadDisabled).toBeTruthy();
+  expect(result.tierMapHidden).toBeTruthy();
+  expect(result.beginnerReady).toBeTruthy();
+  expect(result.intermediateReady).toBeTruthy();
+  expect(result.expertReady).toBeTruthy();
+});
+
+test("lesson tier modal stays centered, viewport-safe, and renders 20 slots", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#lessonsSelectorToggle").click();
+  await page.locator("#lessonTierOpenBeginner").click();
+
+  const result = await page.evaluate(() => {
+    const panel = document.querySelector("#lessonTierBeginnerPanel");
+    const list = document.querySelector("#lessonTierBeginnerList");
+    const header = panel?.querySelector?.(".layout-header");
+    const closeButton = document.querySelector("#lessonTierBeginnerClose");
+    if (!(panel instanceof HTMLElement) || !(list instanceof HTMLElement)) {
+      return { ready: false };
+    }
+
+    const rect = panel.getBoundingClientRect();
+    const headerRect = header instanceof HTMLElement ? header.getBoundingClientRect() : null;
+    const closeRect = closeButton instanceof HTMLElement ? closeButton.getBoundingClientRect() : null;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const panelCenterX = rect.left + (rect.width / 2);
+    const panelCenterY = rect.top + (rect.height / 2);
+    const centeredX = Math.abs(panelCenterX - (viewportWidth / 2)) <= 8;
+    const centeredY = Math.abs(panelCenterY - (viewportHeight / 2)) <= 8;
+
+    const inViewport = rect.top >= 0 && rect.left >= 0 && rect.bottom <= viewportHeight && rect.right <= viewportWidth;
+    const listOverflowY = getComputedStyle(list).overflowY;
+    const bodyOverflowY = getComputedStyle(panel.querySelector(".lesson-tier-modal-body") || panel).overflowY;
+    const headerInViewport = Boolean(
+      headerRect
+      && headerRect.top >= 0
+      && headerRect.left >= 0
+      && headerRect.bottom <= viewportHeight
+      && headerRect.right <= viewportWidth
+    );
+    const closeVisible = Boolean(
+      closeRect
+      && closeRect.width > 0
+      && closeRect.height > 0
+      && closeRect.top >= 0
+      && closeRect.left >= 0
+      && closeRect.bottom <= viewportHeight
+      && closeRect.right <= viewportWidth
+    );
+
+    return {
+      ready: true,
+      open: panel.getAttribute("data-open") === "true",
+      slotCount: Number(list.children.length || 0),
+      centeredX,
+      centeredY,
+      inViewport,
+      listOverflowY,
+      bodyOverflowY,
+      headerInViewport,
+      closeVisible,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.open).toBeTruthy();
+  expect(result.slotCount).toBe(20);
+  expect(result.centeredX).toBeTruthy();
+  expect(result.centeredY).toBeTruthy();
+  expect(result.inViewport).toBeTruthy();
+  expect(result.headerInViewport).toBeTruthy();
+  expect(result.closeVisible).toBeTruthy();
+  expect(["visible", "clip"]).toContain(result.listOverflowY);
+  expect(["auto", "scroll"]).toContain(result.bodyOverflowY);
+});
+
+test("lesson tier modal closes from close button and backdrop", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#lessonsSelectorToggle").click();
+  await page.locator("#lessonTierOpenBeginner").click();
+  await expect(page.locator("#lessonTierBeginnerPanel")).toHaveAttribute("data-open", "true");
+
+  await page.evaluate(() => {
+    document.querySelector("#lessonTierBeginnerClose")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await expect(page.locator("#lessonTierBeginnerPanel")).toHaveAttribute("data-open", "false");
+
+  await page.locator("#lessonTierOpenBeginner").click();
+  await expect(page.locator("#lessonTierBeginnerPanel")).toHaveAttribute("data-open", "true");
+
+  await page.evaluate(() => {
+    document.querySelector("#lessonTierBeginnerBackdrop")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await expect(page.locator("#lessonTierBeginnerPanel")).toHaveAttribute("data-open", "false");
 });
 
 test("runtime validation applications are present in Applications catalog", async ({ page }) => {
@@ -2354,7 +2448,7 @@ test("games load successfully", async ({ page }) => {
   expect(result.activeName.length).toBeGreaterThan(0);
 });
 
-test("games applications and lessons load buttons reveal and enable when catalogs are expanded", async ({ page }) => {
+test("games and applications load buttons reveal and lessons tier launchers stay visible when expanded", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const result = await page.evaluate(() => {
@@ -2367,8 +2461,9 @@ test("games applications and lessons load buttons reveal and enable when catalog
 
     const gameLoad = document.querySelector("#gameLoad");
     const appLoad = document.querySelector("#appLoad");
-    const lessonLoad = document.querySelector("#lessonLoad");
-    if (!gamesToggle || !appsToggle || !lessonsToggle || !gameLoad || !appLoad || !lessonLoad) {
+    const tierMap = document.querySelector("#lessonTierMap");
+    const beginnerBtn = document.querySelector("#lessonTierOpenBeginner");
+    if (!gamesToggle || !appsToggle || !lessonsToggle || !gameLoad || !appLoad || !tierMap || !beginnerBtn) {
       return { ready: false };
     }
 
@@ -2379,10 +2474,10 @@ test("games applications and lessons load buttons reveal and enable when catalog
       lessonsToggleDisabled: Boolean(lessonsToggle.disabled),
       gameLoadHidden: Boolean(gameLoad.hidden),
       appLoadHidden: Boolean(appLoad.hidden),
-      lessonLoadHidden: Boolean(lessonLoad.hidden),
       gameLoadDisabled: Boolean(gameLoad.disabled),
       appLoadDisabled: Boolean(appLoad.disabled),
-      lessonLoadDisabled: Boolean(lessonLoad.disabled),
+      tierMapHidden: tierMap.getAttribute("aria-hidden") === "true",
+      beginnerExpanded: String(beginnerBtn.getAttribute("aria-expanded") || "false"),
     };
   });
 
@@ -2392,10 +2487,10 @@ test("games applications and lessons load buttons reveal and enable when catalog
   expect(result.lessonsToggleDisabled).toBeFalsy();
   expect(result.gameLoadHidden).toBeFalsy();
   expect(result.appLoadHidden).toBeFalsy();
-  expect(result.lessonLoadHidden).toBeFalsy();
   expect(result.gameLoadDisabled).toBeFalsy();
   expect(result.appLoadDisabled).toBeFalsy();
-  expect(result.lessonLoadDisabled).toBeFalsy();
+  expect(result.tierMapHidden).toBeFalsy();
+  expect(result.beginnerExpanded).toBe("false");
 });
 
 test("files panel sections can be reordered and persist in layout state", async ({ page }) => {
@@ -4225,20 +4320,31 @@ test("beginner tutorial sandbox actions are visible without hover", async ({ pag
       await wait(40);
     }
 
-    await wait(120);
-
     const runnerShell = document.querySelector("#runnerShell");
     const actions = runnerShell?.querySelector?.(".runner-actions");
     const popout = document.querySelector("#popoutSandbox");
     const expand = document.querySelector("#runnerFull");
-    const computed = actions instanceof HTMLElement ? window.getComputedStyle(actions) : null;
+    let opacity = 0;
+    let pointerEvents = "";
+
+    if (actions instanceof HTMLElement) {
+      for (let i = 0; i < 40; i += 1) {
+        const computed = window.getComputedStyle(actions);
+        opacity = Number.parseFloat(computed.opacity || "0");
+        pointerEvents = String(computed.pointerEvents || "");
+        if (opacity >= 0.95 && pointerEvents === "auto") {
+          break;
+        }
+        await wait(30);
+      }
+    }
 
     return {
       ready: true,
       reached,
       tutorialActionsAttr: String(runnerShell?.getAttribute?.("data-tutorial-actions") || ""),
-      opacity: computed ? Number.parseFloat(computed.opacity || "0") : 0,
-      pointerEvents: computed ? String(computed.pointerEvents || "") : "",
+      opacity,
+      pointerEvents,
       popoutPresent: popout instanceof HTMLElement,
       expandPresent: expand instanceof HTMLElement,
     };
@@ -6229,8 +6335,11 @@ test("loading a lesson from sidebar focuses editor for immediate typing", async 
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   await page.locator("#lessonsSelectorToggle").click();
-  await page.locator("#lessonsList [data-lesson-id]").first().click();
-  await page.locator("#lessonLoad").click();
+  await page.locator("#lessonTierOpenBeginner").click();
+  await expect.poll(async () => {
+    return page.locator("#lessonTierBeginnerList [data-lesson-tier-modal-lesson-id]").count();
+  }).toBeGreaterThan(0);
+  await page.locator("#lessonTierBeginnerList [data-lesson-tier-modal-lesson-id]").first().click();
 
   await expect.poll(async () => {
     return page.evaluate(() => Boolean(window.fazide?.getLessonState?.()?.active));
@@ -6253,6 +6362,113 @@ test("loading a lesson from sidebar focuses editor for immediate typing", async 
   expect(result.ready).toBeTruthy();
   expect(result.active).toBeTruthy();
   expect(result.focused).toBeTruthy();
+});
+
+test("lesson-locked files cannot be duplicated from row menu until lesson completes", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const prepared = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState) return { ready: false };
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const state = api.getLessonState();
+    return {
+      ready: true,
+      loaded: Boolean(loaded),
+      active: Boolean(state?.active),
+    };
+  });
+
+  expect(prepared.ready).toBeTruthy();
+  expect(prepared.loaded).toBeTruthy();
+  expect(prepared.active).toBeTruthy();
+
+  await page.locator('#fileList [data-file-section="files"]').click();
+  const lockedRow = page.locator('.file-row[data-file-row-section="files"][data-lesson-locked="true"]').first();
+  await expect(lockedRow).toBeVisible();
+
+  await lockedRow.click({ button: "right" });
+  await expect(page.locator("#fileRowMenu")).toHaveAttribute("aria-hidden", "false");
+  await expect(page.locator('#fileRowMenu [data-file-menu-action="duplicate"]')).toBeDisabled();
+});
+
+test("active lesson file cannot be duplicated while lesson is active", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const prepared = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.listFiles) return { ready: false };
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const state = api.getLessonState();
+    const activeLessonFile = api.listFiles().find((file) => file.active && file.family === "lesson");
+    return {
+      ready: true,
+      loaded: Boolean(loaded),
+      active: Boolean(state?.active),
+      activeLessonName: String(activeLessonFile?.name || ""),
+    };
+  });
+
+  expect(prepared.ready).toBeTruthy();
+  expect(prepared.loaded).toBeTruthy();
+  expect(prepared.active).toBeTruthy();
+  expect(prepared.activeLessonName.toLowerCase().endsWith(".js")).toBeTruthy();
+
+  await page.locator("#filesMenuButton").click();
+  await expect(page.locator('#filesMenu [data-files-menu="duplicate"]')).toBeDisabled();
+});
+
+test("reloading the same lesson reuses files without creating duplicates", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.listFiles) {
+      return { ready: false };
+    }
+
+    const lessonId = "paddle-lesson-1";
+    const beforeLesson = api.listFiles().filter((file) => file.family === "lesson" && file.lessonId === lessonId);
+    const beforeTotal = api.listFiles().length;
+
+    const firstLoad = await api.loadLesson(lessonId, { startTyping: true, run: false });
+    const afterFirst = api.listFiles();
+    const afterFirstLesson = afterFirst.filter((file) => file.family === "lesson" && file.lessonId === lessonId);
+    const firstIds = [...new Set(afterFirstLesson.map((file) => String(file.id || "")))].sort();
+
+    const secondLoad = await api.loadLesson(lessonId, { startTyping: true, run: false });
+    const afterSecond = api.listFiles();
+    const afterSecondLesson = afterSecond.filter((file) => file.family === "lesson" && file.lessonId === lessonId);
+    const secondIds = [...new Set(afterSecondLesson.map((file) => String(file.id || "")))].sort();
+
+    const logText = String(document.querySelector("#log")?.textContent || "");
+    const statusText = String(document.querySelector("#statusText")?.textContent || "");
+
+    return {
+      ready: true,
+      beforeLessonCount: beforeLesson.length,
+      beforeTotal,
+      firstLoad: Boolean(firstLoad),
+      secondLoad: Boolean(secondLoad),
+      afterFirstCount: afterFirstLesson.length,
+      afterSecondCount: afterSecondLesson.length,
+      afterFirstTotal: afterFirst.length,
+      afterSecondTotal: afterSecond.length,
+      sameIdsAfterReload: JSON.stringify(firstIds) === JSON.stringify(secondIds),
+      reuseMessageInLog: logText.includes("already in your files"),
+      reuseMessageInStatus: statusText.includes("already in your files"),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.firstLoad).toBeTruthy();
+  expect(result.secondLoad).toBeTruthy();
+  expect(result.afterFirstCount).toBeGreaterThan(0);
+  expect(result.afterSecondCount).toBe(result.afterFirstCount);
+  expect(result.afterSecondTotal).toBe(result.afterFirstTotal);
+  expect(result.sameIdsAfterReload).toBeTruthy();
+  expect(result.reuseMessageInLog).toBeTruthy();
+  expect(result.reuseMessageInStatus).toBeTruthy();
 });
 
 test("lesson mode keeps cursor locked to required next character after editor click", async ({ page }) => {
@@ -6744,6 +6960,118 @@ test("lesson session clears when the lesson file is deleted", async ({ page }) =
   expect(result.removed).toBeTruthy();
   expect(result.beforeActive).toBeTruthy();
   expect(result.afterStateIsNull).toBeTruthy();
+});
+
+test("deleting one lesson file removes the full lesson package and folder", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.deleteFile || !api?.listFiles || !api?.listFolders) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: false, run: false });
+    const beforeFiles = api.listFiles();
+    const lessonFiles = beforeFiles
+      .filter((entry) => String(entry?.family || "") === "lesson")
+      .map((entry) => String(entry?.name || ""))
+      .filter(Boolean);
+    const target = lessonFiles.find((name) => name.toLowerCase().endsWith("/game.js"))
+      || lessonFiles.find((name) => name.toLowerCase().endsWith("game.js"))
+      || lessonFiles[0]
+      || "";
+
+    const foldersBefore = api.listFolders();
+    const lessonFoldersBefore = foldersBefore.filter((path) => (
+      lessonFiles.some((name) => name.startsWith(`${String(path || "")}/`))
+    ));
+
+    const removed = target ? api.deleteFile(target) : false;
+
+    const afterFiles = api.listFiles();
+    const remainingLessonFiles = afterFiles
+      .filter((entry) => String(entry?.family || "") === "lesson")
+      .map((entry) => String(entry?.name || ""))
+      .filter(Boolean);
+    const foldersAfter = api.listFolders();
+    const leftoverLessonFolders = lessonFoldersBefore.filter((path) => foldersAfter.includes(path));
+
+    return {
+      ready: true,
+      loaded,
+      removed,
+      lessonFileCountBefore: lessonFiles.length,
+      remainingLessonFileCount: remainingLessonFiles.length,
+      lessonFolderCountBefore: lessonFoldersBefore.length,
+      leftoverLessonFolderCount: leftoverLessonFolders.length,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.removed).toBeTruthy();
+  expect(result.lessonFileCountBefore).toBeGreaterThan(0);
+  expect(result.remainingLessonFileCount).toBe(0);
+  expect(result.lessonFolderCountBefore).toBeGreaterThan(0);
+  expect(result.leftoverLessonFolderCount).toBe(0);
+});
+
+test("deleting lesson package keeps shared folder when non-lesson files remain", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.deleteFile || !api?.listFiles || !api?.listFolders || !api?.createFile) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("paddle-lesson-1", { startTyping: false, run: false });
+    const beforeFiles = api.listFiles();
+    const lessonFiles = beforeFiles
+      .filter((entry) => String(entry?.family || "") === "lesson")
+      .map((entry) => String(entry?.name || ""))
+      .filter(Boolean);
+    const target = lessonFiles.find((name) => name.toLowerCase().endsWith("/game.js"))
+      || lessonFiles.find((name) => name.toLowerCase().endsWith("game.js"))
+      || lessonFiles[0]
+      || "";
+    const folderPath = target.includes("/") ? target.slice(0, target.lastIndexOf("/")) : "";
+    if (!target || !folderPath) {
+      return { ready: false, loaded, reason: "missing-target" };
+    }
+
+    const sharedName = `${folderPath}/notes-keep.js`;
+    const created = api.createFile(sharedName, "// keep folder alive\n");
+    const createdName = String(created?.name || "");
+    const folderPresentBeforeDelete = api.listFolders().includes(folderPath);
+
+    const removed = api.deleteFile(target);
+
+    const afterFiles = api.listFiles().map((entry) => String(entry?.name || "")).filter(Boolean);
+    const foldersAfter = api.listFolders();
+    const sharedFileStillPresent = createdName ? afterFiles.includes(createdName) : false;
+    const folderStillPresent = foldersAfter.includes(folderPath);
+    const lessonFilesRemaining = afterFiles.filter((name) => lessonFiles.includes(name));
+
+    return {
+      ready: true,
+      loaded,
+      removed,
+      folderPresentBeforeDelete,
+      sharedFileStillPresent,
+      folderStillPresent,
+      lessonFilesRemainingCount: lessonFilesRemaining.length,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.removed).toBeTruthy();
+  expect(result.folderPresentBeforeDelete).toBeTruthy();
+  expect(result.sharedFileStillPresent).toBeTruthy();
+  expect(result.folderStillPresent).toBeTruthy();
+  expect(result.lessonFilesRemainingCount).toBe(0);
 });
 
 test("lesson HUD hides but header stats stay visible after switching to non-lesson file", async ({ page }) => {

@@ -62,10 +62,9 @@ export function getRequiredElements() {
         appLoad: $("#appLoad"),
         lessonsSelectorToggle: $("#lessonsSelectorToggle"),
         lessonTierMap: $("#lessonTierMap"),
-        lessonTierFilterAll: $("#lessonTierFilterAll"),
-        lessonTierFilterBeginner: $("#lessonTierFilterBeginner"),
-        lessonTierFilterIntermediate: $("#lessonTierFilterIntermediate"),
-        lessonTierFilterExpert: $("#lessonTierFilterExpert"),
+        lessonTierOpenBeginner: $("#lessonTierOpenBeginner"),
+        lessonTierOpenIntermediate: $("#lessonTierOpenIntermediate"),
+        lessonTierOpenExpert: $("#lessonTierOpenExpert"),
         lessonsList: $("#lessonsList"),
         lessonLoad: $("#lessonLoad"),
         filesMenuButton: $("#filesMenuButton"),
@@ -121,6 +120,18 @@ export function getRequiredElements() {
         lessonStatsElapsed: $("#lessonStatsElapsed"),
         lessonStatsLastActive: $("#lessonStatsLastActive"),
         lessonStatsSafety: $("#lessonStatsSafety"),
+        lessonTierBeginnerBackdrop: $("#lessonTierBeginnerBackdrop"),
+        lessonTierBeginnerPanel: $("#lessonTierBeginnerPanel"),
+        lessonTierBeginnerClose: $("#lessonTierBeginnerClose"),
+        lessonTierBeginnerList: $("#lessonTierBeginnerList"),
+        lessonTierIntermediateBackdrop: $("#lessonTierIntermediateBackdrop"),
+        lessonTierIntermediatePanel: $("#lessonTierIntermediatePanel"),
+        lessonTierIntermediateClose: $("#lessonTierIntermediateClose"),
+        lessonTierIntermediateList: $("#lessonTierIntermediateList"),
+        lessonTierExpertBackdrop: $("#lessonTierExpertBackdrop"),
+        lessonTierExpertPanel: $("#lessonTierExpertPanel"),
+        lessonTierExpertClose: $("#lessonTierExpertClose"),
+        lessonTierExpertList: $("#lessonTierExpertList"),
         accountBackdrop: $("#accountBackdrop"),
         accountPanel: $("#accountPanel"),
         accountClose: $("#accountClose"),
@@ -337,7 +348,7 @@ export function getRequiredElements() {
         promptDialogConfirm: $("#promptDialogConfirm"),
     };
 
-    const optional = new Set([]);
+    const optional = new Set(["lessonLoad"]);
 
     for (const [k, v] of Object.entries(el)) {
         if (!v && !optional.has(k)) throw new Error(`FAZ IDE: Missing required element: ${k}. Check index.html IDs.`);

@@ -1,8 +1,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { loadLocalReleaseEnv } = require("./load-local-release-env");
 
 const root = process.cwd();
+loadLocalReleaseEnv({ rootDir: root, silent: true });
 const scriptsDir = __dirname;
 const distDir = path.join(root, "dist_site");
 const outputRoot = path.join(root, "release", "siteground");

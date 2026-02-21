@@ -2242,7 +2242,7 @@ button:focus-visible {
     box-shadow: 0 0 0 var(--ring-size-md) var(--ring-focus-soft);
 }
 
-.lesson-tier-chip[aria-pressed="true"] {
+.lesson-tier-chip[aria-expanded="true"] {
     border-color: var(--btn-pressed-border);
     background: var(--surface-selected-soft);
     color: var(--text);
@@ -2251,6 +2251,99 @@ button:focus-visible {
 .lesson-tier-chip-count {
     color: var(--text-muted-quiet);
     font-weight: 600;
+}
+
+.lesson-tier-modal-body {
+    display: grid;
+    gap: var(--space-10);
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+.lesson-tier-panel .layout-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-8);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--modal-surface);
+    overflow: visible;
+    min-height: var(--modal-header-min-height);
+    padding-top: var(--modal-header-padding-y);
+    padding-bottom: var(--modal-header-padding-y);
+    border-bottom: 1px solid var(--modal-header-border);
+}
+
+.lesson-tier-panel .layout-header > div {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.lesson-tier-panel .layout-header > button {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    white-space: nowrap;
+}
+
+.lesson-tier-panel :is(.layout-title, .layout-sub) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+}
+
+.lesson-tier-modal-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-5);
+    max-height: none;
+    overflow: visible;
+}
+
+.lesson-tier-modal-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-10);
+    border: 1px solid var(--border-soft);
+    background: var(--surface-soft);
+    padding: var(--space-8) var(--space-10);
+}
+
+.lesson-tier-modal-label {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.lesson-tier-modal-label strong {
+    color: var(--text);
+    font-size: var(--text-size-xs);
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.lesson-tier-modal-label span {
+    color: var(--text-muted-quiet);
+    font-size: var(--text-size-2xs);
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.lesson-tier-modal-action {
+    min-height: var(--control-height-sm);
+    height: var(--control-height-sm);
+    padding: 0 var(--space-10);
+    border-radius: 0;
+    white-space: nowrap;
+    align-self: center;
 }
 
 .files-lessons-option {
@@ -3399,6 +3492,9 @@ body[data-resize="row"] {
     transform: translate(-50%, -50%);
 }
 
+#lessonTierBeginnerPanel[data-open="true"],
+#lessonTierIntermediatePanel[data-open="true"],
+#lessonTierExpertPanel[data-open="true"],
 #shortcutHelpPanel[data-open="true"],
 #editorHistoryPanel[data-open="true"],
 #editorSettingsPanel[data-open="true"],
@@ -4171,12 +4267,23 @@ body[data-resize="row"] {
     overflow: hidden;
 }
 
+.lesson-tier-panel {
+    left: 50%;
+    right: auto;
+    top: 50%;
+    width: var(--modal-width-md);
+    max-height: min(var(--modal-max-height), var(--modal-viewport-max-height));
+    transform: translate(-50%, -50%);
+    z-index: 1380;
+    overflow: hidden;
+}
+
 .lesson-stats-panel {
     left: 50%;
     right: auto;
     top: 50%;
-    width: min(var(--modal-width-md), calc(100vw - 24px));
-    max-height: min(760px, var(--modal-viewport-max-height));
+    width: var(--modal-width-md);
+    max-height: min(var(--modal-max-height), var(--modal-viewport-max-height));
     transform: translate(-50%, -50%);
     z-index: 1380;
     overflow-x: hidden;
@@ -4688,7 +4795,6 @@ body[data-resize="row"] {
 }
 
 .lesson-stats-label {
-    font-size: var(--text-size-2xs);
     color: var(--text-muted-soft);
     text-transform: uppercase;
     letter-spacing: var(--letter-spacing-meta);
@@ -4702,8 +4808,6 @@ body[data-resize="row"] {
 
 .lesson-stats-session {
     border: 1px solid var(--border-soft);
-    background: var(--surface-panel);
-    padding: var(--space-10);
     display: grid;
     gap: var(--space-8);
 }

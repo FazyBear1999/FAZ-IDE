@@ -1,7 +1,9 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
+const { loadLocalReleaseEnv } = require("./load-local-release-env");
 
 const root = process.cwd();
+loadLocalReleaseEnv({ rootDir: root, silent: true });
 const requiredVars = ["SUPABASE_URL", "SUPABASE_ANON_KEY"];
 
 function readEnv(name) {
