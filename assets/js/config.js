@@ -39,6 +39,15 @@ export const STORAGE = {
     DEV_TERMINAL_SECRET_HASH: "fazide.dev-terminal-secret-hash.v1",
 };
 
+export const AUTH = {
+    PROVIDER: "supabase",
+    SUPABASE_URL: "",
+    SUPABASE_ANON_KEY: "",
+    OAUTH_REDIRECT_PATH: "/",
+    PROFILE_TABLE: "account_profiles",
+    STATE_TABLE: "account_workspace_state",
+};
+
 // Optional local games library that can be loaded into the IDE.
 // Templates can be one or many files.
 const TWEMOJI_CDN = "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg";

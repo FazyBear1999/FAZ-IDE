@@ -4144,8 +4144,135 @@ body[data-resize="row"] {
     padding-right: 0;
 }
 
+.account-auth-provider {
+    display: grid;
+    gap: var(--space-6);
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.account-auth-provider .primary {
+    width: 100%;
+    min-height: var(--control-height-md);
+    height: var(--control-height-md);
+    border-radius: 0;
+}
+
+.account-auth-hint {
+    margin: 0;
+    color: var(--text-muted-soft);
+    font-size: var(--text-size-2xs);
+}
+
+.account-meta {
+    display: grid;
+    gap: var(--space-6);
+    padding: var(--space-8);
+    border: 1px solid var(--border-soft);
+    background: var(--surface-menu);
+}
+
+.account-meta[hidden] {
+    display: none;
+}
+
+.account-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    font-size: var(--text-size-2xs);
+}
+
+.account-meta-row span {
+    color: var(--text-muted-soft);
+}
+
+.account-meta-row strong {
+    color: var(--text);
+    font-weight: 600;
+    text-align: right;
+}
+
+#accountSyncNow {
+    width: 100%;
+    min-height: var(--control-height-sm);
+    height: var(--control-height-sm);
+    border-radius: 0;
+    font-size: var(--text-size-2xs);
+}
+
 .account-form .layout-group {
     gap: var(--space-6);
+}
+
+.account-form .layout-group[hidden] {
+    display: none !important;
+}
+
+.account-field-hint {
+    margin: 0;
+    color: var(--text-muted-quiet);
+    font-size: var(--text-size-3xs);
+}
+
+.account-email-field {
+    position: relative;
+}
+
+.account-email-field #accountEmailInput {
+    padding-right: 36px;
+}
+
+.account-email-toggle {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted-soft);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.account-email-toggle:hover {
+    color: var(--text);
+}
+
+.account-email-toggle[data-visible="true"] {
+    color: var(--btn-pressed-border);
+}
+
+.account-email-toggle:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.account-email-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.account-email-icon-hidden {
+    display: inline-block;
+}
+
+.account-email-icon-visible {
+    display: none;
+}
+
+.account-email-toggle[data-visible="true"] .account-email-icon-hidden {
+    display: none;
+}
+
+.account-email-toggle[data-visible="true"] .account-email-icon-visible {
+    display: inline-block;
 }
 
 .account-form input,

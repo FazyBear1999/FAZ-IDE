@@ -16,7 +16,7 @@
 // - Any execution behavior must stay in sandbox/* (isolated + testable).
 // - Keeping IDs centralized + fail-fast checks makes HTML refactors safe.
 
-import { APP, STORAGE, DEFAULT_CODE, DEFAULT_WELCOME_FILES, GAMES, APPLICATIONS, LESSONS } from "./config.js";
+import { APP, STORAGE, AUTH, DEFAULT_CODE, DEFAULT_WELCOME_FILES, GAMES, APPLICATIONS, LESSONS } from "./config.js";
 import { getRequiredElements } from "./ui/elements.js";
 import { load, save, saveBatchAtomic, recoverStorageJournal, getStorageJournalState, getStorageBackendInfo, STORAGE_JOURNAL_KEY } from "./ui/store.js";
 import { makeLogger } from "./ui/logger.js";
@@ -81,6 +81,7 @@ import {
 import { createDebouncedTask } from "./core/debounce.js";
 import { createFormatter } from "./core/formatting.js";
 import { createAstClient } from "./core/astClient.js";
+import { createSupabaseAccountClient } from "./auth/supabaseAccount.js";
 import {
     isRunShortcut,
     isSaveShortcut,
@@ -1391,6 +1392,19 @@ function syncFooterRuntimeStatus() {
         el.footerProblems.dataset.state = state;
         el.footerProblems.textContent = `Problems: ${total}`;
         el.footerProblems.title = total > 0 ? `${total} active problem${total === 1 ? "" : "s"}` : "No active problems";
+    }
+
+    if (el.footerPrivacy) {
+        if (!accountCloudEnabled) {
+            el.footerPrivacy.textContent = "Storage: Browser only";
+            el.footerPrivacy.title = "All workspace/account data stays in this browser local storage";
+        } else if (accountProfile.signedIn) {
+            el.footerPrivacy.textContent = "Storage: Browser + Cloud sync";
+            el.footerPrivacy.title = "Workspace/account data is stored locally and synced to your signed-in cloud account";
+        } else {
+            el.footerPrivacy.textContent = "Storage: Browser (cloud optional)";
+            el.footerPrivacy.title = "Workspace/account data is local in this browser unless you sign in to enable cloud sync";
+        }
     }
 }
 
@@ -3014,10 +3028,40 @@ const ACCOUNT_TYPES = Object.freeze(["test", "sandbox"]);
 const DEFAULT_ACCOUNT_PROFILE = Object.freeze({
     displayName: "",
     email: "",
+    showEmail: false,
     accountType: "test",
     signedIn: false,
     updatedAt: 0,
 });
+const accountAuthClient = createSupabaseAccountClient({
+    supabaseUrl: AUTH.SUPABASE_URL,
+    supabaseAnonKey: AUTH.SUPABASE_ANON_KEY,
+    redirectPath: AUTH.OAUTH_REDIRECT_PATH,
+    profileTable: AUTH.PROFILE_TABLE,
+    stateTable: AUTH.STATE_TABLE,
+    storageKey: `${STORAGE.ACCOUNT_PROFILE}.auth`,
+});
+const accountCloudEnabled = Boolean(accountAuthClient.enabled && !isAutomationEnvironment());
+const ACCOUNT_CLOUD_EXCLUDED_STORAGE_KEYS = Object.freeze([
+    STORAGE.DEV_TERMINAL_SECRET_HASH,
+]);
+const ACCOUNT_CLOUD_STATE_STORAGE_KEYS = Object.freeze(
+    [...new Set(Object.values(STORAGE))].filter((key) => {
+        if (typeof key !== "string") return false;
+        if (!key.trim()) return false;
+        return !ACCOUNT_CLOUD_EXCLUDED_STORAGE_KEYS.includes(key);
+    })
+);
+const ACCOUNT_CLOUD_RESTORE_MARKER_KEY = "fazide.cloud-restore.user.v1";
+const ACCOUNT_CLOUD_LAST_SYNC_AT_KEY = "fazide.cloud-last-sync-at.v1";
+const ACCOUNT_CLOUD_PROFILE_BASELINE_KEY = "fazide.cloud-profile-baseline.v1";
+const ACCOUNT_CLOUD_SYNC_DEBOUNCE_MS = 1800;
+const ACCOUNT_CLOUD_SYNC_INTERVAL_MS = 30000;
+const ACCOUNT_CLOUD_SYNC_MAX_PAYLOAD_CHARS = 1_700_000;
+const ACCOUNT_CLOUD_RETRY_BASE_MS = 2500;
+const ACCOUNT_CLOUD_RETRY_MAX_MS = 60000;
+const ACCOUNT_CLOUD_BYTES_DELTA_MAX = 50000;
+const ACCOUNT_CLOUD_XP_DELTA_MAX = 250000;
 let lessonSession = null;
 let lessonProfileDirtyWrites = 0;
 let lessonSessionDirtyWrites = 0;
@@ -3060,6 +3104,16 @@ let lessonProfile = {
 let accountProfile = {
     ...DEFAULT_ACCOUNT_PROFILE,
 };
+let accountAuthUnsubscribe = null;
+let accountAuthReady = false;
+let accountAuthBusy = false;
+let accountCloudSyncTimer = 0;
+let accountCloudSyncInFlight = false;
+let accountCloudSyncQueued = false;
+let accountCloudSyncIntervalId = 0;
+let accountCloudRetryTimer = 0;
+let accountCloudRetryAttempt = 0;
+let accountCloudActiveUserId = "";
 let openFileMenu = null;
 let folderMenuTargetPath = null;
 let dragFileId = null;
@@ -10005,34 +10059,163 @@ function parseStoredJson(raw) {
 
 function sanitizeAccountProfile(raw = null) {
     const source = raw && typeof raw === "object" ? raw : {};
-    const displayName = String(source.displayName || "").trim().slice(0, 48);
+    let displayName = String(source.displayName || "").trim().slice(0, 48);
     const email = String(source.email || "").trim().toLowerCase().slice(0, 120);
+    if (displayName && email) {
+        const normalizedName = displayName.toLowerCase();
+        if (normalizedName.endsWith(email)) {
+            displayName = displayName.slice(0, Math.max(0, displayName.length - email.length)).trim();
+        }
+    }
     const accountType = ACCOUNT_TYPES.includes(String(source.accountType || "").trim().toLowerCase())
         ? String(source.accountType || "").trim().toLowerCase()
         : "test";
+    const showEmail = Boolean(source.showEmail);
     const signedIn = Boolean(source.signedIn) && Boolean(displayName || email);
     const updatedAt = Math.max(0, Math.floor(Number(source.updatedAt) || 0));
     return {
         displayName,
         email,
+        showEmail,
         accountType,
         signedIn,
         updatedAt,
     };
 }
 
+function maskEmailAddress(email = "") {
+    const value = String(email || "").trim();
+    const atIndex = value.indexOf("@");
+    if (atIndex <= 0) return "Hidden";
+    const local = value.slice(0, atIndex);
+    const domain = value.slice(atIndex + 1);
+    if (!domain) return "Hidden";
+    const first = local.slice(0, 1);
+    return `${first || "*"}***@${domain}`;
+}
+
+function buildAccountLessonStatsSnapshot() {
+    return {
+        lesson_level: Math.max(1, Math.floor(Number(lessonProfile?.level) || 1)),
+        lesson_xp: Math.max(0, Math.floor(Number(lessonProfile?.xp) || 0)),
+        lesson_bytes: Math.max(0, Math.floor(Number(lessonProfile?.bytes) || 0)),
+        lessons_completed: Math.max(0, Math.floor(Number(lessonProfile?.lessonsCompleted) || 0)),
+        lesson_best_streak: Math.max(0, Math.floor(Number(lessonProfile?.bestStreak) || 0)),
+        lesson_daily_streak: Math.max(0, Math.floor(Number(lessonProfile?.dailyStreak) || 0)),
+        lesson_total_typed_chars: Math.max(0, Math.floor(Number(lessonProfile?.totalTypedChars) || 0)),
+        lesson_last_active_day: String(lessonProfile?.lastActiveDay || "").trim().slice(0, 16),
+    };
+}
+
+function getAccountCloudProfileBaselineStorageKey(userId = accountCloudActiveUserId) {
+    const normalizedUserId = String(userId || "").trim();
+    if (!normalizedUserId) return ACCOUNT_CLOUD_PROFILE_BASELINE_KEY;
+    return `${ACCOUNT_CLOUD_PROFILE_BASELINE_KEY}.${normalizedUserId}`;
+}
+
+function readAccountCloudProfileBaseline(userId = accountCloudActiveUserId) {
+    const raw = safeLocalStorageGet(getAccountCloudProfileBaselineStorageKey(userId));
+    const parsed = parseStoredJson(raw);
+    if (!parsed) return null;
+    return normalizeLessonStatsPayload(parsed);
+}
+
+function writeAccountCloudProfileBaseline(lessonStats = null, userId = accountCloudActiveUserId) {
+    if (!lessonStats || typeof lessonStats !== "object") return false;
+    const normalized = normalizeLessonStatsPayload(lessonStats);
+    return safeLocalStorageSet(
+        getAccountCloudProfileBaselineStorageKey(userId),
+        JSON.stringify(normalized)
+    );
+}
+
+function clearAccountCloudProfileBaseline(userId = accountCloudActiveUserId) {
+    return safeLocalStorageRemove(getAccountCloudProfileBaselineStorageKey(userId));
+}
+
+function normalizeLessonStatsPayload(stats = null) {
+    const source = stats && typeof stats === "object" ? stats : {};
+    return {
+        lesson_level: Math.max(1, Math.floor(Number(source.lesson_level) || 1)),
+        lesson_xp: Math.max(0, Math.floor(Number(source.lesson_xp) || 0)),
+        lesson_bytes: Math.max(0, Math.floor(Number(source.lesson_bytes) || 0)),
+        lessons_completed: Math.max(0, Math.floor(Number(source.lessons_completed) || 0)),
+        lesson_best_streak: Math.max(0, Math.floor(Number(source.lesson_best_streak) || 0)),
+        lesson_daily_streak: Math.max(0, Math.floor(Number(source.lesson_daily_streak) || 0)),
+        lesson_total_typed_chars: Math.max(0, Math.floor(Number(source.lesson_total_typed_chars) || 0)),
+        lesson_last_active_day: String(source.lesson_last_active_day || "").trim().slice(0, 16),
+    };
+}
+
+function isCloudLessonStatsDeltaTrusted(currentStats = null, baselineStats = null) {
+    if (!baselineStats || typeof baselineStats !== "object") return false;
+    const current = normalizeLessonStatsPayload(currentStats);
+    const baseline = normalizeLessonStatsPayload(baselineStats);
+    const bytesDelta = current.lesson_bytes - baseline.lesson_bytes;
+    const xpDelta = current.lesson_xp - baseline.lesson_xp;
+    return bytesDelta <= ACCOUNT_CLOUD_BYTES_DELTA_MAX && xpDelta <= ACCOUNT_CLOUD_XP_DELTA_MAX;
+}
+
+function applyCanonicalLessonStatsFromRemote(remoteProfile = null) {
+    if (!remoteProfile || typeof remoteProfile !== "object") return false;
+    const canonicalProfile = sanitizeLessonProfile({
+        ...lessonProfile,
+        xp: remoteProfile.lesson_xp,
+        level: remoteProfile.lesson_level,
+        bytes: remoteProfile.lesson_bytes,
+        lessonsCompleted: remoteProfile.lessons_completed,
+        bestStreak: remoteProfile.lesson_best_streak,
+        dailyStreak: remoteProfile.lesson_daily_streak,
+        totalTypedChars: remoteProfile.lesson_total_typed_chars,
+        lastActiveDay: remoteProfile.lesson_last_active_day,
+    });
+    const nextSerialized = JSON.stringify(canonicalProfile);
+    const prevSerialized = JSON.stringify(lessonProfile);
+    if (nextSerialized === prevSerialized) return false;
+    lessonProfile = canonicalProfile;
+    save(STORAGE.LESSON_PROFILE, nextSerialized);
+    queueLessonHeaderStatsUpdate({ force: true });
+    return true;
+}
+
+function setAccountAuthHint(message = "") {
+    if (!el.accountAuthHint) return;
+    el.accountAuthHint.textContent = String(message || "").trim();
+}
+
+function getAccountIdentityLabel(profile = accountProfile) {
+    return String(profile?.displayName || profile?.email || "Account").trim() || "Account";
+}
+
+function formatAccountSyncLabel(syncAt = 0) {
+    const timestamp = Math.max(0, Math.floor(Number(syncAt) || 0));
+    if (!timestamp) return "Never";
+    try {
+        return new Date(timestamp).toLocaleString();
+    } catch {
+        return "Synced";
+    }
+}
+
 function formatAccountSummary(profile = accountProfile) {
     if (!profile?.signedIn) return "Signed out";
     const accountLabel = profile.accountType === "sandbox" ? "Sandbox Account" : "Test Account";
-    const identity = String(profile.displayName || profile.email || "Account").trim();
+    const identity = getAccountIdentityLabel(profile);
     return `${identity} • ${accountLabel}`;
 }
 
 function renderAccountUi() {
     const summary = formatAccountSummary(accountProfile);
+    const authEnabled = accountCloudEnabled;
+    const authConnected = authEnabled && accountProfile.signedIn;
+    const connectionLabel = !authEnabled
+        ? (accountProfile.signedIn ? "Local profile" : "Local only")
+        : (authConnected ? "Google connected" : "Local until sign-in");
+    const syncAt = getAccountCloudLastSyncAt();
+    const showEmail = Boolean(accountProfile.showEmail);
     if (el.btnAccount) {
         el.btnAccount.textContent = accountProfile.signedIn
-            ? String(accountProfile.displayName || accountProfile.email || "Account")
+            ? getAccountIdentityLabel(accountProfile)
             : "Account";
         el.btnAccount.setAttribute("title", summary);
         el.btnAccount.setAttribute("aria-label", summary);
@@ -10040,22 +10223,376 @@ function renderAccountUi() {
     if (el.accountNameInput) el.accountNameInput.value = String(accountProfile.displayName || "");
     if (el.accountEmailInput) el.accountEmailInput.value = String(accountProfile.email || "");
     if (el.accountModeSelect) el.accountModeSelect.value = String(accountProfile.accountType || "test");
+    if (el.accountEmailGroup) {
+        el.accountEmailGroup.hidden = !authConnected;
+        el.accountEmailGroup.setAttribute("aria-hidden", authConnected ? "false" : "true");
+    }
+    if (el.accountEmailInput) {
+        el.accountEmailInput.disabled = !authConnected;
+        el.accountEmailInput.readOnly = true;
+        el.accountEmailInput.type = showEmail ? "email" : "password";
+    }
+    if (el.accountEmailToggle) {
+        el.accountEmailToggle.disabled = !authConnected;
+        el.accountEmailToggle.setAttribute("data-visible", showEmail ? "true" : "false");
+        el.accountEmailToggle.setAttribute("aria-label", showEmail ? "Hide email" : "Show email");
+        el.accountEmailToggle.setAttribute("title", showEmail ? "Hide email" : "Show email");
+    }
+    if (el.accountMeta) {
+        el.accountMeta.hidden = !authConnected;
+        el.accountMeta.setAttribute("aria-hidden", authConnected ? "false" : "true");
+    }
+    if (el.accountGoogleConnect) {
+        el.accountGoogleConnect.disabled = !authEnabled || accountAuthBusy || authConnected;
+        if (!authEnabled) {
+            el.accountGoogleConnect.textContent = "Cloud Unavailable";
+        } else {
+            el.accountGoogleConnect.textContent = authConnected ? "Google Connected" : "Connect Google";
+        }
+    }
+    if (el.accountConnectionValue) {
+        el.accountConnectionValue.textContent = connectionLabel;
+    }
+    if (el.accountEmailValue) {
+        const rawEmail = String(accountProfile.email || "").trim();
+        el.accountEmailValue.textContent = rawEmail
+            ? (showEmail ? rawEmail : maskEmailAddress(rawEmail))
+            : "--";
+    }
+    if (el.accountSyncValue) {
+        el.accountSyncValue.textContent = formatAccountSyncLabel(syncAt);
+    }
+    if (el.accountSyncNow) {
+        el.accountSyncNow.disabled = !authConnected || accountAuthBusy;
+    }
+    if (el.accountSave) {
+        el.accountSave.textContent = authConnected ? "Save Cloud Profile" : "Save Profile";
+    }
     if (el.accountStatus) {
         el.accountStatus.textContent = summary;
     }
     if (el.accountSignOut) {
         el.accountSignOut.disabled = !accountProfile.signedIn;
     }
+    if (!authEnabled) {
+        setAccountAuthHint("Cloud sign-in is currently unavailable in this build. Local profile mode is active.");
+    } else if (authConnected) {
+        setAccountAuthHint("Cloud account active. Progress and bytes are verified using your signed account sync history.");
+    } else if (accountAuthReady) {
+        setAccountAuthHint("Cloud auth ready. You can use local profile now, or connect Google for sync.");
+    } else {
+        setAccountAuthHint("Initializing cloud auth...");
+    }
 }
 
 function persistAccountProfile() {
     if (persistenceWritesLocked) return;
     save(STORAGE.ACCOUNT_PROFILE, JSON.stringify(accountProfile));
+    queueAccountCloudStateSync();
 }
 
 function loadAccountProfile() {
     accountProfile = sanitizeAccountProfile(parseStoredJson(load(STORAGE.ACCOUNT_PROFILE)));
     renderAccountUi();
+}
+
+function clearAccountProfile({ persist = true } = {}) {
+    accountProfile = { ...DEFAULT_ACCOUNT_PROFILE };
+    if (persist) persistAccountProfile();
+    renderAccountUi();
+}
+
+function getCloudRestoreMarkerUserId() {
+    try {
+        if (typeof sessionStorage === "undefined") return "";
+        return String(sessionStorage.getItem(ACCOUNT_CLOUD_RESTORE_MARKER_KEY) || "").trim();
+    } catch {
+        return "";
+    }
+}
+
+function getAccountCloudLastSyncStorageKey(userId = accountCloudActiveUserId) {
+    const normalizedUserId = String(userId || "").trim();
+    if (!normalizedUserId) return ACCOUNT_CLOUD_LAST_SYNC_AT_KEY;
+    return `${ACCOUNT_CLOUD_LAST_SYNC_AT_KEY}.${normalizedUserId}`;
+}
+
+function getAccountCloudLastSyncAt(userId = accountCloudActiveUserId) {
+    const raw = safeLocalStorageGet(getAccountCloudLastSyncStorageKey(userId));
+    const parsed = Math.max(0, Math.floor(Number(raw) || 0));
+    return parsed;
+}
+
+function setAccountCloudLastSyncAt(value = Date.now(), userId = accountCloudActiveUserId) {
+    const next = Math.max(0, Math.floor(Number(value) || 0));
+    if (!next) return;
+    safeLocalStorageSet(getAccountCloudLastSyncStorageKey(userId), String(next));
+}
+
+function clearAccountCloudRetryTimer() {
+    if (!accountCloudRetryTimer) return;
+    clearTimeout(accountCloudRetryTimer);
+    accountCloudRetryTimer = 0;
+}
+
+function scheduleAccountCloudRetry() {
+    clearAccountCloudRetryTimer();
+    accountCloudRetryAttempt += 1;
+    const delay = Math.min(ACCOUNT_CLOUD_RETRY_MAX_MS, ACCOUNT_CLOUD_RETRY_BASE_MS * (2 ** Math.max(0, accountCloudRetryAttempt - 1)));
+    accountCloudRetryTimer = setTimeout(() => {
+        accountCloudRetryTimer = 0;
+        queueAccountCloudStateSync({ immediate: true });
+    }, delay);
+}
+
+function setCloudRestoreMarkerUserId(userId = "") {
+    try {
+        if (typeof sessionStorage === "undefined") return;
+        const normalized = String(userId || "").trim();
+        if (!normalized) {
+            sessionStorage.removeItem(ACCOUNT_CLOUD_RESTORE_MARKER_KEY);
+            return;
+        }
+        sessionStorage.setItem(ACCOUNT_CLOUD_RESTORE_MARKER_KEY, normalized);
+    } catch {
+    }
+}
+
+function collectAccountCloudStatePayload() {
+    const payload = {};
+    for (const key of ACCOUNT_CLOUD_STATE_STORAGE_KEYS) {
+        const value = safeLocalStorageGet(key);
+        if (!value) continue;
+        payload[key] = value;
+    }
+    const serialized = JSON.stringify(payload);
+    if (serialized.length > ACCOUNT_CLOUD_SYNC_MAX_PAYLOAD_CHARS) {
+        return null;
+    }
+    return payload;
+}
+
+function applyAccountCloudStatePayload(payload = {}) {
+    const source = payload && typeof payload === "object" ? payload : {};
+    let writes = 0;
+    for (const key of ACCOUNT_CLOUD_STATE_STORAGE_KEYS) {
+        const rawValue = source[key];
+        if (typeof rawValue !== "string") continue;
+        const nextValue = String(rawValue);
+        const prevValue = safeLocalStorageGet(key);
+        if (prevValue === nextValue) continue;
+        const wrote = safeLocalStorageSet(key, nextValue);
+        if (wrote) writes += 1;
+    }
+    return writes;
+}
+
+async function flushAccountCloudStateSync({ force = false } = {}) {
+    if (!accountCloudEnabled || !accountProfile.signedIn || !accountAuthReady) return false;
+    if (accountCloudSyncInFlight) {
+        accountCloudSyncQueued = true;
+        return false;
+    }
+    accountCloudSyncInFlight = true;
+    let synced = false;
+    try {
+        const user = await accountAuthClient.getCurrentUser();
+        const userId = String(user?.id || "").trim();
+        if (!userId) return false;
+        const payload = collectAccountCloudStatePayload();
+        if (!payload) {
+            setAccountAuthHint("Cloud state too large to sync. Trim workspace size and retry.");
+            renderAccountUi();
+            return false;
+        }
+        const result = await accountAuthClient.upsertRemoteState({
+            userId,
+            storagePayload: payload,
+        });
+        if (!result?.ok) {
+            setAccountAuthHint("Cloud state sync failed. Profile still works; retry after edits.");
+            scheduleAccountCloudRetry();
+            renderAccountUi();
+            return false;
+        }
+        const currentLessonStats = buildAccountLessonStatsSnapshot();
+        const profileBaseline = readAccountCloudProfileBaseline(userId);
+        if (!isCloudLessonStatsDeltaTrusted(currentLessonStats, profileBaseline)) {
+            setAccountAuthHint("Progress verification required. Reconnect your cloud account to refresh trusted profile baseline.");
+            renderAccountUi();
+            return false;
+        }
+        const trustedProfileSyncResult = await accountAuthClient.upsertRemoteProfile({
+            userId,
+            displayName: accountProfile.displayName,
+            accountType: accountProfile.accountType,
+            lessonStats: currentLessonStats,
+        });
+        if (!trustedProfileSyncResult?.ok) {
+            setAccountAuthHint("Cloud state synced, but profile stats refresh failed. Try Sync now.");
+        } else {
+            writeAccountCloudProfileBaseline(currentLessonStats, userId);
+        }
+        clearAccountCloudRetryTimer();
+        accountCloudRetryAttempt = 0;
+        setAccountCloudLastSyncAt(Date.now());
+        synced = true;
+        renderAccountUi();
+        return true;
+    } finally {
+        accountCloudSyncInFlight = false;
+        if (accountCloudSyncQueued) {
+            accountCloudSyncQueued = false;
+            queueAccountCloudStateSync();
+        }
+        if (!synced) {
+            renderAccountUi();
+        }
+    }
+}
+
+function queueAccountCloudStateSync({ immediate = false } = {}) {
+    if (!accountCloudEnabled || !accountProfile.signedIn || !accountAuthReady) return;
+    if (accountCloudSyncTimer) {
+        clearTimeout(accountCloudSyncTimer);
+        accountCloudSyncTimer = 0;
+    }
+    if (immediate) {
+        accountCloudSyncQueued = true;
+        void flushAccountCloudStateSync({ force: true });
+        return;
+    }
+    accountCloudSyncTimer = setTimeout(() => {
+        accountCloudSyncTimer = 0;
+        void flushAccountCloudStateSync();
+    }, ACCOUNT_CLOUD_SYNC_DEBOUNCE_MS);
+}
+
+async function syncAccountFromRemoteUser(user = null) {
+    if (!user) {
+        const previousUserId = String(accountCloudActiveUserId || "").trim();
+        accountCloudActiveUserId = "";
+        clearAccountCloudRetryTimer();
+        accountCloudRetryAttempt = 0;
+        setCloudRestoreMarkerUserId("");
+        if (previousUserId) {
+            clearAccountCloudProfileBaseline(previousUserId);
+        }
+        clearAccountProfile({ persist: true });
+        return;
+    }
+    const userId = String(user.id || "").trim();
+    accountCloudActiveUserId = userId;
+    if (userId && getCloudRestoreMarkerUserId() !== userId) {
+        const remoteState = await accountAuthClient.loadRemoteState(userId);
+        const remotePayload = remoteState?.storage_payload && typeof remoteState.storage_payload === "object"
+            ? remoteState.storage_payload
+            : null;
+        const remoteUpdatedAt = Math.max(0, Math.floor(Date.parse(String(remoteState?.updated_at || "")) || 0));
+        const shouldApplyRemoteState = Boolean(remotePayload);
+        if (shouldApplyRemoteState) {
+            const writeCount = applyAccountCloudStatePayload(remotePayload);
+            setCloudRestoreMarkerUserId(userId);
+            setAccountCloudLastSyncAt(remoteUpdatedAt, userId);
+            if (writeCount > 0) {
+                window.location.reload();
+                return;
+            }
+        } else {
+            setCloudRestoreMarkerUserId(userId);
+            if (remoteUpdatedAt > 0) {
+                setAccountCloudLastSyncAt(remoteUpdatedAt, userId);
+            }
+        }
+    }
+    const remoteProfile = await accountAuthClient.loadRemoteProfile(user.id);
+    const inferredDisplayName = String(
+        remoteProfile?.display_name
+        || accountProfile.displayName
+        || user.user_metadata?.full_name
+        || user.user_metadata?.name
+        || ""
+    ).trim();
+    const inferredAccountType = String(remoteProfile?.account_type || accountProfile.accountType || "test");
+    if (!remoteProfile) {
+        const bootstrapResult = await accountAuthClient.upsertRemoteProfile({
+            userId,
+            displayName: inferredDisplayName,
+            accountType: inferredAccountType,
+            lessonStats: null,
+        });
+        if (!bootstrapResult?.ok) {
+            setAccountAuthHint("Connected, but profile bootstrap failed. Click Save Cloud Profile to retry.");
+        } else {
+            const defaultBaseline = normalizeLessonStatsPayload({
+                lesson_level: 1,
+                lesson_xp: 0,
+                lesson_bytes: 0,
+                lessons_completed: 0,
+                lesson_best_streak: 0,
+                lesson_daily_streak: 0,
+                lesson_total_typed_chars: 0,
+                lesson_last_active_day: "",
+            });
+            writeAccountCloudProfileBaseline(defaultBaseline, userId);
+            applyCanonicalLessonStatsFromRemote(defaultBaseline);
+            setAccountAuthHint("Cloud profile initialized. Verified progress baseline is now active.");
+        }
+    } else {
+        applyCanonicalLessonStatsFromRemote(remoteProfile);
+        writeAccountCloudProfileBaseline({
+            lesson_level: remoteProfile.lesson_level,
+            lesson_xp: remoteProfile.lesson_xp,
+            lesson_bytes: remoteProfile.lesson_bytes,
+            lessons_completed: remoteProfile.lessons_completed,
+            lesson_best_streak: remoteProfile.lesson_best_streak,
+            lesson_daily_streak: remoteProfile.lesson_daily_streak,
+            lesson_total_typed_chars: remoteProfile.lesson_total_typed_chars,
+            lesson_last_active_day: remoteProfile.lesson_last_active_day,
+        }, userId);
+    }
+    accountProfile = sanitizeAccountProfile({
+        displayName: inferredDisplayName,
+        email: String(user.email || ""),
+        showEmail: accountProfile.showEmail,
+        accountType: inferredAccountType,
+        signedIn: true,
+        updatedAt: Date.now(),
+    });
+    persistAccountProfile();
+    renderAccountUi();
+    queueAccountCloudStateSync({ immediate: true });
+}
+
+async function initAccountAuth() {
+    if (!accountCloudEnabled) {
+        accountAuthReady = false;
+        renderAccountUi();
+        return;
+    }
+    const initResult = await accountAuthClient.init();
+    accountAuthReady = Boolean(initResult?.ok);
+    if (!accountAuthReady) {
+        setAccountAuthHint("Cloud auth unavailable. Check Supabase URL/anon key and deploy again.");
+        renderAccountUi();
+        return;
+    }
+    if (typeof accountAuthUnsubscribe === "function") {
+        try {
+            accountAuthUnsubscribe();
+        } catch {
+        }
+    }
+    accountAuthUnsubscribe = accountAuthClient.onAuthStateChange(async (user) => {
+        await syncAccountFromRemoteUser(user);
+    });
+    const user = await accountAuthClient.getCurrentUser();
+    await syncAccountFromRemoteUser(user);
+    if (!accountCloudSyncIntervalId) {
+        accountCloudSyncIntervalId = setInterval(() => {
+            queueAccountCloudStateSync();
+        }, ACCOUNT_CLOUD_SYNC_INTERVAL_MS);
+    }
 }
 
 function sanitizeStoredLessonSession(raw = null) {
@@ -10113,6 +10650,8 @@ function persistLessonSession({ force = false } = {}) {
         sessionXp: Math.max(0, Math.floor(Number(lessonSession.sessionXp) || 0)),
     };
     save(STORAGE.LESSON_SESSION, JSON.stringify(payload));
+    if (force) queueAccountCloudStateSync({ immediate: true });
+    else queueAccountCloudStateSync();
 }
 
 function restoreLessonSessionFromStorage() {
@@ -10200,6 +10739,8 @@ function persistLessonProfile({ force = false } = {}) {
     if (!force && lessonProfileDirtyWrites < 8) return;
     lessonProfileDirtyWrites = 0;
     save(STORAGE.LESSON_PROFILE, JSON.stringify(lessonProfile));
+    if (force) queueAccountCloudStateSync({ immediate: true });
+    else queueAccountCloudStateSync();
 }
 
 function loadLessonProfile() {
@@ -18725,33 +19266,101 @@ function wireAccountModal() {
     if (el.accountBackdrop) {
         el.accountBackdrop.addEventListener("click", () => closeAccountModal({ focusEditor: false }));
     }
+    if (el.accountGoogleConnect) {
+        el.accountGoogleConnect.addEventListener("click", async () => {
+            if (!accountCloudEnabled || accountAuthBusy) return;
+            accountAuthBusy = true;
+            renderAccountUi();
+            status.set("Opening Google sign-in...");
+            const result = await accountAuthClient.signInWithGoogle();
+            accountAuthBusy = false;
+            renderAccountUi();
+            if (!result?.ok) {
+                status.set("Google sign-in failed");
+                setAccountAuthHint("Google sign-in could not start. Verify OAuth redirect URL and try again.");
+            }
+        });
+    }
+    if (el.accountSyncNow) {
+        el.accountSyncNow.addEventListener("click", async () => {
+            if (!accountCloudEnabled || accountAuthBusy || !accountProfile.signedIn) return;
+            accountAuthBusy = true;
+            renderAccountUi();
+            status.set("Syncing cloud state...");
+            const ok = await flushAccountCloudStateSync({ force: true });
+            accountAuthBusy = false;
+            renderAccountUi();
+            status.set(ok ? "Cloud sync complete" : "Cloud sync queued");
+        });
+    }
     if (el.accountForm) {
-        el.accountForm.addEventListener("submit", (event) => {
+        el.accountForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             const displayName = String(el.accountNameInput?.value || "").trim().slice(0, 48);
-            const email = String(el.accountEmailInput?.value || "").trim().toLowerCase().slice(0, 120);
             const accountType = ACCOUNT_TYPES.includes(String(el.accountModeSelect?.value || "").trim().toLowerCase())
                 ? String(el.accountModeSelect?.value || "").trim().toLowerCase()
                 : "test";
-            const signedIn = Boolean(displayName || email);
+            const signedIn = accountCloudEnabled ? accountProfile.signedIn : Boolean(displayName || accountProfile.email);
             accountProfile = sanitizeAccountProfile({
                 displayName,
-                email,
+                email: String(accountProfile.email || ""),
+                showEmail: accountProfile.showEmail,
                 accountType,
                 signedIn,
                 updatedAt: Date.now(),
             });
+
+            if (accountCloudEnabled && accountProfile.signedIn) {
+                const currentUser = await accountAuthClient.getCurrentUser();
+                const upsertResult = await accountAuthClient.upsertRemoteProfile({
+                    userId: String(currentUser?.id || ""),
+                    displayName: accountProfile.displayName,
+                    accountType: accountProfile.accountType,
+                    lessonStats: buildAccountLessonStatsSnapshot(),
+                });
+                if (!upsertResult?.ok) {
+                    renderAccountUi();
+                    status.set("Cloud save failed");
+                    setAccountAuthHint("Cloud profile save failed. Check Supabase table/policies and retry.");
+                    return;
+                }
+            }
+
             persistAccountProfile();
             renderAccountUi();
-            status.set(accountProfile.signedIn ? "Test account saved" : "Account cleared");
+            status.set(
+                accountCloudEnabled
+                    ? (accountProfile.signedIn ? "Cloud profile saved" : "Profile saved locally")
+                    : (accountProfile.signedIn ? "Test account saved" : "Account cleared")
+            );
         });
     }
     if (el.accountSignOut) {
-        el.accountSignOut.addEventListener("click", () => {
-            accountProfile = { ...DEFAULT_ACCOUNT_PROFILE };
+        el.accountSignOut.addEventListener("click", async () => {
+            if (accountCloudEnabled) {
+                const result = await accountAuthClient.signOut();
+                if (!result?.ok) {
+                    status.set("Sign out failed");
+                    setAccountAuthHint("Cloud sign-out failed. Please retry.");
+                    return;
+                }
+            }
+            accountAuthBusy = false;
+            setCloudRestoreMarkerUserId("");
+            clearAccountCloudProfileBaseline();
+            clearAccountProfile({ persist: true });
+            status.set("Signed out");
+        });
+    }
+    if (el.accountEmailToggle) {
+        el.accountEmailToggle.addEventListener("click", () => {
+            accountProfile = sanitizeAccountProfile({
+                ...accountProfile,
+                showEmail: !accountProfile.showEmail,
+                updatedAt: Date.now(),
+            });
             persistAccountProfile();
             renderAccountUi();
-            status.set("Signed out");
         });
     }
 }
@@ -18947,6 +19556,7 @@ function persistFiles(reason = "autosave") {
         if (active) save(STORAGE.CODE, active.code);
         persistWorkspaceSnapshot(reason);
     }
+    queueAccountCloudStateSync();
     queueProblemsRender();
 }
 
@@ -23014,13 +23624,18 @@ async function boot() {
         if (persistenceWritesLocked) return;
         persistLessonProfile({ force: true });
         persistLessonSession({ force: true });
+        queueAccountCloudStateSync({ immediate: true });
     });
     document.addEventListener("visibilitychange", () => {
         if (persistenceWritesLocked) return;
         if (document.visibilityState === "hidden") {
             persistLessonProfile({ force: true });
             persistLessonSession({ force: true });
+            queueAccountCloudStateSync({ immediate: true });
         }
+    });
+    window.addEventListener("online", () => {
+        queueAccountCloudStateSync({ immediate: true });
     });
     exposeDebug();
     wireQuickOpen();
@@ -23028,6 +23643,7 @@ async function boot() {
     wireShortcutHelp();
     wireLessonStats();
     wireAccountModal();
+    await initAccountAuth();
     wirePromptDialog();
     wireEditorScopeTrail();
     wireEditorSearch();

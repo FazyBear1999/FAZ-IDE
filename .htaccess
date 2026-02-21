@@ -13,7 +13,7 @@
   Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
   Header always set Origin-Agent-Cluster "?1"
   Header always set Cross-Origin-Resource-Policy "same-origin"
-  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content"
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content"
   Header always set X-XSS-Protection "0"
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"
 </IfModule>

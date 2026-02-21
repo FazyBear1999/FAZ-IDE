@@ -111,10 +111,16 @@ Master product direction and phased implementation plan:
 
 See `docs/RELEASE_CHECKLIST.md` for the safe pre-upload and deployment flow.
 
+## Real Accounts (Google + SiteGround)
+
+See `docs/SITEGROUND_REAL_ACCOUNTS_SETUP.md` for the full production setup using Supabase Auth + Google OAuth.
+
 Production domain stamping note:
 
 - Before `npm run deploy:siteground`, set `SITE_URL` in PowerShell so packaged canonical/OG/sitemap URLs are correct.
 - Example: `$env:SITE_URL = "https://yourdomain.com"`
+- For real cloud accounts in the deploy package, also set `SUPABASE_URL` and `SUPABASE_ANON_KEY` before deploy.
+- Example: `$env:SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"` and `$env:SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_PUBLIC_KEY"`
 
 ## QA Commands
 
@@ -128,6 +134,10 @@ Production domain stamping note:
 - `npm run test:quick` runs sync check + AI memory check + test integrity check + full E2E suite.
 - `npm run test:all` runs the browser-first release gate (sync + E2E + SiteGround package prep/verification + privacy checks).
 - `npm run deploy:siteground` supports optional `SITE_URL` rewrite for packaged `canonical`, `og:url`, and `sitemap.xml` `<loc>` entries.
+- `npm run deploy:siteground` also supports optional deploy-time auth injection via `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and optional `SUPABASE_OAUTH_REDIRECT_PATH`.
+- `npm run test:secrets` scans tracked git files for high-risk credential patterns.
+- `npm run precommit:guard` runs secret + privacy checks before commit.
+- `npm run hooks:install` enables local git hooks from `.githooks/` (includes `pre-commit` guard).
 
 Script-path governance:
 

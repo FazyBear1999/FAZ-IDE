@@ -18,6 +18,7 @@
             <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
             <meta name="application-name" content="FAZ IDE" />
             <meta name="theme-color" content="#0f1117" />
+            <meta name="mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
             <meta name="msapplication-navbutton-color" content="#0f1117" />
@@ -1043,29 +1044,54 @@
             </section>
 
             <div id="accountBackdrop" class="layout-backdrop" aria-hidden="true"></div>
-            <section id="accountPanel" class="layout-panel account-panel" data-open="false" aria-hidden="true" aria-label="Test account" role="dialog" aria-modal="true">
+            <section id="accountPanel" class="layout-panel account-panel" data-open="false" aria-hidden="true" aria-label="Account" role="dialog" aria-modal="true" aria-labelledby="accountTitle" aria-describedby="accountSub">
                 <header class="layout-header">
                     <div>
-                        <p class="layout-title">Test Account</p>
-                        <p class="layout-sub">Local-only starter account system</p>
+                        <p id="accountTitle" class="layout-title">Account</p>
+                        <p id="accountSub" class="layout-sub">Manage sign-in and cloud sync</p>
                     </div>
                     <button id="accountClose" type="button">Close</button>
                 </header>
-                <form id="accountForm" class="layout-body account-form" novalidate>
+                <form id="accountForm" class="layout-body account-form" novalidate autocomplete="off">
+                    <div class="account-auth-provider">
+                        <button id="accountGoogleConnect" type="button" class="primary">Connect Google</button>
+                        <p id="accountAuthHint" class="account-auth-hint" aria-live="polite">Configure auth keys to enable real cloud accounts.</p>
+                    </div>
+                    <div id="accountMeta" class="account-meta" role="group" aria-label="Account status" hidden>
+                        <div class="account-meta-row"><span>Connection</span><strong id="accountConnectionValue">Not connected</strong></div>
+                        <div class="account-meta-row"><span>Email</span><strong id="accountEmailValue">--</strong></div>
+                        <div class="account-meta-row"><span>Last Sync</span><strong id="accountSyncValue">Never</strong></div>
+                        <button id="accountSyncNow" type="button">Sync now</button>
+                    </div>
                     <div class="layout-group">
                         <label class="layout-label" for="accountNameInput">Display Name</label>
-                        <input id="accountNameInput" type="text" maxlength="48" autocomplete="name" placeholder="FAZ Tester" />
+                        <input id="accountNameInput" type="text" maxlength="48" autocomplete="off" placeholder="FAZ Tester" />
                     </div>
-                    <div class="layout-group">
+                    <div id="accountEmailGroup" class="layout-group" hidden>
                         <label class="layout-label" for="accountEmailInput">Email</label>
-                        <input id="accountEmailInput" type="email" maxlength="120" autocomplete="email" placeholder="tester@faz.local" />
+                        <div class="account-email-field">
+                            <input id="accountEmailInput" type="password" maxlength="120" autocomplete="off" placeholder="tester@faz.local" readonly />
+                            <button id="accountEmailToggle" class="account-email-toggle" type="button" aria-label="Show email" title="Show email" data-visible="false">
+                                <svg class="account-email-icon account-email-icon-visible" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                                </svg>
+                                <svg class="account-email-icon account-email-icon-hidden" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M2 12s3.5-7 10-7c2.1 0 4 .7 5.5 1.7m2.5 2.3c1.2 1.5 2 3 2 3s-3.5 7-10 7c-2.1 0-4-.7-5.5-1.7m-2.5-2.3c-1.2-1.5-2-3-2-3s3.5-7 10-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    <path d="M9.9 9.9a3 3 0 0 1 4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                                    <path d="M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="layout-group">
-                        <label class="layout-label" for="accountModeSelect">Account Type</label>
+                        <label class="layout-label" for="accountModeSelect">Profile Mode</label>
                         <select id="accountModeSelect" class="layout-select">
-                            <option value="test">Test Account</option>
-                            <option value="sandbox">Sandbox Account</option>
+                            <option value="test">Standard</option>
+                            <option value="sandbox">Sandbox</option>
                         </select>
+                        <p class="account-field-hint">Standard is your normal profile for everyday progress. Sandbox is a separate practice profile mode so you can experiment with settings and workflows without mixing that behavior with your primary profile habits.</p>
+                        <p class="account-field-hint">Bytes and lesson progress are validated against your signed cloud profile and sync history before updates are accepted.</p>
                     </div>
                     <p id="accountStatus" class="account-status" aria-live="polite">Signed out</p>
                     <div class="layout-actions account-actions">

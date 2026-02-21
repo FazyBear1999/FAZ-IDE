@@ -50,6 +50,43 @@ function applySiteUrlOverrides(publicDir, siteUrl) {
   }
 }
 
+function applyAuthOverrides(publicDir, {
+  supabaseUrl = "",
+  supabaseAnonKey = "",
+  oauthRedirectPath = "/",
+} = {}) {
+  const hasUrl = Boolean(String(supabaseUrl || "").trim());
+  const hasAnon = Boolean(String(supabaseAnonKey || "").trim());
+  if (!hasUrl && !hasAnon) {
+    return { applied: false, reason: "not-provided" };
+  }
+  if (hasUrl !== hasAnon) {
+    throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY must both be set when enabling cloud auth in deploy package.");
+  }
+
+  const configTargetPath = path.join(publicDir, "assets", "js", "config.js");
+  if (!fs.existsSync(configTargetPath)) {
+    throw new Error("Cannot apply auth overrides: public_html/assets/js/config.js is missing.");
+  }
+
+  const source = fs.readFileSync(configTargetPath, "utf8");
+  const normalizedUrl = String(supabaseUrl || "").trim();
+  const normalizedAnon = String(supabaseAnonKey || "").trim();
+  const normalizedRedirect = String(oauthRedirectPath || "/").trim() || "/";
+
+  const updated = source
+    .replace(/SUPABASE_URL:\s*"[^"]*"/, `SUPABASE_URL: "${normalizedUrl}"`)
+    .replace(/SUPABASE_ANON_KEY:\s*"[^"]*"/, `SUPABASE_ANON_KEY: "${normalizedAnon}"`)
+    .replace(/OAUTH_REDIRECT_PATH:\s*"[^"]*"/, `OAUTH_REDIRECT_PATH: "${normalizedRedirect}"`);
+
+  if (updated === source) {
+    throw new Error("Auth override failed: expected AUTH fields were not found in packaged config.js.");
+  }
+
+  fs.writeFileSync(configTargetPath, updated, "utf8");
+  return { applied: true, reason: "env-injected" };
+}
+
 function runNodeScript(scriptName) {
   const scriptPath = path.join(scriptsDir, scriptName);
   const result = spawnSync(process.execPath, [scriptPath], {
@@ -78,6 +115,11 @@ function main() {
 
   const siteUrl = normalizeSiteUrl(process.env.SITE_URL || "");
   applySiteUrlOverrides(publicHtmlDir, siteUrl);
+  const authOverrideResult = applyAuthOverrides(publicHtmlDir, {
+    supabaseUrl: process.env.SUPABASE_URL || "",
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+    oauthRedirectPath: process.env.SUPABASE_OAUTH_REDIRECT_PATH || "/",
+  });
 
   const indexPath = path.join(publicHtmlDir, "index.html");
   if (!fs.existsSync(indexPath)) {
@@ -96,6 +138,9 @@ function main() {
       siteUrl
         ? `SITE_URL applied: ${siteUrl}/`
         : "SITE_URL not provided (canonical/og:url remain relative and sitemap keeps default placeholder domain).",
+      authOverrideResult.applied
+        ? "Cloud auth values injected into deploy package via SUPABASE_URL + SUPABASE_ANON_KEY."
+        : "Cloud auth values not injected (SUPABASE_URL/SUPABASE_ANON_KEY not provided); package stays local-only.",
       "",
     ].join("\n"),
     "utf8"

@@ -55,12 +55,40 @@ test("account micro: account modal opens centered and closes via escape", async 
   await expect(page.locator("#accountBtn")).toHaveAttribute("aria-expanded", "false");
 });
 
+test("account micro: account status rows render for signed-out and signed-in states", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#accountBtn").click();
+  await expect(page.locator("#accountMeta")).toBeHidden();
+
+  await page.evaluate(() => {
+    localStorage.setItem("fazide.account-profile.v1", JSON.stringify({
+      displayName: "QA Tester",
+      email: "qa@test.local",
+      showEmail: true,
+      accountType: "sandbox",
+      signedIn: true,
+      updatedAt: Date.now(),
+    }));
+  });
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator("#accountBtn").click();
+  await expect(page.locator("#accountMeta")).toBeHidden();
+});
+
+test("account micro: email field stays hidden while disconnected", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#accountBtn").click();
+  await expect(page.locator("#accountEmailGroup")).toHaveAttribute("aria-hidden", "true");
+});
+
 test("account micro: test account save persists locally and sign out clears", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   await page.locator("#accountBtn").click();
   await page.locator("#accountNameInput").fill("QA Tester");
-  await page.locator("#accountEmailInput").fill("qa@test.local");
   await page.locator("#accountModeSelect").selectOption("sandbox");
   await page.locator("#accountForm").dispatchEvent("submit");
 
@@ -85,7 +113,7 @@ test("account micro: test account save persists locally and sign out clears", as
   });
 
   expect(saved.displayName).toBe("QA Tester");
-  expect(saved.email).toBe("qa@test.local");
+  expect(saved.email).toBe("");
   expect(saved.accountType).toBe("sandbox");
   expect(saved.signedIn).toBeTruthy();
   expect(saved.buttonText).toBe("QA Tester");
