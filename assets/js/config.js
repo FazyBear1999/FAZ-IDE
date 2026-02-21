@@ -216,6 +216,7 @@ export const LESSONS = [
     {
         id: "quick-output-instant",
         name: "Lesson: Instant Output Test (2 keys)",
+        tier: "beginner",
         icon: buildThemedIcon("26a1"),
         files: [
             { path: "index.html", src: "./assets/lessons/quick-output-instant/index.html" },
@@ -225,6 +226,7 @@ export const LESSONS = [
     {
         id: "paddle-lesson-1",
         name: "Lesson: Paddle Intro (Typing)",
+        tier: "intermediate",
         icon: buildThemedIcon("1f3d3"),
         files: [
             { path: "index.html", src: "./assets/lessons/paddle-lesson-1/index.html" },
@@ -236,6 +238,7 @@ export const LESSONS = [
     {
         id: "quick-output-4line",
         name: "Lesson: Quick Output Test (1 line)",
+        tier: "expert",
         icon: buildThemedIcon("2615"),
         files: [
             { path: "index.html", src: "./assets/lessons/quick-output-4line/index.html" },

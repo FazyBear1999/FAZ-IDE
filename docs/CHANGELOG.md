@@ -2,6 +2,7 @@
 
 ## 2026-02-20
 
+- Added a lessons progression map with `All`, `Beginner`, `Intermediate`, and `Expert` tier chips in the Files sidebar, including per-tier counts and safe filtering that preserves existing lesson load/typing flows.
 - Added CI-safe Playwright retry policy (`retries: 1` on CI, `0` locally) to reduce transient flake failures without slowing local feedback loops.
 - Added `PLAYWRIGHT_RETRIES` override support in Playwright config for deterministic local retry tuning.
 - Added `test:stable` script for explicit one-retry end-to-end runs during optimization/polish waves.

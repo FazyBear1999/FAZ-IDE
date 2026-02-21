@@ -309,6 +309,12 @@
                                             <span class="file-section-caret" aria-hidden="true"></span>
                                             <span class="file-section-label">Lessons</span>
                                         </button>
+                                        <div id="lessonTierMap" class="lesson-tier-map" role="group" aria-label="Lesson progression map">
+                                            <button id="lessonTierFilterAll" type="button" class="lesson-tier-chip" data-lesson-tier-filter="all" aria-pressed="true">All <span class="lesson-tier-chip-count" data-lesson-tier-count="all">0</span></button>
+                                            <button id="lessonTierFilterBeginner" type="button" class="lesson-tier-chip" data-lesson-tier-filter="beginner" aria-pressed="false">Beginner <span class="lesson-tier-chip-count" data-lesson-tier-count="beginner">0</span></button>
+                                            <button id="lessonTierFilterIntermediate" type="button" class="lesson-tier-chip" data-lesson-tier-filter="intermediate" aria-pressed="false">Intermediate <span class="lesson-tier-chip-count" data-lesson-tier-count="intermediate">0</span></button>
+                                            <button id="lessonTierFilterExpert" type="button" class="lesson-tier-chip" data-lesson-tier-filter="expert" aria-pressed="false">Expert <span class="lesson-tier-chip-count" data-lesson-tier-count="expert">0</span></button>
+                                        </div>
                                         <ul id="lessonsList" class="files-games-list files-lessons-list" role="listbox" aria-label="Available lessons" aria-hidden="true"></ul>
                                         <button id="lessonLoad" type="button" title="Load selected lesson into editor" hidden>LOAD</button>
                                     </div>

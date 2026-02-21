@@ -2184,7 +2184,8 @@ button:focus-visible {
 }
 
 #gameLoad,
-#appLoad {
+#appLoad,
+#lessonLoad {
     width: 100%;
     margin: 0;
     height: var(--control-height-md);
@@ -2199,6 +2200,59 @@ button:focus-visible {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+.lesson-tier-map {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+}
+
+.lesson-tier-map[aria-hidden="true"] {
+    display: none;
+}
+
+.lesson-tier-chip {
+    width: 100%;
+    min-height: var(--control-height-xs);
+    padding: 0 var(--space-6);
+    border: 1px solid var(--border-soft);
+    background: var(--surface-soft);
+    color: var(--text-muted);
+    border-radius: 0;
+    font-size: var(--text-size-4xs);
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+
+.lesson-tier-chip:hover {
+    border-color: var(--border-control);
+    background: var(--surface-raised);
+    color: var(--text);
+}
+
+.lesson-tier-chip:focus-visible {
+    outline: none;
+    border-color: var(--btn-pressed-border);
+    box-shadow: 0 0 0 var(--ring-size-md) var(--ring-focus-soft);
+}
+
+.lesson-tier-chip[aria-pressed="true"] {
+    border-color: var(--btn-pressed-border);
+    background: var(--surface-selected-soft);
+    color: var(--text);
+}
+
+.lesson-tier-chip-count {
+    color: var(--text-muted-quiet);
+    font-weight: 600;
+}
+
+.files-lessons-option {
+    margin-top: var(--space-2);
 }
 
 .files-menu-btn {

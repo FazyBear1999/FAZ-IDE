@@ -22,7 +22,7 @@ import { load, save, saveBatchAtomic, recoverStorageJournal, getStorageJournalSt
 import { makeLogger } from "./ui/logger.js";
 import { makeStatus } from "./ui/status.js";
 import { makeDiagnostics } from "./ui/diagnostics.js";
-import { syncTemplateSelectorShell, renderTemplateSelectorOptions } from "./ui/templateSelectors.js";
+import { syncTemplateSelectorShell, renderTemplateSelectorOptions, renderTemplateOptionLabel } from "./ui/templateSelectors.js";
 import { THEMES, normalizeTheme, applyThemeState, DEFAULT_THEME } from "./ui/theme.js";
 import { buildExportWorkspaceData, buildWorkspaceExportFilename, triggerWorkspaceExportDownload, normalizeImportedWorkspacePayload, parseWorkspaceImportText, buildImportWorkspaceConfirmMessage } from "./ui/workspaceTransfer.js";
 import { DEFAULT_LAYOUT_STATE, LAYOUT_PRESETS, normalizePanelRows, normalizeFilesSectionOrder, cloneLayoutState } from "./ui/layoutState.js";
@@ -2994,6 +2994,8 @@ let editorSettings = { ...EDITOR_PROFILES.balanced, profile: "balanced" };
 let fileHistory = [];
 let fileHistoryIndex = -1;
 let historyDepth = 0;
+const LESSON_TIER_ORDER = Object.freeze(["beginner", "intermediate", "expert"]);
+const LESSON_TIER_FILTER_ORDER = Object.freeze(["all", ...LESSON_TIER_ORDER]);
 const games = normalizeGames(GAMES);
 const applications = normalizeApplications(APPLICATIONS);
 const lessons = normalizeLessons(LESSONS);
@@ -3024,6 +3026,7 @@ let selectedApplicationId = applications[0]?.id ?? "";
 let applicationsSelectorOpen = false;
 let selectedLessonId = lessons[0]?.id ?? "";
 let lessonsSelectorOpen = false;
+let lessonTierFilter = "all";
 const ACCOUNT_TYPES = Object.freeze(["test", "sandbox"]);
 const DEFAULT_ACCOUNT_PROFILE = Object.freeze({
     displayName: "",
@@ -9720,7 +9723,113 @@ function normalizeApplications(list) {
 }
 
 function normalizeLessons(list) {
-    return normalizeTemplateList(list, { fallbackLabel: "Lesson" });
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    return list
+        .map((entry, index) => {
+            const normalized = normalizeTemplate(entry, index, { fallbackLabel: "Lesson" });
+            if (!normalized) return null;
+            return {
+                ...normalized,
+                tier: normalizeLessonTier(entry?.tier),
+            };
+        })
+        .filter(Boolean)
+        .filter((entry) => {
+            if (seen.has(entry.id)) return false;
+            seen.add(entry.id);
+            return true;
+        });
+}
+
+function normalizeLessonTier(value = "") {
+    const raw = String(value ?? "").trim().toLowerCase();
+    if (LESSON_TIER_ORDER.includes(raw)) return raw;
+    return "beginner";
+}
+
+function normalizeLessonTierFilter(value = "all") {
+    const raw = String(value ?? "").trim().toLowerCase();
+    if (LESSON_TIER_FILTER_ORDER.includes(raw)) return raw;
+    return "all";
+}
+
+function getVisibleLessonsByTier() {
+    if (lessonTierFilter === "all") return lessons;
+    return lessons.filter((lesson) => lesson.tier === lessonTierFilter);
+}
+
+function getLessonTierCounts() {
+    const counts = {
+        all: lessons.length,
+        beginner: 0,
+        intermediate: 0,
+        expert: 0,
+    };
+    lessons.forEach((lesson) => {
+        const tier = normalizeLessonTier(lesson.tier);
+        counts[tier] += 1;
+    });
+    return counts;
+}
+
+function syncLessonTierMap({ show = true } = {}) {
+    if (!el.lessonTierMap) return;
+    setAriaHidden(el.lessonTierMap, !show);
+    if (!show) return;
+    const counts = getLessonTierCounts();
+    const buttons = el.lessonTierMap.querySelectorAll("[data-lesson-tier-filter]");
+    buttons.forEach((button) => {
+        const tier = normalizeLessonTierFilter(button.dataset.lessonTierFilter || "all");
+        const active = tier === lessonTierFilter;
+        button.setAttribute("aria-pressed", toBooleanAttribute(active));
+        if (tier !== "all") {
+            button.disabled = counts[tier] <= 0;
+        } else {
+            button.disabled = counts.all <= 0;
+        }
+    });
+    const chips = el.lessonTierMap.querySelectorAll("[data-lesson-tier-count]");
+    chips.forEach((chip) => {
+        const tier = normalizeLessonTierFilter(chip.dataset.lessonTierCount || "all");
+        chip.textContent = String(counts[tier] ?? 0);
+    });
+}
+
+function renderLessonSelectorOptions(listNode, items = [], selectedId = "") {
+    if (!listNode) return;
+    let activeDescendant = "";
+    const orderedItems = [];
+    LESSON_TIER_ORDER.forEach((tier) => {
+        const tierItems = items.filter((lesson) => normalizeLessonTier(lesson.tier) === tier);
+        orderedItems.push(...tierItems);
+    });
+    listNode.innerHTML = "";
+    orderedItems.forEach((entry, index) => {
+        const option = document.createElement("button");
+        const optionId = `lesson-option-${index}`;
+        const selected = entry.id === selectedId;
+        option.type = "button";
+        option.className = "files-games-option files-lessons-option";
+        option.id = optionId;
+        option.dataset.lessonId = entry.id;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", toBooleanAttribute(selected));
+        option.setAttribute("data-selected", toBooleanAttribute(selected));
+        renderTemplateOptionLabel(option, entry.name, entry.iconSources, { iconSourceLimit: TEMPLATE_ICON_SOURCE_LIMIT });
+
+        const item = document.createElement("li");
+        item.className = "files-games-item";
+        item.appendChild(option);
+        listNode.appendChild(item);
+
+        if (selected) activeDescendant = optionId;
+    });
+    if (activeDescendant) {
+        listNode.setAttribute("aria-activedescendant", activeDescendant);
+    } else {
+        listNode.removeAttribute("aria-activedescendant");
+    }
 }
 
 function getGameById(id) {
@@ -9813,6 +9922,13 @@ function syncApplicationsUI() {
 
 function syncLessonsUI() {
     if (!el.filesLessons || !el.lessonsSelectorToggle || !el.lessonsList) return;
+    lessonTierFilter = normalizeLessonTierFilter(lessonTierFilter);
+    const visibleLessons = getVisibleLessonsByTier();
+    const hasVisibleSelection = visibleLessons.some((lesson) => lesson.id === selectedLessonId);
+    if (!hasVisibleSelection) {
+        selectedLessonId = visibleLessons[0]?.id ?? lessons[0]?.id ?? "";
+    }
+    const nextHasSelection = visibleLessons.some((lesson) => lesson.id === selectedLessonId);
     const visible = syncTemplateSelectorShell({
         section: el.filesLessons,
         toggle: el.lessonsSelectorToggle,
@@ -9822,13 +9938,11 @@ function syncLessonsUI() {
         sectionOpen: layoutState.filesLessonsOpen,
         listOpen: lessonsSelectorOpen,
         hasItems: lessons.length > 0,
-        hasSelection: Boolean(selectedLessonId),
+        hasSelection: nextHasSelection,
     });
+    const showTierMap = Boolean(visible && lessonsSelectorOpen && lessons.length > 0);
+    syncLessonTierMap({ show: showTierMap });
     if (!visible) return;
-
-    if (!lessons.some((lesson) => lesson.id === selectedLessonId)) {
-        selectedLessonId = lessons[0]?.id ?? "";
-    }
 
     syncTemplateSelectorShell({
         section: el.filesLessons,
@@ -9839,14 +9953,10 @@ function syncLessonsUI() {
         sectionOpen: layoutState.filesLessonsOpen,
         listOpen: lessonsSelectorOpen,
         hasItems: lessons.length > 0,
-        hasSelection: Boolean(selectedLessonId),
+        hasSelection: nextHasSelection,
     });
 
-    renderTemplateSelectorOptions(el.lessonsList, lessons, selectedLessonId, {
-        optionIdPrefix: "lesson-option",
-        optionDatasetKey: "lessonId",
-        iconSourceLimit: TEMPLATE_ICON_SOURCE_LIMIT,
-    });
+    renderLessonSelectorOptions(el.lessonsList, visibleLessons, selectedLessonId);
 }
 
 async function loadTemplateFilesFromSources(templateFiles = [], contextLabel = "Template") {
@@ -24379,6 +24489,16 @@ async function boot() {
     if (el.lessonsSelectorToggle) {
         el.lessonsSelectorToggle.addEventListener("click", () => {
             lessonsSelectorOpen = !lessonsSelectorOpen;
+            syncLessonsUI();
+        });
+    }
+    if (el.lessonTierMap) {
+        el.lessonTierMap.addEventListener("click", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-lesson-tier-filter]") : null;
+            if (!target) return;
+            const nextTier = normalizeLessonTierFilter(target.dataset.lessonTierFilter || "all");
+            if (nextTier === lessonTierFilter) return;
+            lessonTierFilter = nextTier;
             syncLessonsUI();
         });
     }
