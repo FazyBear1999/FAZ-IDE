@@ -4336,6 +4336,29 @@ function sanitizeLayoutState(state = {}) {
         : layoutState.filesTrashOpen;
     next.filesSectionOrder = normalizeFilesSectionOrder(state.filesSectionOrder ?? layoutState.filesSectionOrder);
 
+    if (getOpenPrimaryPanelCountFromSnapshot(next) <= 0) {
+        next.editorOpen = true;
+    }
+
+    const sanitizePanelGap = clamp(safeNumber(state.panelGap, layoutState.panelGap), bounds.panelGap.min, bounds.panelGap.max);
+    const cappedRows = solvePanelRows({
+        rows: next.panelRows,
+        normalizeRows: normalizePanelRows,
+        isPanelOpen(panel) {
+            return isPanelOpenInLayoutSnapshot(next, panel);
+        },
+        rowWidthByName: {
+            top: getRowWidth("top"),
+            bottom: getRowWidth("bottom"),
+        },
+        panelGap: sanitizePanelGap,
+        getPanelMinWidth: () => 0,
+        maxOpenPerRow: LAYOUT_COLUMN_COUNT,
+        widthFit: false,
+    });
+    next.panelRows = cappedRows;
+    next.panelLayout = normalizePanelLayout(rowsToPanelLayout(cappedRows), { fallbackRows: cappedRows });
+
     const fallbackWidth = safeNumber(state.outputWidth, null);
     const baseLogWidth = clamp(safeNumber(state.logWidth ?? fallbackWidth, layoutState.logWidth), bounds.logWidth.min, bounds.logWidth.max);
     const baseSidebarWidth = clamp(safeNumber(state.sidebarWidth, layoutState.sidebarWidth), bounds.sidebar.min, bounds.sidebar.max);
@@ -7773,6 +7796,47 @@ function isPanelOpen(panel) {
     return true;
 }
 
+const PRIMARY_PANEL_NAMES = ["log", "editor", "files", "sandbox", "tools"];
+
+function isPrimaryPanelName(panel) {
+    return PRIMARY_PANEL_NAMES.includes(String(panel || "").trim());
+}
+
+function isDockingRowName(row) {
+    const normalized = String(row || "").trim().toLowerCase();
+    return normalized === "top" || normalized === "bottom";
+}
+
+function normalizeDockingRowName(row) {
+    if (!isDockingRowName(row)) return "";
+    return String(row).trim().toLowerCase();
+}
+
+function normalizePanelTargetIndex(index) {
+    const target = Number(index);
+    if (!Number.isFinite(target)) return null;
+    if (!Number.isSafeInteger(target)) return null;
+    if (Math.trunc(target) !== target) return null;
+    return target;
+}
+
+function getOpenPrimaryPanelCount() {
+    return PRIMARY_PANEL_NAMES.reduce((count, panel) => count + (isPanelOpen(panel) ? 1 : 0), 0);
+}
+
+function isPanelOpenInLayoutSnapshot(snapshot = {}, panel = "") {
+    if (panel === "log") return Boolean(snapshot.logOpen);
+    if (panel === "editor") return Boolean(snapshot.editorOpen);
+    if (panel === "files") return Boolean(snapshot.filesOpen);
+    if (panel === "sandbox") return Boolean(snapshot.sandboxOpen);
+    if (panel === "tools") return Boolean(snapshot.toolsOpen);
+    return true;
+}
+
+function getOpenPrimaryPanelCountFromSnapshot(snapshot = {}) {
+    return PRIMARY_PANEL_NAMES.reduce((count, panel) => count + (isPanelOpenInLayoutSnapshot(snapshot, panel) ? 1 : 0), 0);
+}
+
 function syncPanelToggles() {
     const toggleStates = [
         [el.btnToggleLog, layoutState.logOpen, "Console"],
@@ -7831,8 +7895,12 @@ function panelRowsEqual(a, b) {
 }
 
 function setPanelOpen(panel, open) {
+    if (!isPrimaryPanelName(panel)) return;
     const nextOpen = Boolean(open);
     const previousOpen = isPanelOpen(panel);
+    if (!nextOpen && previousOpen && getOpenPrimaryPanelCount() <= 1) {
+        return;
+    }
     if (panel === "log") layoutState.logOpen = open;
     if (panel === "editor") layoutState.editorOpen = open;
     if (panel === "files") layoutState.filesOpen = open;
@@ -7871,6 +7939,7 @@ function setPanelOpen(panel, open) {
 }
 
 function togglePanel(panel) {
+    if (!isPrimaryPanelName(panel)) return;
     if (panel === "log") return setPanelOpen("log", !layoutState.logOpen);
     if (panel === "editor") return setPanelOpen("editor", !layoutState.editorOpen);
     if (panel === "files") return setPanelOpen("files", !layoutState.filesOpen);
@@ -7879,12 +7948,14 @@ function togglePanel(panel) {
 }
 
 function setPanelOrder(panel, index, { animatePanels = true } = {}) {
+    if (!isPrimaryPanelName(panel)) return;
     const row = getPanelRow(panel);
     const order = Array.isArray(layoutState.panelRows?.[row]) ? [...layoutState.panelRows[row]] : [];
     const currentIndex = order.indexOf(panel);
     if (currentIndex === -1) return;
-    const target = Number(index);
-    const clamped = Number.isFinite(target) ? clamp(target, 0, order.length - 1) : currentIndex;
+    const normalizedIndex = normalizePanelTargetIndex(index);
+    if (normalizedIndex === null) return;
+    const clamped = clamp(normalizedIndex, 0, order.length - 1);
     if (clamped === currentIndex) return;
     order.splice(currentIndex, 1);
     order.splice(clamped, 0, panel);
@@ -7898,13 +7969,16 @@ function setPanelOrder(panel, index, { animatePanels = true } = {}) {
 }
 
 function movePanelToRow(panel, row, index = 0, { animatePanels = true } = {}) {
-    const targetRow = row === "bottom" ? "bottom" : "top";
+    if (!isPrimaryPanelName(panel)) return;
+    const targetRow = normalizeDockingRowName(row);
+    if (!targetRow) return;
+    const normalizedIndex = normalizePanelTargetIndex(index);
+    if (normalizedIndex === null) return;
     const currentRow = getPanelRow(panel);
     const currentOrder = Array.isArray(layoutState.panelRows?.[currentRow]) ? [...layoutState.panelRows[currentRow]] : [];
     const currentIndex = currentOrder.indexOf(panel);
     if (currentIndex !== -1 && currentRow === targetRow) {
-        const target = Number(index);
-        const clampedCurrent = Number.isFinite(target) ? clamp(target, 0, currentOrder.length - 1) : currentIndex;
+        const clampedCurrent = clamp(normalizedIndex, 0, currentOrder.length - 1);
         if (clampedCurrent === currentIndex) {
             return;
         }
@@ -7914,7 +7988,7 @@ function movePanelToRow(panel, row, index = 0, { animatePanels = true } = {}) {
     nextRows[otherRow] = nextRows[otherRow].filter((name) => name !== panel);
     nextRows[targetRow] = nextRows[targetRow].filter((name) => name !== panel);
     const target = nextRows[targetRow];
-    const clamped = clamp(Number(index), 0, target.length);
+    const clamped = clamp(normalizedIndex, 0, target.length);
     target.splice(clamped, 0, panel);
     setPanelRows(enforceDockingRowCaps(nextRows, { preferredRow: targetRow, preservePanel: panel }));
     applyLayout({ animatePanels });
@@ -24351,6 +24425,7 @@ function exposeDebug() {
             return applied;
         },
         setPanelOrder(panel, index) {
+            if (!isPrimaryPanelName(panel)) return { ...layoutState.panelRows };
             setPanelOrder(panel, index);
             return { ...layoutState.panelRows };
         },
@@ -24358,14 +24433,18 @@ function exposeDebug() {
             return JSON.parse(JSON.stringify(layoutState.panelLayout || rowsToPanelLayout(layoutState.panelRows)));
         },
         dockPanel(panel, row = "top") {
+            if (!isPrimaryPanelName(panel)) return { ...layoutState.panelRows };
+            if (!isDockingRowName(row)) return { ...layoutState.panelRows };
             movePanelToRow(panel, row, 0);
             return { ...layoutState.panelRows };
         },
         setPanelOpen(panel, open) {
+            if (!isPrimaryPanelName(panel)) return false;
             setPanelOpen(panel, Boolean(open));
             return isPanelOpen(panel);
         },
         togglePanel(panel) {
+            if (!isPrimaryPanelName(panel)) return false;
             togglePanel(panel);
             return isPanelOpen(panel);
         },

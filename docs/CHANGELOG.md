@@ -8,6 +8,18 @@
 - Added a hard mobile access gate that blocks IDE boot for mobile user agents and shows a desktop-required message with a FAZIDE.COM link.
 - Added a focused contract test in `tests/ide.spec.js` to ensure mobile user agents cannot access IDE shell UI.
 - Refactored mobile gate rendering from inline JS DOM styling to structured HTML (`index.html`) and tokenized CSS (`assets/css/layout.css`) to reduce `app.js` complexity and improve maintainability.
+- Added a panel-contract guard in `assets/js/app.js` to prevent closing the final remaining primary panel, avoiding blank-shell dead-end states.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to lock the "at least one panel remains open" behavior.
+- Added panel API input hardening in `assets/js/app.js` so invalid panel names are explicit no-ops across open/order/dock/toggle pathways.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to ensure invalid panel API inputs do not mutate layout state.
+- Added row/order normalization hardening in `assets/js/app.js` so malformed docking rows and non-integer order indices are treated as safe no-ops.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to ensure malformed row/order panel API inputs do not mutate layout state.
+- Added safe-integer normalization in `assets/js/app.js` for panel order indices so precision-unsafe integers are rejected as no-ops while valid extreme safe integers remain clamped deterministically.
+- Added focused contract coverage in `tests/layout-micro.spec.js` for safe-extreme panel order clamping and unsafe-integer no-op behavior.
+- Added sanitize-time row-cap hardening in `assets/js/app.js` so persisted dense panel row states are normalized to docking caps on reload.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to verify persisted dense row layouts are capped deterministically after reload.
+- Added sanitize-time primary panel floor recovery in `assets/js/app.js` so persisted all-closed primary panel payloads reopen a safe default panel at boot.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to verify all-closed persisted panel states recover to at least one open panel on reload.
 
 ## 2026-02-20
 

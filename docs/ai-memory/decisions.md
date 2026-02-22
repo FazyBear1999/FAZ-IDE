@@ -49,6 +49,90 @@ Keep entries short, dated, and explicit about why the change was made.
 - Follow-up:
 - Continue slices with targeted contract tests, then run full suite at slice multiples of 3 (or immediately if risk profile increases).
 
+## 2026-02-21T00:50:00Z - Slice 4 panel-open floor contract
+
+- Date (UTC):
+- 2026-02-21T00:50:00Z
+- Area:
+- Layout/panel reliability and dead-end prevention
+- Decision:
+- Added a panel-contract floor in `assets/js/app.js` so attempts to close the final remaining primary panel are ignored.
+- Introduced focused regression coverage in `tests/layout-micro.spec.js` to prove at least one primary panel always remains open after close operations.
+- Why:
+- Prevents unusable blank workspace states and keeps recovery/control surfaces available without introducing new UI complexity.
+- Follow-up:
+- Keep panel-open/row/order invariants under focused layout contracts during ongoing panel-contract slices.
+
+## 2026-02-21T01:10:00Z - Slice 5 invalid-panel no-op contract
+
+- Date (UTC):
+- 2026-02-21T01:10:00Z
+- Area:
+- Panel API safety and layout mutation resilience
+- Decision:
+- Hardened panel mutator pathways in `assets/js/app.js` (`setPanelOpen`, `togglePanel`, `setPanelOrder`, `movePanelToRow`, and related `window.fazide` wrappers) to treat unknown panel names as explicit no-ops.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to assert invalid panel inputs do not mutate row/order/open state.
+- Why:
+- Prevents accidental state corruption from malformed command inputs and keeps panel-contract behavior deterministic under bad calls.
+- Follow-up:
+- Continue panel-contract slices with input-validation first, then row/order semantics tightening under focused contracts.
+
+## 2026-02-21T01:30:00Z - Slice 6 malformed row/index no-op contract
+
+- Date (UTC):
+- 2026-02-21T01:30:00Z
+- Area:
+- Panel row/order normalization safety and layout determinism
+- Decision:
+- Hardened panel order/docking mutators in `assets/js/app.js` so malformed docking rows and non-integer order indices are explicit no-ops.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to assert malformed row/order API inputs do not mutate panel row state.
+- Why:
+- Prevents invalid-input coercion from causing unintended row churn and preserves deterministic panel layout behavior under bad calls.
+- Follow-up:
+- Continue panel-contract slices on bounded/normalized row-cap semantics for valid extreme indices while preserving no-op behavior for malformed inputs.
+
+## 2026-02-21T01:45:00Z - Slice 7 safe-integer index precision contract
+
+- Date (UTC):
+- 2026-02-21T01:45:00Z
+- Area:
+- Panel order index normalization and deterministic boundary behavior
+- Decision:
+- Hardened `assets/js/app.js` panel order index normalization to accept only safe integers, rejecting precision-unsafe integers as explicit no-ops.
+- Added focused contract coverage in `tests/layout-micro.spec.js` to verify unsafe integer no-op behavior while preserving deterministic clamp-to-boundary semantics for valid extreme safe integers.
+- Why:
+- Prevents precision-coercion edge cases from mutating row order unexpectedly while preserving predictable order behavior for valid inputs.
+- Follow-up:
+- Continue panel-contract slices around row-cap boundary proofs under dense row states, keeping malformed/precision-unsafe inputs no-op.
+
+## 2026-02-21T02:05:00Z - Slice 8 persisted dense-row cap normalization contract
+
+- Date (UTC):
+- 2026-02-21T02:05:00Z
+- Area:
+- Layout boot sanitization and panel row-cap resilience
+- Decision:
+- Hardened `sanitizeLayoutState` in `assets/js/app.js` to enforce docking row caps during layout-load sanitization, using snapshot-aware open-state checks.
+- Added focused contract coverage in `tests/layout-micro.spec.js` that seeds a dense persisted panel-row payload and verifies row caps are restored deterministically after reload.
+- Why:
+- Prevents persisted malformed/legacy layout payloads from booting into over-cap row states and preserves stable panel invariants from first render.
+- Follow-up:
+- Continue panel-contract slices on solver determinism with mixed open/closed panel combinations while preserving strict row-cap guarantees.
+
+## 2026-02-21T02:25:00Z - Slice 9 persisted all-closed panel recovery contract
+
+- Date (UTC):
+- 2026-02-21T02:25:00Z
+- Area:
+- Layout boot safety and blank-shell prevention
+- Decision:
+- Hardened `sanitizeLayoutState` in `assets/js/app.js` to enforce a primary-panel open floor for persisted layout payloads, restoring a safe default (`editor`) when all primary panels are closed.
+- Added focused contract coverage in `tests/layout-micro.spec.js` that seeds an all-closed persisted layout and verifies recovery to at least one open panel (editor open) after reload.
+- Why:
+- Prevents unusable blank-shell boot states from legacy/corrupt stored layout payloads while preserving deterministic startup behavior.
+- Follow-up:
+- Continue panel-contract slices with boot-payload resilience checks before broad orchestrator decomposition.
+
 ## 2026-02-20T00:00:00Z - CSS Phase 2 micro-primitives and letter-spacing normalization
 
 - Date (UTC):

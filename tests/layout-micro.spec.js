@@ -290,3 +290,335 @@ test("layout micro: narrow viewport hides all splitters including tools splitter
     await expect(page.locator(selector)).toBeHidden();
   }
 });
+
+test("layout micro: cannot close the final remaining primary panel", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.setPanelOpen) return { ready: false };
+
+    api.setPanelOpen("log", false);
+    api.setPanelOpen("files", false);
+    api.setPanelOpen("sandbox", false);
+    api.setPanelOpen("tools", false);
+    api.setPanelOpen("editor", false);
+
+    const shell = document.querySelector("#appShell");
+    const states = {
+      log: String(shell?.getAttribute("data-log") || ""),
+      editor: String(shell?.getAttribute("data-editor") || ""),
+      files: String(shell?.getAttribute("data-files") || ""),
+      sandbox: String(shell?.getAttribute("data-sandbox") || ""),
+      tools: String(shell?.getAttribute("data-tools") || ""),
+    };
+    const openCount = Object.values(states).filter((value) => value === "open").length;
+    return {
+      ready: true,
+      states,
+      openCount,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.openCount).toBeGreaterThanOrEqual(1);
+  expect(result.states.editor).toBe("open");
+});
+
+test("layout micro: invalid panel api inputs are safe no-ops", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.getState || !api?.setPanelOrder || !api?.dockPanel || !api?.setPanelOpen || !api?.togglePanel) {
+      return { ready: false };
+    }
+
+    const before = api.getState()?.layout || {};
+    const beforeRows = JSON.stringify(before.panelRows || {});
+    const beforeOpen = {
+      log: Boolean(before.logOpen),
+      editor: Boolean(before.editorOpen),
+      files: Boolean(before.filesOpen),
+      sandbox: Boolean(before.sandboxOpen),
+      tools: Boolean(before.toolsOpen),
+    };
+
+    api.setPanelOrder("ghost", 1);
+    api.dockPanel("ghost", "bottom");
+    const setResult = api.setPanelOpen("ghost", false);
+    const toggleResult = api.togglePanel("ghost");
+
+    const after = api.getState()?.layout || {};
+    const afterRows = JSON.stringify(after.panelRows || {});
+    const afterOpen = {
+      log: Boolean(after.logOpen),
+      editor: Boolean(after.editorOpen),
+      files: Boolean(after.filesOpen),
+      sandbox: Boolean(after.sandboxOpen),
+      tools: Boolean(after.toolsOpen),
+    };
+
+    return {
+      ready: true,
+      rowsUnchanged: beforeRows === afterRows,
+      openUnchanged: JSON.stringify(beforeOpen) === JSON.stringify(afterOpen),
+      setResult,
+      toggleResult,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.rowsUnchanged).toBeTruthy();
+  expect(result.openUnchanged).toBeTruthy();
+  expect(result.setResult).toBe(false);
+  expect(result.toggleResult).toBe(false);
+});
+
+test("layout micro: malformed row and order inputs are safe no-ops", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.getState || !api?.setPanelOrder || !api?.dockPanel) {
+      return { ready: false };
+    }
+
+    const before = api.getState()?.layout || {};
+    const beforeRows = JSON.stringify(before.panelRows || {});
+
+    api.setPanelOrder("editor", "two");
+    api.setPanelOrder("editor", 1.5);
+    api.dockPanel("editor", "middle");
+
+    const after = api.getState()?.layout || {};
+    const afterRows = JSON.stringify(after.panelRows || {});
+
+    return {
+      ready: true,
+      rowsUnchanged: beforeRows === afterRows,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.rowsUnchanged).toBeTruthy();
+});
+
+test("layout micro: panel order uses safe-integer bounds and rejects unsafe integers", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.getState || !api?.setPanelOrder) {
+      return { ready: false };
+    }
+
+    const getRows = () => JSON.parse(JSON.stringify(api.getState()?.layout?.panelRows || {}));
+    const findPanel = (rows, panel) => {
+      const top = Array.isArray(rows.top) ? rows.top : [];
+      const bottom = Array.isArray(rows.bottom) ? rows.bottom : [];
+      const topIndex = top.indexOf(panel);
+      if (topIndex !== -1) {
+        return { row: "top", index: topIndex, length: top.length };
+      }
+      const bottomIndex = bottom.indexOf(panel);
+      if (bottomIndex !== -1) {
+        return { row: "bottom", index: bottomIndex, length: bottom.length };
+      }
+      return { row: "", index: -1, length: 0 };
+    };
+
+    const panel = "log";
+    const beforeUnsafeRows = getRows();
+    const beforeUnsafe = JSON.stringify(beforeUnsafeRows);
+    api.setPanelOrder(panel, Number.MAX_SAFE_INTEGER + 1);
+    const afterUnsafeRows = getRows();
+    const unsafeNoOp = JSON.stringify(afterUnsafeRows) === beforeUnsafe;
+
+    api.setPanelOrder(panel, Number.MAX_SAFE_INTEGER);
+    const afterMaxRows = getRows();
+    const afterMaxPos = findPanel(afterMaxRows, panel);
+    const maxClampedToEnd = afterMaxPos.index === Math.max(0, afterMaxPos.length - 1);
+
+    api.setPanelOrder(panel, Number.MIN_SAFE_INTEGER);
+    const afterMinRows = getRows();
+    const afterMinPos = findPanel(afterMinRows, panel);
+    const minClampedToStart = afterMinPos.index === 0;
+
+    return {
+      ready: true,
+      unsafeNoOp,
+      maxClampedToEnd,
+      minClampedToStart,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.unsafeNoOp).toBeTruthy();
+  expect(result.maxClampedToEnd).toBeTruthy();
+  expect(result.minClampedToStart).toBeTruthy();
+});
+
+test("layout micro: persisted dense rows are normalized to row caps on reload", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const seeded = await page.evaluate(() => {
+    let layoutKey = "";
+    let layoutSnapshot = null;
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && parsed.panelRows && parsed.panelLayout) {
+          layoutKey = key;
+          layoutSnapshot = parsed;
+          break;
+        }
+      } catch {
+        // no-op
+      }
+    }
+
+    if (!layoutKey || !layoutSnapshot) {
+      return { ready: false };
+    }
+
+    const dense = {
+      ...layoutSnapshot,
+      logOpen: true,
+      editorOpen: true,
+      filesOpen: true,
+      sandboxOpen: true,
+      toolsOpen: true,
+      panelRows: {
+        top: ["log", "editor", "files", "sandbox", "tools"],
+        bottom: [],
+      },
+      panelLayout: {
+        top: ["log", "editor", "files", "sandbox", "tools"],
+        bottom: [],
+      },
+    };
+
+    localStorage.setItem(layoutKey, JSON.stringify(dense));
+    return { ready: true, layoutKey };
+  });
+
+  expect(seeded.ready).toBeTruthy();
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    if (!api?.getState) {
+      return { ready: false };
+    }
+
+    const rows = api.getState()?.layout?.panelRows || {};
+    const top = Array.isArray(rows.top) ? rows.top : [];
+    const bottom = Array.isArray(rows.bottom) ? rows.bottom : [];
+
+    const isOpen = (panel) => {
+      const shell = document.querySelector("#appShell");
+      if (!shell) return false;
+      if (panel === "log") return shell.getAttribute("data-log") === "open";
+      if (panel === "editor") return shell.getAttribute("data-editor") === "open";
+      if (panel === "files") return shell.getAttribute("data-files") === "open";
+      if (panel === "sandbox") return shell.getAttribute("data-sandbox") === "open";
+      if (panel === "tools") return shell.getAttribute("data-tools") === "open";
+      return false;
+    };
+
+    const topOpen = top.filter((panel) => isOpen(panel)).length;
+    const bottomOpen = bottom.filter((panel) => isOpen(panel)).length;
+
+    return {
+      ready: true,
+      topOpen,
+      bottomOpen,
+      totalPanels: top.length + bottom.length,
+      topCount: top.length,
+      bottomCount: bottom.length,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.totalPanels).toBe(5);
+  expect(result.topOpen).toBeLessThanOrEqual(3);
+  expect(result.bottomOpen).toBeLessThanOrEqual(3);
+  expect(result.topCount).toBeLessThanOrEqual(3);
+  expect(result.bottomCount).toBeGreaterThanOrEqual(2);
+});
+
+test("layout micro: persisted all-closed primary panel state recovers on reload", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const seeded = await page.evaluate(() => {
+    let layoutKey = "";
+    let layoutSnapshot = null;
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && parsed.panelRows && parsed.panelLayout) {
+          layoutKey = key;
+          layoutSnapshot = parsed;
+          break;
+        }
+      } catch {
+        // no-op
+      }
+    }
+
+    if (!layoutKey || !layoutSnapshot) {
+      return { ready: false };
+    }
+
+    const allClosed = {
+      ...layoutSnapshot,
+      logOpen: false,
+      editorOpen: false,
+      filesOpen: false,
+      sandboxOpen: false,
+      toolsOpen: false,
+    };
+
+    localStorage.setItem(layoutKey, JSON.stringify(allClosed));
+    return { ready: true };
+  });
+
+  expect(seeded.ready).toBeTruthy();
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const shell = document.querySelector("#appShell");
+    if (!shell) {
+      return { ready: false };
+    }
+
+    const states = {
+      log: String(shell.getAttribute("data-log") || ""),
+      editor: String(shell.getAttribute("data-editor") || ""),
+      files: String(shell.getAttribute("data-files") || ""),
+      sandbox: String(shell.getAttribute("data-sandbox") || ""),
+      tools: String(shell.getAttribute("data-tools") || ""),
+    };
+    const openCount = Object.values(states).filter((value) => value === "open").length;
+    return {
+      ready: true,
+      openCount,
+      states,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.openCount).toBeGreaterThanOrEqual(1);
+  expect(result.states.editor).toBe("open");
+});
