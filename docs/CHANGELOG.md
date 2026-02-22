@@ -24,6 +24,14 @@
 - Added focused contract coverage in `tests/layout-micro.spec.js` for a combined persisted payload (dense rows + all-closed panels) to verify boot recovery enforces both primary-panel floor and row caps together.
 - Optimized `sanitizeLayoutState` in `assets/js/app.js` by caching row width reads for ratio width reconstruction and reusing the already-normalized panel-gap value, reducing redundant normalization/DOM width lookups while preserving behavior.
 - Optimized ratio reconstruction pathways in `assets/js/app.js` by adding a normalized panel→row lookup helper (`buildPanelRowLookup`) and reusing it in both `buildPanelRatioSnapshot` and `sanitizeLayoutState` to avoid repeated row membership scans.
+- Optimized lesson marker parsing in `assets/js/core/lessonEngine.js` by precomputing next blank-line lookups for `[LESSON:*]` segmentation, replacing repeated per-marker blank-line scans while preserving parsing behavior.
+- Updated lesson typing progression in `assets/js/core/lessonEngine.js` so parsed lesson segments collapse into a single completion target per lesson session, preserving detailed in-file tutorial comments/content while removing multi-step completion checkpoints.
+- Added focused contract coverage in `tests/lesson-system-micro.spec.js` to enforce single-step typing sessions per lesson.
+- Updated lesson typing normalization in `assets/js/app.js` to auto-skip instructional comment segments (`//`, `/* */`, `<!-- -->`) so learners type code only while detailed lesson comments remain in files.
+- Added focused contract coverage in `tests/lesson-system-micro.spec.js` to verify comment-prefixed lessons start typing on code characters.
+- Updated lesson active-range rendering in `assets/js/app.js` so auto-skipped comment spans are not highlighted as typed ranges.
+- Added focused contract coverage in `tests/lesson-system-micro.spec.js` to verify pressing Enter after a completed code line skips intervening comments and advances to the next code character.
+- Hardened beginner lesson runtime scripts (`assets/lessons/beginner-js-01` through `beginner-js-17`) to use safe render target fallbacks (`#app` → `#out` → `document.body`), preventing null `innerHTML` crashes when completing and auto-running lessons.
 
 ## 2026-02-20
 

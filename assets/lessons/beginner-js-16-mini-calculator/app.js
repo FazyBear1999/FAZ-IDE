@@ -1,4 +1,4 @@
-const app = document.getElementById("app");
+const app = document.getElementById("app") || document.getElementById("out") || document.body;
 // This lesson updates the preview panel as you complete each guided block.
 
 // This section focuses on calc seed. [LESSON:calc-seed]

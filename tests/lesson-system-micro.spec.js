@@ -54,6 +54,7 @@ test("lesson micro: loading a lesson starts an active typed-step session", async
       stepId: String(state?.stepId || ""),
       progress: Number(state?.progress || 0),
       expectedLength: Number(state?.expectedLength || 0),
+      expectedNext: String(state?.expectedNext || ""),
     };
   });
 
@@ -63,8 +64,101 @@ test("lesson micro: loading a lesson starts an active typed-step session", async
   expect(result.completed).toBeFalsy();
   expect(result.stepCount).toBeGreaterThanOrEqual(1);
   expect(result.stepId).toBe("instant-output-warmup");
-  expect(result.progress).toBe(0);
+  expect(result.progress).toBeGreaterThan(0);
+  expect(result.expectedNext).toBe("c");
   expect(result.expectedLength).toBeGreaterThan(80);
+});
+
+test("lesson micro: typing session uses a single completion target per lesson", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState) return { ready: false };
+
+    const loaded = await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    const state = api.getLessonState();
+
+    return {
+      ready: true,
+      loaded: Boolean(loaded),
+      active: Boolean(state?.active),
+      stepCount: Number(state?.stepCount || 0),
+      expectedLength: Number(state?.expectedLength || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.active).toBeTruthy();
+  expect(result.stepCount).toBe(1);
+  expect(result.expectedLength).toBeGreaterThan(0);
+});
+
+test("lesson micro: instructional comments are auto-skipped so typing starts on code", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    const before = api.getLessonState();
+    const firstExpected = String(before?.expectedNext || "");
+
+    const typed = Number(api.typeLessonInput(firstExpected) || 0);
+    const after = api.getLessonState();
+
+    return {
+      ready: true,
+      loaded: Boolean(loaded),
+      firstExpected,
+      typed,
+      progressAfter: Number(after?.progress || 0),
+      expectedLength: Number(after?.expectedLength || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.firstExpected).toBe("c");
+  expect(result.typed).toBeGreaterThanOrEqual(1);
+  expect(result.progressAfter).toBeGreaterThan(0);
+  expect(result.expectedLength).toBeGreaterThan(result.progressAfter);
+});
+
+test("lesson micro: after typing code line and pressing enter, comments are skipped to next code char", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState || !api?.typeLessonInput) {
+      return { ready: false };
+    }
+
+    const loaded = await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    const firstLine = 'const learnerName = "FAZ Student";\n';
+    const typed = Number(api.typeLessonInput(firstLine) || 0);
+    const state = api.getLessonState();
+
+    return {
+      ready: true,
+      loaded: Boolean(loaded),
+      typed,
+      expectedNext: String(state?.expectedNext || ""),
+      progress: Number(state?.progress || 0),
+      expectedLength: Number(state?.expectedLength || 0),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.loaded).toBeTruthy();
+  expect(result.typed).toBeGreaterThanOrEqual(1);
+  expect(result.expectedNext).toBe("c");
+  expect(result.progress).toBeGreaterThan(0);
+  expect(result.expectedLength).toBeGreaterThan(result.progress);
 });
 
 test("lesson micro: first beginner lesson uses a modern multi-line warmup step", async ({ page }) => {

@@ -173,6 +173,76 @@ Keep entries short, dated, and explicit about why the change was made.
 - Follow-up:
 - Continue micro-optimizations that replace repeated derived lookups with normalized local maps only when behavior contracts stay green.
 
+## 2026-02-22T00:10:00Z - Slice 13 lesson parser blank-line lookup optimization
+
+- Date (UTC):
+- 2026-02-22T00:10:00Z
+- Area:
+- Lesson engine parsing performance and deterministic extraction
+- Decision:
+- Optimized `parseLessonSteps` in `assets/js/core/lessonEngine.js` by adding a precomputed next-blank-line lookup used for `[LESSON:*]` segment boundary resolution.
+- Why:
+- Removes repeated per-marker linear scans for blank-line boundaries, improving parser efficiency while preserving marker extraction behavior and ordering.
+- Follow-up:
+- Continue lesson engine micro-optimizations only when focused lesson contracts remain green.
+
+## 2026-02-22T00:35:00Z - Slice 14 single-completion lesson typing contract
+
+- Date (UTC):
+- 2026-02-22T00:35:00Z
+- Area:
+- Lesson progression UX and typing-session completion semantics
+- Decision:
+- Updated `parseLessonSteps` in `assets/js/core/lessonEngine.js` to collapse parsed lesson segments into one combined typing step per lesson session.
+- Preserved detailed lesson/tutorial comments and content in the typed target span while removing multi-step completion checkpoints.
+- Added focused coverage in `tests/lesson-system-micro.spec.js` to enforce single-step lesson typing sessions.
+- Why:
+- Aligns lesson UX with one clear completion objective per lesson while keeping rich in-file instructional detail.
+- Follow-up:
+- Keep lesson authoring guidance aligned with one-completion typing flow and maintain focused lesson-system contracts for progression behavior.
+
+## 2026-02-22T00:55:00Z - Slice 15 code-only typing with instructional comments preserved
+
+- Date (UTC):
+- 2026-02-22T00:55:00Z
+- Area:
+- Lesson typing UX and instructional-comment compatibility
+- Decision:
+- Updated lesson typing normalization in `assets/js/app.js` to auto-skip instructional comment spans (`//`, `/* */`, `<!-- -->`) during progress normalization.
+- Kept detailed lesson comments in lesson files while ensuring typing progression requires code only.
+- Added focused coverage in `tests/lesson-system-micro.spec.js` to verify comment-prefixed lesson content starts typing on code characters.
+- Why:
+- Aligns typing UX with learner intent (type code, not tutorial prose/comments) without sacrificing rich lesson guidance in source files.
+- Follow-up:
+- Continue validating comment-aware typing behavior against lesson authoring patterns as new lessons are added.
+
+## 2026-02-22T01:15:00Z - Slice 16 no-highlight comment skip + enter-to-next-code contract
+
+- Date (UTC):
+- 2026-02-22T01:15:00Z
+- Area:
+- Lesson typing visual fidelity and progression flow
+- Decision:
+- Updated lesson typed-active marking in `assets/js/app.js` to skip auto-skipped comment spans so comments are not visually highlighted as typed.
+- Added focused contract in `tests/lesson-system-micro.spec.js` to verify that after typing a required code line and pressing Enter, lesson progression skips comment lines and continues on the next code character.
+- Why:
+- Aligns displayed typing progress with actual learner input expectations (code-only typing) and preserves smooth progression through commented tutorial files.
+- Follow-up:
+- Keep lesson visual/typing parity checks in focused contracts whenever skip semantics are adjusted.
+
+## 2026-02-22T01:35:00Z - Slice 17 lesson completion-run null-target safety hardening
+
+- Date (UTC):
+- 2026-02-22T01:35:00Z
+- Area:
+- Lesson runtime stability after completion auto-run
+- Decision:
+- Hardened beginner lesson templates (`assets/lessons/beginner-js-01` through `beginner-js-17` `app.js`) by replacing strict `#app` render-target dependency with fallback resolution (`#app` → `#out` → `document.body`).
+- Why:
+- Eliminates uncaught `Cannot set properties of null (setting 'innerHTML')` errors when lesson completion triggers auto-run in shells where `#app` is missing.
+- Follow-up:
+- Keep lesson template runtime surfaces defensive and add focused run-after-completion contract checks for representative lesson families.
+
 ## 2026-02-20T00:00:00Z - CSS Phase 2 micro-primitives and letter-spacing normalization
 
 - Date (UTC):

@@ -12108,6 +12108,55 @@ function isLessonIndentationWhitespace(expectedText = "", index = 0) {
     return !/[^ \t]/.test(linePrefix);
 }
 
+function findLessonCommentLineBoundary(expectedText = "", index = 0) {
+    const source = String(expectedText || "");
+    const target = Math.max(0, Number(index) || 0);
+    const newlineIndex = source.indexOf("\n", target);
+    return newlineIndex === -1 ? source.length : newlineIndex;
+}
+
+function getLessonCommentSkipLength(expectedText = "", index = 0) {
+    const source = String(expectedText || "");
+    const target = Math.max(0, Number(index) || 0);
+    if (!source || target >= source.length) return 0;
+
+    const lineEnd = findLessonCommentLineBoundary(source, target);
+    const lineSlice = source.slice(target, lineEnd);
+    const leadingWhitespace = lineSlice.match(/^[ \t]*/)?.[0] || "";
+    const markerIndex = target + leadingWhitespace.length;
+    if (markerIndex >= source.length) return 0;
+
+    const includeTrailingNewline = (endExclusive) => {
+        if (source[endExclusive] === "\n") {
+            return endExclusive + 1;
+        }
+        return endExclusive;
+    };
+
+    if (source.startsWith("//", markerIndex)) {
+        const endExclusive = includeTrailingNewline(lineEnd);
+        return Math.max(0, endExclusive - target);
+    }
+
+    if (source.startsWith("/*", markerIndex)) {
+        const closingIndex = source.indexOf("*/", markerIndex + 2);
+        const endExclusive = closingIndex === -1
+            ? lineEnd
+            : includeTrailingNewline(closingIndex + 2);
+        return Math.max(0, endExclusive - target);
+    }
+
+    if (source.startsWith("<!--", markerIndex)) {
+        const closingIndex = source.indexOf("-->", markerIndex + 4);
+        const endExclusive = closingIndex === -1
+            ? lineEnd
+            : includeTrailingNewline(closingIndex + 3);
+        return Math.max(0, endExclusive - target);
+    }
+
+    return 0;
+}
+
 function normalizeLessonProgressToTypeable() {
     if (!lessonSession || lessonSession.completed) return 0;
     const step = getLessonCurrentStep();
@@ -12117,6 +12166,12 @@ function normalizeLessonProgressToTypeable() {
     let advanced = 0;
 
     while (progress < expectedText.length) {
+        const commentSkip = getLessonCommentSkipLength(expectedText, progress);
+        if (commentSkip > 0) {
+            progress += commentSkip;
+            advanced += commentSkip;
+            continue;
+        }
         const next = expectedText[progress] || "";
         if (next === "\r") {
             progress += 1;
@@ -12167,16 +12222,24 @@ function markLessonTypedActiveRanges(step, progress) {
         runStart = -1;
     };
 
-    for (let localIndex = 0; localIndex < limit; localIndex += 1) {
+    for (let localIndex = 0; localIndex < limit;) {
+        const commentSkip = getLessonCommentSkipLength(expectedText, localIndex);
+        if (commentSkip > 0) {
+            flushRun(localIndex);
+            localIndex += commentSkip;
+            continue;
+        }
         const char = expectedText[localIndex] || "";
         const skip = char === "\n" || char === "\r" || isLessonIndentationWhitespace(expectedText, localIndex);
         if (skip) {
             flushRun(localIndex);
+            localIndex += 1;
             continue;
         }
         if (runStart < 0) {
             runStart = localIndex;
         }
+        localIndex += 1;
     }
     flushRun(limit);
 }
