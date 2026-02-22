@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-02-21
+
+- Began optimization lockdown slices with a behavior-preserving cleanup pass.
+- Removed inline styles from `assets/lessons/quick-output-instant/index.html` and moved those declarations into `assets/lessons/quick-output-instant/styles.css`.
+- Updated roadmap execution tracking with a dedicated lockdown slice log entry.
+- Added a hard mobile access gate that blocks IDE boot for mobile user agents and shows a desktop-required message with a FAZIDE.COM link.
+- Added a focused contract test in `tests/ide.spec.js` to ensure mobile user agents cannot access IDE shell UI.
+- Refactored mobile gate rendering from inline JS DOM styling to structured HTML (`index.html`) and tokenized CSS (`assets/css/layout.css`) to reduce `app.js` complexity and improve maintainability.
+
 ## 2026-02-20
 
 - Added a lessons progression map with `All`, `Beginner`, `Intermediate`, and `Expert` tier chips in the Files sidebar, including per-tier counts and safe filtering that preserves existing lesson load/typing flows.

@@ -19,5 +19,7 @@ body {
 .lesson p { margin: 0; color: var(--lesson-muted); }
 .lesson-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,320px); gap: 14px; }
 .card { border: 1px solid var(--lesson-border); background: color-mix(in srgb, var(--lesson-panel) 96%, transparent); padding: 12px; display: grid; gap: 8px; }
+.card-title { margin: 0; font-size: 1rem; }
+.card-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 #out { min-height: 120px; border: 1px dashed var(--lesson-border); padding: 10px; }
 @media (max-width: 860px) { .lesson-grid { grid-template-columns: 1fr; } }

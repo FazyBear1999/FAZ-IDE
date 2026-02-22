@@ -19,6 +19,36 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-21T00:00:00Z - Mobile access hard gate + contract lock
+
+- Date (UTC):
+- 2026-02-21T00:00:00Z
+- Area:
+- Access policy enforcement, boot-path simplification, and contract coverage
+- Decision:
+- Enforced a hard mobile user-agent gate in `assets/js/app.js` so mobile users never reach IDE shell initialization; instead, the page is replaced with a desktop-required message and FAZIDE.COM link.
+- Removed obsolete one-time mobile advisory flow (`maybeShowMobileDesktopNotice`) to reduce duplicate logic and boot-path branching.
+- Added a focused behavior contract in `tests/ide.spec.js` that simulates a mobile user agent and asserts only gate content is visible while `#appShell` is absent.
+- Why:
+- Product direction now explicitly requires zero mobile IDE access until desktop-first stability goals are complete; a single hard gate is safer and easier to maintain than dual advisory + full-app flows.
+- Follow-up:
+- Keep mobile-policy edits gated by the new focused mobile contract plus full test suite evidence; revisit gate policy only when panel-contract hardening and mobile readiness criteria are formally approved.
+
+## 2026-02-21T00:30:00Z - Slice 3 cross-system mobile gate refactor + optimization cadence
+
+- Date (UTC):
+- 2026-02-21T00:30:00Z
+- Area:
+- Orchestrator maintainability, UI structure consistency (HTML/CSS/JS), and optimization validation workflow
+- Decision:
+- Refactored mobile desktop gate rendering from inline-styled DOM construction in `assets/js/app.js` to static gate markup in `index.html` + tokenized styling in `assets/css/layout.css`.
+- Kept `app.js` responsible only for policy enforcement and state toggle (`data-mobile-gated` + gate visibility).
+- Set execution cadence for current optimization wave: run focused tests per slice, and run full suite after each group of 3 slices unless a risky change requires earlier escalation.
+- Why:
+- Cross-system structure reduces JS complexity and style drift risk while preserving strict mobile block behavior; grouped full-suite cadence improves optimization throughput without losing guardrails.
+- Follow-up:
+- Continue slices with targeted contract tests, then run full suite at slice multiples of 3 (or immediately if risk profile increases).
+
 ## 2026-02-20T00:00:00Z - CSS Phase 2 micro-primitives and letter-spacing normalization
 
 - Date (UTC):

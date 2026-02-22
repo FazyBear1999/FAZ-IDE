@@ -26078,13 +26078,32 @@ function onSandboxMessage(event) {
     }
 }
 
+function isMobileUserAgent() {
+    if (typeof navigator === "undefined") return false;
+    const agent = String(navigator.userAgent || "");
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobi/i.test(agent);
+}
+
+function renderDesktopOnlyMobileGate() {
+    if (typeof document === "undefined") return;
+    const root = document.body;
+    const gate = document.getElementById("mobileDesktopGate");
+    if (!root || !(gate instanceof HTMLElement)) return;
+    root.setAttribute("data-mobile-gated", "true");
+    gate.hidden = false;
+    gate.setAttribute("aria-hidden", "false");
+}
+
 // Start FAZ IDE
 // Notes:
 // - boot() wires everything once (no framework needed).
 // - keeping a single entry point helps later when adding init steps (themes, tabs, etc.)
-
-boot().catch((err) => {
-    console.error("FAZ IDE boot failed:", err);
-    status.set("Boot failed");
-    logger.append("error", [`Boot failed: ${String(err?.message || err)}`]);
-});
+if (isMobileUserAgent()) {
+    renderDesktopOnlyMobileGate();
+} else {
+    boot().catch((err) => {
+        console.error("FAZ IDE boot failed:", err);
+        status.set("Boot failed");
+        logger.append("error", [`Boot failed: ${String(err?.message || err)}`]);
+    });
+}

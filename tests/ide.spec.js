@@ -20,6 +20,27 @@ test("loads the IDE shell with files and editor", async ({ page }) => {
   expect(fileRows).toBeGreaterThan(0);
 });
 
+test("mobile user agents are blocked behind desktop-required gate", async ({ browser }) => {
+  const context = await browser.newContext({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await expect(page.locator("#mobileDesktopGate")).toBeVisible();
+    await expect(page.getByText("Desktop Only")).toBeVisible();
+    await expect(page.getByText("FAZ IDE is currently a work in progress on mobile.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Go to FAZIDE.COM" })).toBeVisible();
+    await expect(page.locator("#appShell")).toBeHidden();
+  } finally {
+    await context.close();
+  }
+});
+
 test("fresh start opens welcome project in editor", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.removeItem("fazide.files.v1");

@@ -50,6 +50,12 @@ Until this lockdown is complete, optimization/organization/reliability work take
 - No ambiguous test additions: each new test must validate a real user/system contract.
 - If focused validation is unclear, escalate immediately to full gate before continuing.
 
+### Lockdown Execution Log (Surgical Slices)
+
+- Slice 1 (2026-02-21): Removed inline-style drift from `assets/lessons/quick-output-instant/index.html` by moving style rules into lesson-local `styles.css`. Validation: focused diagnostics + green test baseline.
+- Slice 2 (2026-02-21): Hardened mobile access policy by blocking IDE boot for mobile user agents and rendering a desktop-required gate only; removed obsolete dual mobile-notice flow from `app.js`. Validation: focused mobile-gate contract in `tests/ide.spec.js` + full suite pass.
+- Slice 3 (2026-02-21): Cross-system mobile gate refactor — moved gate UI from inline JS DOM construction to structured `index.html` + tokenized `assets/css/layout.css`, leaving `app.js` to gate-state toggling only. Validation: focused mobile-gate contract + targeted diagnostics.
+
 ## Optimization Program — Detailed Roadmap
 
 ### Wave O0 — Baseline + Guardrails

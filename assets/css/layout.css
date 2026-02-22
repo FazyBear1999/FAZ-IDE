@@ -798,3 +798,54 @@ body[data-resize="row"] .workspace-row[data-resize-active="true"] {
 .app-shell[data-footer="closed"] .foot {
     display: none;
 }
+
+body[data-mobile-gated="true"] > :not(#mobileDesktopGate) {
+    display: none !important;
+}
+
+.mobile-desktop-gate {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: var(--space-16);
+    background: var(--surface-app);
+    color: var(--text-main);
+    font-family: var(--font);
+}
+
+.mobile-desktop-gate-panel {
+    width: min(92vw, 420px);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-panel);
+    padding: var(--space-16);
+    display: grid;
+    gap: var(--space-10);
+    box-shadow: var(--menu-shadow);
+}
+
+.mobile-desktop-gate-title {
+    margin: 0;
+    font-size: var(--text-size-lg);
+    letter-spacing: var(--letter-spacing-tight);
+}
+
+.mobile-desktop-gate-body {
+    margin: 0;
+    color: var(--text-muted-soft);
+    line-height: 1.45;
+}
+
+.mobile-desktop-gate-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-8) var(--space-10);
+    text-decoration: none;
+    font-weight: 600;
+    color: var(--text-main);
+    background: var(--surface-accent-subtle);
+}
