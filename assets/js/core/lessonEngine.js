@@ -163,3 +163,110 @@ export function normalizeLessonInputChar(value = "") {
     if (key === "Tab") return "\t";
     return key.length === 1 ? key : "";
 }
+
+function hasTypeableCodeContent(expected = "") {
+    const source = String(expected || "");
+    if (!source) return false;
+    let index = 0;
+    while (index < source.length) {
+        const lineEnd = source.indexOf("\n", index);
+        const end = lineEnd === -1 ? source.length : lineEnd;
+        const line = source.slice(index, end);
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("//") && !trimmed.startsWith("/*") && !trimmed.startsWith("<!--") && !trimmed.endsWith("*/") && !trimmed.endsWith("-->")) {
+            return true;
+        }
+        if (lineEnd === -1) break;
+        index = lineEnd + 1;
+    }
+    return false;
+}
+
+export function lintLessonAuthoring(source = "") {
+    const text = String(source || "").replace(/\r\n?/g, "\n");
+    const lines = text.split("\n");
+    const issues = [];
+    const openLegacy = new Set();
+
+    lines.forEach((line, lineIndex) => {
+        const lineNumber = lineIndex + 1;
+        const hasLessonToken = line.includes("[LESSON:");
+        const hasStepToken = line.includes("[STEP:");
+        const lessonMatch = hasLessonToken ? line.match(LESSON_MARKER) : null;
+        const stepMatch = hasStepToken ? line.match(LEGACY_STEP_MARKER) : null;
+
+        if (hasLessonToken && !lessonMatch) {
+            issues.push({
+                code: "malformed-lesson-marker",
+                severity: "error",
+                line: lineNumber,
+                message: "Malformed [LESSON:id] marker.",
+            });
+        }
+
+        if (hasStepToken && !stepMatch) {
+            issues.push({
+                code: "malformed-step-marker",
+                severity: "error",
+                line: lineNumber,
+                message: "Malformed [STEP:id:START|END] marker.",
+            });
+        }
+
+        if (stepMatch) {
+            const markerId = String(stepMatch[1] || "").trim();
+            const kind = String(stepMatch[2] || "").trim().toUpperCase();
+            if (kind === "START") {
+                openLegacy.add(markerId);
+            } else if (kind === "END") {
+                if (!openLegacy.has(markerId)) {
+                    issues.push({
+                        code: "orphan-step-end",
+                        severity: "error",
+                        line: lineNumber,
+                        message: `Found [STEP:${markerId}:END] without a matching START.`,
+                    });
+                } else {
+                    openLegacy.delete(markerId);
+                }
+            }
+        }
+    });
+
+    openLegacy.forEach((markerId) => {
+        issues.push({
+            code: "unclosed-step-start",
+            severity: "error",
+            line: 0,
+            message: `Found [STEP:${markerId}:START] without a matching END.`,
+        });
+    });
+
+    const steps = parseLessonSteps(text);
+    if ((text.includes("[LESSON:") || text.includes("[STEP:")) && !steps.length) {
+        issues.push({
+            code: "unreachable-objective",
+            severity: "warn",
+            line: 0,
+            message: "Markers were found but no reachable lesson objective could be parsed.",
+        });
+    }
+
+    steps.forEach((step) => {
+        if (!hasTypeableCodeContent(step.expected || "")) {
+            issues.push({
+                code: "empty-code-objective",
+                severity: "warn",
+                line: Number(step.startLine) || 0,
+                message: `Objective \"${String(step.id || "lesson")}\" has no typeable code content.`,
+            });
+        }
+    });
+
+    return {
+        issueCount: issues.length,
+        errorCount: issues.filter((entry) => entry.severity === "error").length,
+        warningCount: issues.filter((entry) => entry.severity === "warn").length,
+        issues,
+    };
+}

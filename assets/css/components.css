@@ -379,6 +379,16 @@ button:focus-visible {
     transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
+.CodeMirror .cm-lesson-objective {
+    background: color-mix(in srgb, var(--surface-selected-soft) 30%, transparent);
+    border-bottom: 1px dashed var(--border-soft);
+}
+
+.CodeMirror .cm-lesson-comment-muted {
+    color: var(--text-muted-quiet);
+    opacity: 0.22;
+}
+
 @keyframes lesson-next-breathe {
     0%,
     100% {
@@ -398,6 +408,14 @@ button:focus-visible {
 
 .top-command-dropdown[data-open="true"] {
     display: flex;
+}
+
+.lesson-stats-explain {
+    margin-top: var(--space-8);
+    padding: var(--space-8);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: var(--surface-elevated-2, var(--surface-elevated));
 }
 
 #topCommandPaletteList {

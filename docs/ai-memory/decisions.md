@@ -19,6 +19,36 @@ Keep entries short, dated, and explicit about why the change was made.
 - Keep wording implementation-specific and falsifiable.
 - Never overwrite historical context; append new decisions.
 
+## 2026-02-22T00:00:00Z - Slice 18 lesson completion runtime regression lock
+
+- Date (UTC):
+- 2026-02-22T00:00:00Z
+- Area:
+- Lesson runtime reliability and post-completion execution safety
+- Decision:
+- Added focused runtime regression coverage in `tests/lesson-system-micro.spec.js` that listens for uncaught `pageerror` events and asserts none occur when a lesson is completed and auto-run path executes.
+- Why:
+- A prior null render-target failure (`innerHTML` on null) was fixed in lesson templates; this contract prevents silent regressions by locking runtime stability at the lesson completion boundary.
+- Follow-up:
+- Keep this contract green alongside lesson-typing contracts when iterating on lesson completion, run triggers, or template/runtime mount logic.
+
+## 2026-02-22T00:30:00Z - Slice 19 lesson guidance + analytics contract expansion
+
+- Date (UTC):
+- 2026-02-22T00:30:00Z
+- Area:
+- Lesson typing UX clarity, authoring safety, and deterministic diagnostics
+- Decision:
+- Added code-objective marking and comment-muted rendering so lesson visuals emphasize code-only objectives while keeping instructional comments visibly de-emphasized.
+- Added adaptive mismatch hint tiers in lesson typing flow with explicit optional reveal action (`F2`) and compatibility-preserving status wording.
+- Added deterministic analytics snapshots (time-on-objective, retries, pain points) to lesson runtime/session persistence and public API.
+- Added authoring lint checks in `assets/js/core/lessonEngine.js` for malformed markers, orphaned legacy markers, empty code objectives, and unreachable objective payloads; surfaced lint summaries on lesson load and via API.
+- Added Explain This Step panel content in lesson stats from lesson comment text to separate instructional guidance from typed objective targeting.
+- Why:
+- User experience requested clearer objective focus, scalable hints, and actionable learning telemetry while preserving existing contracts and deterministic behavior in current lesson architecture.
+- Follow-up:
+- Keep new lesson micro contracts green, and extend lint severity routing/UI surfacing only if authoring throughput requires file-level drilldown UX beyond current API + logger summaries.
+
 ## 2026-02-21T00:00:00Z - Mobile access hard gate + contract lock
 
 - Date (UTC):

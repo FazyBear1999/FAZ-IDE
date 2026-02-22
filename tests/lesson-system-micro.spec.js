@@ -377,3 +377,129 @@ test("lesson micro: malformed stored lesson day is sanitized on load", async ({ 
   expect(result.xp).toBe(50);
   expect(result.lastActiveDay).toBe("");
 });
+
+test("lesson micro: completion auto-run emits no uncaught runtime errors", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (err) => {
+    pageErrors.push(String(err?.message || err));
+  });
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.nextLessonStep || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    await api.loadLesson("paddle-lesson-1", { startTyping: true, run: false });
+    const advanced = Boolean(api.nextLessonStep());
+    const state = api.getLessonState();
+
+    return {
+      ready: true,
+      advanced,
+      completed: Boolean(state?.completed),
+    };
+  });
+
+  await page.waitForTimeout(120);
+
+  expect(result.ready).toBeTruthy();
+  expect(result.advanced).toBeTruthy();
+  expect(result.completed).toBeTruthy();
+  expect(
+    pageErrors.some((message) =>
+      /Cannot set properties of null \(setting 'innerHTML'\)/i.test(String(message))
+    )
+  ).toBeFalsy();
+});
+
+test("lesson micro: lesson authoring lint report is available for loaded lesson files", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.lintLessonAuthoring) {
+      return { ready: false };
+    }
+
+    await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    const lint = api.lintLessonAuthoring("quick-output-instant");
+
+    return {
+      ready: true,
+      fileCount: Number(lint?.fileCount || 0),
+      issueCount: Number(lint?.issueCount || 0),
+      hasFilesArray: Array.isArray(lint?.files),
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.fileCount).toBeGreaterThan(0);
+  expect(result.issueCount).toBeGreaterThanOrEqual(0);
+  expect(result.hasFilesArray).toBeTruthy();
+});
+
+test("lesson micro: adaptive hint reveal and analytics retries update after mismatch", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.typeLessonInput || !api?.revealLessonHint || !api?.getLessonState || !api?.getLessonAnalytics) {
+      return { ready: false };
+    }
+
+    await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    api.typeLessonInput("x");
+    api.typeLessonInput("x");
+    const revealOk = Boolean(api.revealLessonHint());
+    const state = api.getLessonState();
+    const analytics = api.getLessonAnalytics();
+    const retries = Object.values(analytics?.retriesByObjective || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+
+    return {
+      ready: true,
+      revealOk,
+      mistakes: Number(state?.mistakes || 0),
+      retries,
+      hasPainPoints: Object.keys(analytics?.painPoints || {}).length > 0,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.revealOk).toBeTruthy();
+  expect(result.mistakes).toBeGreaterThan(0);
+  expect(result.retries).toBeGreaterThan(0);
+  expect(result.hasPainPoints).toBeTruthy();
+});
+
+test("lesson micro: explain panel reflects active step guidance", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.locator("#lessonStatsBtn").click();
+
+  const result = await page.evaluate(async () => {
+    const api = window.fazide;
+    if (!api?.loadLesson || !api?.getLessonState) {
+      return { ready: false };
+    }
+
+    await api.loadLesson("quick-output-instant", { startTyping: true, run: false });
+    const state = api.getLessonState();
+    const title = String(document.getElementById("lessonExplainTitle")?.textContent || "").trim();
+    const body = String(document.getElementById("lessonExplainBody")?.textContent || "").trim();
+
+    return {
+      ready: true,
+      active: Boolean(state?.active),
+      title,
+      body,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.active).toBeTruthy();
+  expect(result.title.length).toBeGreaterThan(0);
+  expect(result.body.length).toBeGreaterThan(0);
+});

@@ -110,6 +110,8 @@ export function getRequiredElements() {
         lessonStatsShopList: $("#lessonStatsShopList"),
         lessonStatsShopHint: $("#lessonStatsShopHint"),
         lessonStatsSessionState: $("#lessonStatsSessionState"),
+        lessonExplainTitle: $("#lessonExplainTitle"),
+        lessonExplainBody: $("#lessonExplainBody"),
         lessonStatsStep: $("#lessonStatsStep"),
         lessonStatsProgress: $("#lessonStatsProgress"),
         lessonStatsSessionXp: $("#lessonStatsSessionXp"),

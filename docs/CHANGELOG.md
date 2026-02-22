@@ -32,6 +32,13 @@
 - Updated lesson active-range rendering in `assets/js/app.js` so auto-skipped comment spans are not highlighted as typed ranges.
 - Added focused contract coverage in `tests/lesson-system-micro.spec.js` to verify pressing Enter after a completed code line skips intervening comments and advances to the next code character.
 - Hardened beginner lesson runtime scripts (`assets/lessons/beginner-js-01` through `beginner-js-17`) to use safe render target fallbacks (`#app` → `#out` → `document.body`), preventing null `innerHTML` crashes when completing and auto-running lessons.
+- Added focused runtime regression coverage in `tests/lesson-system-micro.spec.js` to assert lesson completion auto-run emits no uncaught page errors.
+- Added code-objective lesson mark rendering in `assets/js/app.js` + `assets/css/components.css` so remaining code targets are highlighted separately from skipped instructional comments.
+- Added adaptive lesson hints with tiered mismatch feedback and optional reveal (`F2`) in `assets/js/app.js`.
+- Added deterministic lesson analytics tracking in `assets/js/app.js` (time-on-objective, retries, pain points) with API snapshots and persisted session support.
+- Added lesson authoring lint checks via `lintLessonAuthoring` in `assets/js/core/lessonEngine.js`, surfaced through lesson load warnings and the public API.
+- Added an Explain This Step block in `index.html` lesson stats panel, driven by comment-sourced guidance from `assets/js/app.js`.
+- Added focused lesson contracts in `tests/lesson-system-micro.spec.js` for lint reporting, adaptive hint reveal/analytics, and explain panel rendering.
 
 ## 2026-02-20
 

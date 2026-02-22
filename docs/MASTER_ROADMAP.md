@@ -69,6 +69,8 @@ Until this lockdown is complete, optimization/organization/reliability work take
 - Slice 15 (2026-02-22): Code-only lesson typing input — lesson typing normalization in `assets/js/app.js` now auto-skips instructional comment spans (`//`, `/* */`, `<!-- -->`) so progression requires code input only while preserving tutorial comments in lesson files. Validation: focused comment-skip lesson contract in `tests/lesson-system-micro.spec.js`.
 - Slice 16 (2026-02-22): Comment-skip visual + enter-flow polish — lesson active marks in `assets/js/app.js` now exclude auto-skipped comment spans, and enter-after-line progression is contract-locked to skip comments and continue at next code character. Validation: focused enter/comment-skip lesson contract in `tests/lesson-system-micro.spec.js`.
 - Slice 17 (2026-02-22): Lesson completion-run safety hardening — beginner lesson `app.js` templates now use resilient render target fallback (`#app`/`#out`/`document.body`) to prevent null `innerHTML` runtime crashes when auto-running completed lessons.
+- Slice 18 (2026-02-22): Lesson completion-run runtime regression lock — added focused page-error contract in `tests/lesson-system-micro.spec.js` to assert lesson completion auto-run emits no uncaught runtime errors.
+- Slice 19 (2026-02-22): Lesson guidance + analytics upgrade — added code-objective highlights, adaptive hint tiers with optional reveal, lesson authoring lint checks, explain-step panel wiring from comments, and deterministic objective analytics snapshots/persistence in `assets/js/app.js` + `assets/js/core/lessonEngine.js`, with focused contracts in `tests/lesson-system-micro.spec.js` and compatibility validation via `tests/ide.spec.js`.
 
 ## Optimization Program — Detailed Roadmap
 

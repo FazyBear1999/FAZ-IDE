@@ -61,7 +61,7 @@ import {
 } from "./core/tutorialDefinitions.js";
 import { solvePanelRows } from "./core/layoutEngine.js";
 import { rowsToPanelLayout, panelLayoutToRows, normalizePanelLayout } from "./core/panelLayoutModel.js";
-import { parseLessonSteps, normalizeLessonInputChar } from "./core/lessonEngine.js";
+import { parseLessonSteps, normalizeLessonInputChar, lintLessonAuthoring } from "./core/lessonEngine.js";
 import {
     splitLeafExtension,
     collapseDuplicateTerminalExtension,
@@ -3014,6 +3014,7 @@ const LESSON_BYTES_STREAK_MILESTONE = 3;
 const LESSON_BYTES_STREAK_INTERVAL = 20;
 const LESSON_MISMATCH_FEEDBACK_COOLDOWN_MS = 260;
 const LESSON_MISMATCH_FEEDBACK_COOLDOWN_FAST_MS = 380;
+const LESSON_HINT_REVEAL_PREVIEW_LENGTH = 20;
 const LESSON_NEXT_BREATHE_BASE_MS = 1450;
 const LESSON_NEXT_BREATHE_MIN_MS = 980;
 const LESSON_NEXT_BREATHE_MAX_MS = 1700;
@@ -3104,6 +3105,9 @@ let lessonStatsView = "overview";
 let lessonShopNotice = "";
 let lessonLastMismatchProgress = -1;
 let lessonLastMismatchAt = 0;
+let lessonHintProgress = -1;
+let lessonHintRepeatCount = 0;
+let lessonHintRenderedKey = "";
 let lessonLastInputAt = 0;
 let lessonInputCadenceMs = 0;
 let lessonNextBreatheDurationMs = LESSON_NEXT_BREATHE_BASE_MS;
@@ -9926,6 +9930,52 @@ function getLessonsCatalogReportSnapshot() {
     };
 }
 
+function lintLessonAuthoringForFiles(fileEntries = []) {
+    const list = Array.isArray(fileEntries) ? fileEntries : [];
+    const fileReports = [];
+    list.forEach((file) => {
+        const fileName = String(file?.name || "").trim();
+        if (!fileName) return;
+        const result = lintLessonAuthoring(String(file?.code || ""));
+        if (!result || typeof result !== "object") return;
+        fileReports.push({
+            name: fileName,
+            issueCount: Math.max(0, Number(result.issueCount) || 0),
+            errorCount: Math.max(0, Number(result.errorCount) || 0),
+            warningCount: Math.max(0, Number(result.warningCount) || 0),
+            issues: Array.isArray(result.issues) ? result.issues.map((issue) => ({
+                code: String(issue?.code || ""),
+                severity: String(issue?.severity || "warn"),
+                line: Math.max(0, Number(issue?.line) || 0),
+                message: String(issue?.message || ""),
+            })) : [],
+        });
+    });
+
+    return {
+        fileCount: fileReports.length,
+        issueCount: fileReports.reduce((total, entry) => total + Math.max(0, Number(entry.issueCount) || 0), 0),
+        errorCount: fileReports.reduce((total, entry) => total + Math.max(0, Number(entry.errorCount) || 0), 0),
+        warningCount: fileReports.reduce((total, entry) => total + Math.max(0, Number(entry.warningCount) || 0), 0),
+        files: fileReports,
+    };
+}
+
+function lintLessonAuthoringById(lessonId = "") {
+    const normalizedLessonId = String(lessonId || "").trim();
+    if (!normalizedLessonId) {
+        return {
+            fileCount: 0,
+            issueCount: 0,
+            errorCount: 0,
+            warningCount: 0,
+            files: [],
+        };
+    }
+    const lessonFiles = getLessonWorkspaceFiles(normalizedLessonId);
+    return lintLessonAuthoringForFiles(lessonFiles);
+}
+
 function normalizeLessonTier(value = "") {
     const raw = String(value ?? "").trim().toLowerCase();
     if (LESSON_TIER_ORDER.includes(raw)) return raw;
@@ -11017,6 +11067,7 @@ function sanitizeStoredLessonSession(raw = null) {
     if (!fileId) return null;
     const fileName = String(source.fileName || "").trim();
     const lessonId = String(source.lessonId || "").trim();
+    const analytics = source.analytics && typeof source.analytics === "object" ? source.analytics : {};
     return {
         fileId,
         fileName,
@@ -11031,6 +11082,14 @@ function sanitizeStoredLessonSession(raw = null) {
         coinMilestoneIndex: Math.max(0, Math.floor(Number(source.coinMilestoneIndex) || 0)),
         mistakes: Math.max(0, Math.floor(Number(source.mistakes) || 0)),
         sessionXp: Math.max(0, Math.floor(Number(source.sessionXp) || 0)),
+        analytics: {
+            objectiveKey: String(analytics.objectiveKey || ""),
+            objectiveStartedAt: Math.max(0, Math.floor(Number(analytics.objectiveStartedAt) || 0)),
+            objectiveLastSeenAt: Math.max(0, Math.floor(Number(analytics.objectiveLastSeenAt) || 0)),
+            objectiveTimeMs: analytics.objectiveTimeMs && typeof analytics.objectiveTimeMs === "object" ? { ...analytics.objectiveTimeMs } : {},
+            retriesByObjective: analytics.retriesByObjective && typeof analytics.retriesByObjective === "object" ? { ...analytics.retriesByObjective } : {},
+            painPoints: analytics.painPoints && typeof analytics.painPoints === "object" ? { ...analytics.painPoints } : {},
+        },
     };
 }
 
@@ -11050,6 +11109,22 @@ function buildPersistableLessonSessionPayload() {
         coinMilestoneIndex: Math.max(0, Math.floor(Number(lessonSession.coinMilestoneIndex) || 0)),
         mistakes: Math.max(0, Math.floor(Number(lessonSession.mistakes) || 0)),
         sessionXp: Math.max(0, Math.floor(Number(lessonSession.sessionXp) || 0)),
+        analytics: lessonSession.analytics && typeof lessonSession.analytics === "object"
+            ? {
+                objectiveKey: String(lessonSession.analytics.objectiveKey || ""),
+                objectiveStartedAt: Math.max(0, Math.floor(Number(lessonSession.analytics.objectiveStartedAt) || 0)),
+                objectiveLastSeenAt: Math.max(0, Math.floor(Number(lessonSession.analytics.objectiveLastSeenAt) || 0)),
+                objectiveTimeMs: lessonSession.analytics.objectiveTimeMs && typeof lessonSession.analytics.objectiveTimeMs === "object"
+                    ? { ...lessonSession.analytics.objectiveTimeMs }
+                    : {},
+                retriesByObjective: lessonSession.analytics.retriesByObjective && typeof lessonSession.analytics.retriesByObjective === "object"
+                    ? { ...lessonSession.analytics.retriesByObjective }
+                    : {},
+                painPoints: lessonSession.analytics.painPoints && typeof lessonSession.analytics.painPoints === "object"
+                    ? { ...lessonSession.analytics.painPoints }
+                    : {},
+            }
+            : {},
     };
 }
 
@@ -11133,7 +11208,9 @@ function restoreLessonSessionFromStorage() {
         coinMilestoneIndex: Math.max(parsed.coinMilestoneIndex, Math.floor(parsed.streak / LESSON_BYTES_STREAK_INTERVAL)),
         mistakes: parsed.mistakes,
         sessionXp: parsed.sessionXp,
+        analytics: parsed.analytics,
     };
+    ensureLessonSessionAnalytics();
 
     const lessonExists = lessons.some((entry) => entry.id === parsed.lessonId);
     if (lessonExists) {
@@ -11490,7 +11567,11 @@ function updateLessonHeaderStats({ force = false } = {}) {
     const typedText = String(metrics.typedChars);
     const correctText = String(metrics.correctChars);
     const elapsedText = formatLessonElapsedMs(metrics.elapsedMs);
-    const renderKey = `${levelText}|${xpText}|${bytesText}|${completedText}|${bestText}|${dailyText}|${accuracyText}|${wpmText}|${momentumTitle}|${heroSubtitle}|${nextLabel}|${nextLevelProgress}|${lastActive}|${sessionStateText}|${stepText}|${progressText}|${sessionXpText}|${mistakesText}|${streakText}|${typedText}|${correctText}|${elapsedText}`;
+    const explainTitle = state?.active ? `Explain ${String(state.stepId || "step")}` : "Explain This Step";
+    const explainBody = state?.active
+        ? extractLessonExplainText(getLessonCurrentStep(), Number(state.progress) || 0)
+        : "No active lesson explanation yet.";
+    const renderKey = `${levelText}|${xpText}|${bytesText}|${completedText}|${bestText}|${dailyText}|${accuracyText}|${wpmText}|${momentumTitle}|${heroSubtitle}|${nextLabel}|${nextLevelProgress}|${lastActive}|${sessionStateText}|${stepText}|${progressText}|${sessionXpText}|${mistakesText}|${streakText}|${typedText}|${correctText}|${elapsedText}|${explainTitle}|${explainBody}`;
     if (renderKey !== lessonHeaderStatsRenderKey) {
         lessonHeaderStatsRenderKey = renderKey;
         setNodeText(el.lessonHeaderLevel, levelText);
@@ -11514,6 +11595,8 @@ function updateLessonHeaderStats({ force = false } = {}) {
         setNodeText(el.lessonStatsTyped, typedText);
         setNodeText(el.lessonStatsCorrect, correctText);
         setNodeText(el.lessonStatsElapsed, elapsedText);
+        setNodeText(el.lessonExplainTitle, explainTitle);
+        setNodeText(el.lessonExplainBody, explainBody);
         setNodeText(el.lessonStatsSafety, "Privacy-safe: all lesson stats stay local in your browser.");
         if (el.lessonStatsNextFill) {
             el.lessonStatsNextFill.style.setProperty("--lesson-next-progress", `${nextLevelProgress}%`);
@@ -11958,6 +12041,8 @@ function clearLessonVisualMarks() {
     editor.clearMarks?.("lesson-ghost");
     editor.clearMarks?.("lesson-active");
     editor.clearMarks?.("lesson-next");
+    editor.clearMarks?.("lesson-objective");
+    editor.clearMarks?.("lesson-comment-muted");
 }
 
 function getLessonMotionTargetNode() {
@@ -12026,6 +12111,7 @@ function getAdaptiveLessonStreakHapticDuration() {
 function resetLessonMismatchFeedback() {
     lessonLastMismatchProgress = -1;
     lessonLastMismatchAt = 0;
+    resetLessonHintState();
 }
 
 function resetLessonStreakState({ persistProfile = false } = {}) {
@@ -12157,6 +12243,147 @@ function getLessonCommentSkipLength(expectedText = "", index = 0) {
     return 0;
 }
 
+function getLessonLineNumberAtIndex(expectedText = "", index = 0, startLine = 1) {
+    const source = String(expectedText || "");
+    const target = clamp(Number(index) || 0, 0, source.length);
+    let line = Math.max(1, Number(startLine) || 1);
+    for (let pointer = 0; pointer < target; pointer += 1) {
+        if (source[pointer] === "\n") line += 1;
+    }
+    return line;
+}
+
+function getLessonObjectiveKey(step = null, progress = 0) {
+    if (!step) return "";
+    const expectedText = String(step.expected || "");
+    const safeProgress = clamp(Number(progress) || 0, 0, expectedText.length);
+    const lineNumber = getLessonLineNumberAtIndex(expectedText, safeProgress, step.startLine);
+    return `${String(step.id || "lesson")}@L${lineNumber}`;
+}
+
+function ensureLessonSessionAnalytics() {
+    if (!lessonSession) return null;
+    const existing = lessonSession.analytics && typeof lessonSession.analytics === "object"
+        ? lessonSession.analytics
+        : {};
+    const now = Date.now();
+    const currentStep = getLessonCurrentStep();
+    const currentProgress = Math.max(0, Number(lessonSession.progress) || 0);
+    lessonSession.analytics = {
+        objectiveKey: String(existing.objectiveKey || (currentStep ? getLessonObjectiveKey(currentStep, currentProgress) : "")),
+        objectiveStartedAt: Math.max(0, Math.floor(Number(existing.objectiveStartedAt) || now)) || now,
+        objectiveLastSeenAt: Math.max(0, Math.floor(Number(existing.objectiveLastSeenAt) || now)) || now,
+        objectiveTimeMs: existing.objectiveTimeMs && typeof existing.objectiveTimeMs === "object" ? { ...existing.objectiveTimeMs } : {},
+        retriesByObjective: existing.retriesByObjective && typeof existing.retriesByObjective === "object" ? { ...existing.retriesByObjective } : {},
+        painPoints: existing.painPoints && typeof existing.painPoints === "object" ? { ...existing.painPoints } : {},
+    };
+    return lessonSession.analytics;
+}
+
+function syncLessonAnalyticsObjective(step = null, progress = 0, { now = Date.now() } = {}) {
+    if (!lessonSession || lessonSession.completed || !step) return;
+    const analytics = ensureLessonSessionAnalytics();
+    if (!analytics) return;
+    const safeNow = Math.max(0, Math.floor(Number(now) || Date.now()));
+    const previousKey = String(analytics.objectiveKey || "");
+    const previousStartedAt = Math.max(0, Math.floor(Number(analytics.objectiveStartedAt) || safeNow));
+    const previousLastSeenAt = Math.max(0, Math.floor(Number(analytics.objectiveLastSeenAt) || previousStartedAt));
+    const previousElapsed = Math.max(0, safeNow - Math.min(previousLastSeenAt, safeNow));
+    if (previousKey) {
+        analytics.objectiveTimeMs[previousKey] = Math.max(0, Math.floor(Number(analytics.objectiveTimeMs[previousKey]) || 0)) + previousElapsed;
+    }
+    const nextKey = getLessonObjectiveKey(step, progress);
+    analytics.objectiveKey = nextKey;
+    analytics.objectiveStartedAt = safeNow;
+    analytics.objectiveLastSeenAt = safeNow;
+}
+
+function recordLessonMismatchAnalytics(step = null, progress = 0, expected = "") {
+    if (!lessonSession || lessonSession.completed || !step) return;
+    const analytics = ensureLessonSessionAnalytics();
+    if (!analytics) return;
+    const objectiveKey = getLessonObjectiveKey(step, progress);
+    if (!objectiveKey) return;
+    analytics.retriesByObjective[objectiveKey] = Math.max(0, Number(analytics.retriesByObjective[objectiveKey]) || 0) + 1;
+    const expectedLabel = describeLessonExpectedChar(expected);
+    const painKey = `${objectiveKey}:${expectedLabel}`;
+    analytics.painPoints[painKey] = Math.max(0, Number(analytics.painPoints[painKey]) || 0) + 1;
+}
+
+function getLessonHintPreview(step = null, progress = 0, { maxLength = LESSON_HINT_REVEAL_PREVIEW_LENGTH } = {}) {
+    if (!step) return "";
+    const expectedText = String(step.expected || "");
+    const safeProgress = clamp(Number(progress) || 0, 0, expectedText.length);
+    const raw = String(expectedText.slice(safeProgress, safeProgress + Math.max(1, Number(maxLength) || LESSON_HINT_REVEAL_PREVIEW_LENGTH)) || "");
+    return raw
+        .replace(/\n/g, "↵")
+        .replace(/\t/g, "⇥")
+        .replace(/\s{2,}/g, (spaceRun) => " ".repeat(Math.min(spaceRun.length, 2)));
+}
+
+function getAdaptiveLessonHintText({ step = null, progress = 0, expected = "", reveal = false } = {}) {
+    if (!step) return "";
+    const safeExpected = String(expected || "");
+    if (!safeExpected) return "";
+    const repeatCount = Math.max(1, Number(lessonHintRepeatCount) || 1);
+    const tier = repeatCount >= 3 ? 3 : repeatCount >= 2 ? 2 : 1;
+    if (tier === 1) {
+        return `Hint: expected ${describeLessonExpectedChar(safeExpected)} next.`;
+    }
+    if (tier === 2) {
+        const preview = getLessonHintPreview(step, progress, { maxLength: 10 });
+        return `Hint: expected ${describeLessonExpectedChar(safeExpected)} • ${preview}`;
+    }
+    if (!reveal) {
+        return `Hint: expected ${describeLessonExpectedChar(safeExpected)} • reveal available (F2).`;
+    }
+    const preview = getLessonHintPreview(step, progress);
+    return `Hint reveal: ${preview}`;
+}
+
+function resetLessonHintState() {
+    lessonHintProgress = -1;
+    lessonHintRepeatCount = 0;
+    lessonHintRenderedKey = "";
+}
+
+function extractLessonExplainText(step = null, progress = 0) {
+    if (!step) return "No active lesson explanation yet.";
+    const expectedText = String(step.expected || "");
+    const safeProgress = clamp(Number(progress) || 0, 0, expectedText.length);
+    const comments = [];
+    for (let index = 0; index < expectedText.length;) {
+        const commentSkip = getLessonCommentSkipLength(expectedText, index);
+        if (commentSkip > 0) {
+            const commentText = expectedText.slice(index, index + commentSkip)
+                .replace(/^\s*\/\/\s?/gm, "")
+                .replace(/^\s*\/\*+\s?/gm, "")
+                .replace(/\*\/\s*$/gm, "")
+                .replace(/^\s*<!--\s?/gm, "")
+                .replace(/-->\s*$/gm, "")
+                .trim();
+            if (commentText) {
+                comments.push({
+                    start: index,
+                    end: index + commentSkip,
+                    text: commentText,
+                });
+            }
+            index += commentSkip;
+            continue;
+        }
+        index += 1;
+    }
+    if (!comments.length) {
+        return `Step ${String(step.id || "lesson")}: type the remaining code in order.`;
+    }
+    const prior = [...comments].reverse().find((entry) => entry.end <= safeProgress);
+    const active = comments.find((entry) => entry.start <= safeProgress && safeProgress <= entry.end);
+    const upcoming = comments.find((entry) => entry.start > safeProgress);
+    const picked = active || prior || upcoming || comments[0];
+    return String(picked?.text || "No active lesson explanation yet.");
+}
+
 function normalizeLessonProgressToTypeable() {
     if (!lessonSession || lessonSession.completed) return 0;
     const step = getLessonCurrentStep();
@@ -12244,6 +12471,61 @@ function markLessonTypedActiveRanges(step, progress) {
     flushRun(limit);
 }
 
+function markLessonRemainingObjectiveRanges(step, progress) {
+    if (!step) return;
+    const expectedText = String(step.expected || "");
+    const startIndex = clamp(Number(progress) || 0, 0, expectedText.length);
+    if (startIndex >= expectedText.length) return;
+
+    let runStart = -1;
+    const flushObjectiveRun = (localEndExclusive) => {
+        if (runStart < 0 || localEndExclusive <= runStart) return;
+        const startPos = editor.posFromIndex?.(step.startIndex + runStart);
+        const endPos = editor.posFromIndex?.(step.startIndex + localEndExclusive);
+        if (!startPos || !endPos) {
+            runStart = -1;
+            return;
+        }
+        editor.markRange?.(startPos, endPos, {
+            className: "cm-lesson-objective",
+            kind: "lesson-objective",
+            title: `Code objective: ${step.id}`,
+        });
+        runStart = -1;
+    };
+
+    for (let localIndex = startIndex; localIndex < expectedText.length;) {
+        const commentSkip = getLessonCommentSkipLength(expectedText, localIndex);
+        if (commentSkip > 0) {
+            flushObjectiveRun(localIndex);
+            const commentStart = editor.posFromIndex?.(step.startIndex + localIndex);
+            const commentEnd = editor.posFromIndex?.(step.startIndex + localIndex + commentSkip);
+            if (commentStart && commentEnd) {
+                editor.markRange?.(commentStart, commentEnd, {
+                    className: "cm-lesson-comment-muted",
+                    kind: "lesson-comment-muted",
+                    title: "Instruction comment",
+                });
+            }
+            localIndex += commentSkip;
+            continue;
+        }
+
+        const char = expectedText[localIndex] || "";
+        const skip = char === "\n" || char === "\r" || isLessonIndentationWhitespace(expectedText, localIndex);
+        if (skip) {
+            flushObjectiveRun(localIndex);
+            localIndex += 1;
+            continue;
+        }
+
+        if (runStart < 0) runStart = localIndex;
+        localIndex += 1;
+    }
+
+    flushObjectiveRun(expectedText.length);
+}
+
 function syncLessonGhostMarks() {
     clearLessonVisualMarks();
     const lessonState = getLessonStepRuntimeState({ normalizeProgress: true });
@@ -12272,6 +12554,7 @@ function syncLessonGhostMarks() {
             title: "Type this remaining section",
         });
     }
+    markLessonRemainingObjectiveRanges(step, progress);
 }
 
 function stopTypingLesson({ announce = true } = {}) {
@@ -12334,10 +12617,22 @@ function startTypingLessonForFile(fileId = activeFileId, { announce = true } = {
         coinMilestoneIndex: 0,
         mistakes: 0,
         sessionXp: 0,
+        analytics: {
+            objectiveKey: "",
+            objectiveStartedAt: Date.now(),
+            objectiveLastSeenAt: Date.now(),
+            objectiveTimeMs: {},
+            retriesByObjective: {},
+            painPoints: {},
+        },
     };
     resetLessonMismatchFeedback();
     resetLessonTypingCadenceState();
     normalizeLessonProgressToTypeable();
+    const runtimeState = getLessonStepRuntimeState();
+    if (runtimeState?.step) {
+        syncLessonAnalyticsObjective(runtimeState.step, runtimeState.progress, { now: Date.now() });
+    }
     persistLessonSession({ force: true });
     refreshLessonTypingVisualState({ prefix: "Lesson started" });
     renderFileList();
@@ -12430,6 +12725,23 @@ function updateLessonProgressStatus({ prefix = "Lesson" } = {}) {
     updateLessonHud();
 }
 
+function revealLessonHint({ forceReveal = false } = {}) {
+    const lessonState = getLessonStepRuntimeState({ normalizeProgress: true });
+    if (!lessonState) return false;
+    const { step, progress, expectedText } = lessonState;
+    const expected = String(expectedText[progress] || "");
+    if (!expected) return false;
+    const hintText = getAdaptiveLessonHintText({
+        step,
+        progress,
+        expected,
+        reveal: Boolean(forceReveal),
+    });
+    if (!hintText) return false;
+    status.set(hintText);
+    return true;
+}
+
 function resolveLessonInputSequence(inputChar = "", step = null, progress = 0) {
     const value = String(inputChar || "");
     if (!value || !step) return "";
@@ -12481,6 +12793,7 @@ function applyLessonInputChar(inputChar = "") {
     const step = lessonState.step;
     const expectedText = lessonState.expectedText;
     const progress = lessonState.progress;
+    syncLessonAnalyticsObjective(step, progress, { now: Date.now() });
     const expected = expectedText[progress] || "";
     if (!expected) {
         advanceLessonStep({ announce: true });
@@ -12497,15 +12810,32 @@ function applyLessonInputChar(inputChar = "") {
             && (now - lessonLastMismatchAt) < mismatchCooldownMs;
         lessonLastMismatchProgress = progress;
         lessonLastMismatchAt = now;
+        if (lessonHintProgress === progress) {
+            lessonHintRepeatCount += 1;
+        } else {
+            lessonHintProgress = progress;
+            lessonHintRepeatCount = 1;
+        }
         if (!isRepeatedMismatch) {
             lessonSession.typedChars += 1;
             lessonSession.mistakes += 1;
             resetLessonStreakState({ persistProfile: true });
         }
+        recordLessonMismatchAnalytics(step, progress, expected);
         persistLessonSession();
         if (!isRepeatedMismatch) {
             triggerLessonHaptic(4);
-            status.set(`Lesson: expected ${describeLessonExpectedChar(expected)}`);
+            const hintText = getAdaptiveLessonHintText({
+                step,
+                progress,
+                expected,
+                reveal: false,
+            }) || `Lesson: expected ${describeLessonExpectedChar(expected)}`;
+            const hintKey = `${progress}:${lessonHintRepeatCount}:${hintText}`;
+            if (hintKey !== lessonHintRenderedKey) {
+                lessonHintRenderedKey = hintKey;
+                status.set(hintText);
+            }
         }
         updateLessonHud();
         return { ok: false, reason: "mismatch", expected, received: value, progress };
@@ -12517,6 +12847,7 @@ function applyLessonInputChar(inputChar = "") {
     lessonSession.progress += matchedLength;
     resetLessonMismatchFeedback();
     normalizeLessonProgressToTypeable();
+    syncLessonAnalyticsObjective(step, lessonSession.progress, { now: Date.now() });
     lessonSession.streak += matchedLength;
     lessonSession.bestStreak = Math.max(lessonSession.bestStreak, lessonSession.streak);
     lessonSession.sessionXp += LESSON_XP_PER_CHAR * matchedLength;
@@ -12566,6 +12897,12 @@ function handleLessonTypingKeyDown(event) {
         return true;
     }
 
+    if (key === "F2") {
+        event.preventDefault();
+        revealLessonHint({ forceReveal: true });
+        return true;
+    }
+
     if (event.ctrlKey || event.metaKey || event.altKey) {
         const normalizedKey = key.toLowerCase();
         const allowReadOnlyShortcut = !event.altKey && !event.shiftKey && normalizedKey === "c";
@@ -12598,6 +12935,42 @@ function typeLessonInputText(value = "") {
     return applied;
 }
 
+function getLessonAnalyticsSnapshot() {
+    if (!lessonSession || !lessonSession.analytics) {
+        return {
+            objectiveTimeMs: {},
+            retriesByObjective: {},
+            painPoints: {},
+        };
+    }
+    const analytics = ensureLessonSessionAnalytics();
+    if (!analytics) {
+        return {
+            objectiveTimeMs: {},
+            retriesByObjective: {},
+            painPoints: {},
+        };
+    }
+    const now = Date.now();
+    const objectiveTimeMs = {
+        ...(analytics.objectiveTimeMs && typeof analytics.objectiveTimeMs === "object" ? analytics.objectiveTimeMs : {}),
+    };
+    const activeKey = String(analytics.objectiveKey || "");
+    if (activeKey) {
+        const elapsed = Math.max(0, now - Math.max(0, Number(analytics.objectiveStartedAt) || now));
+        objectiveTimeMs[activeKey] = Math.max(0, Number(objectiveTimeMs[activeKey]) || 0) + elapsed;
+    }
+    return {
+        objectiveTimeMs,
+        retriesByObjective: analytics.retriesByObjective && typeof analytics.retriesByObjective === "object"
+            ? { ...analytics.retriesByObjective }
+            : {},
+        painPoints: analytics.painPoints && typeof analytics.painPoints === "object"
+            ? { ...analytics.painPoints }
+            : {},
+    };
+}
+
 function getLessonStateSnapshot({ metrics = null } = {}) {
     if (!lessonSession) return null;
     const step = getLessonCurrentStep();
@@ -12627,6 +13000,7 @@ function getLessonStateSnapshot({ metrics = null } = {}) {
         sessionXp: Number(lessonSession.sessionXp) || 0,
         totalXp: Number(lessonProfile.xp) || 0,
         level: Number(lessonProfile.level) || 1,
+        analytics: getLessonAnalyticsSnapshot(),
     };
 }
 
@@ -12687,6 +13061,12 @@ async function loadLessonById(id, { startTyping = true, runAfter = false } = {})
                     status.set(`${loadedMessage} • step ${step.id}`);
                 }
             }
+            const existingLint = lintLessonAuthoringForFiles(existingLessonFiles);
+            if (existingLint.issueCount > 0) {
+                logger.append("warn", [
+                    `Lesson authoring lint: ${existingLint.issueCount} issue${existingLint.issueCount === 1 ? "" : "s"} across ${existingLint.fileCount} file${existingLint.fileCount === 1 ? "" : "s"}.`,
+                ]);
+            }
             if (runAfter) {
                 run();
             }
@@ -12735,6 +13115,13 @@ async function loadLessonById(id, { startTyping = true, runAfter = false } = {})
 
         if (startTyping) {
             startTypingLessonForFile(activeTarget.id, { announce: false });
+        }
+
+        const loadedLint = lintLessonAuthoringForFiles(created);
+        if (loadedLint.issueCount > 0) {
+            logger.append("warn", [
+                `Lesson authoring lint: ${loadedLint.issueCount} issue${loadedLint.issueCount === 1 ? "" : "s"} across ${loadedLint.fileCount} file${loadedLint.fileCount === 1 ? "" : "s"}.`,
+            ]);
         }
 
         status.set(`Loaded ${lesson.name}`);
@@ -23898,11 +24285,25 @@ function exposeDebug() {
         typeLessonInput(text = "") {
             return typeLessonInputText(text);
         },
+        revealLessonHint() {
+            return revealLessonHint({ forceReveal: true });
+        },
         getLessonState() {
             return getLessonStateSnapshot();
         },
+        getLessonAnalytics() {
+            return getLessonAnalyticsSnapshot();
+        },
         getLessonProfile() {
             return getLessonProfileSnapshot();
+        },
+        lintLessonAuthoring(lessonId = "") {
+            const normalizedLessonId = String(lessonId || "").trim();
+            if (normalizedLessonId) {
+                return lintLessonAuthoringById(normalizedLessonId);
+            }
+            const lessonFiles = files.filter((entry) => isLessonFamilyFile(entry));
+            return lintLessonAuthoringForFiles(lessonFiles);
         },
         listThemeShop() {
             return buildThemeShopSnapshot();
