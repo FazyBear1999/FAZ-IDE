@@ -3350,6 +3350,18 @@ function getPanelRowFromRows(rows, panel) {
     return "top";
 }
 
+function buildPanelRowLookup(rows) {
+    const normalized = normalizePanelRows(rows);
+    const lookup = Object.create(null);
+    normalized.top.forEach((panel) => {
+        lookup[panel] = "top";
+    });
+    normalized.bottom.forEach((panel) => {
+        lookup[panel] = "bottom";
+    });
+    return lookup;
+}
+
 function normalizeSizeRatio(value, { min = PANEL_RATIO_MIN, max = PANEL_RATIO_MAX, fallback = 0.25 } = {}) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return fallback;
@@ -3373,11 +3385,12 @@ function resolveWorkspaceHeightForRatios() {
 
 function buildPanelRatioSnapshot(state = layoutState) {
     const rows = normalizePanelRows(state?.panelRows || layoutState.panelRows);
+    const rowLookup = buildPanelRowLookup(rows);
     const rowTopWidth = resolvePanelRatioRowWidth("top");
     const rowBottomWidth = resolvePanelRatioRowWidth("bottom");
     const workspaceHeight = resolveWorkspaceHeightForRatios();
     const ratioFor = (panel, width) => {
-        const rowName = getPanelRowFromRows(rows, panel);
+        const rowName = rowLookup[panel] || "top";
         const rowWidth = rowName === "bottom" ? rowBottomWidth : rowTopWidth;
         if (!Number.isFinite(rowWidth) || rowWidth <= 0) return 0.25;
         return normalizeSizeRatio(width / rowWidth, { fallback: 0.25 });
@@ -4336,28 +4349,9 @@ function sanitizeLayoutState(state = {}) {
         : layoutState.filesTrashOpen;
     next.filesSectionOrder = normalizeFilesSectionOrder(state.filesSectionOrder ?? layoutState.filesSectionOrder);
 
-    if (getOpenPrimaryPanelCountFromSnapshot(next) <= 0) {
-        next.editorOpen = true;
-    }
-
+    ensureSnapshotPrimaryPanelFloor(next);
     const sanitizePanelGap = clamp(safeNumber(state.panelGap, layoutState.panelGap), bounds.panelGap.min, bounds.panelGap.max);
-    const cappedRows = solvePanelRows({
-        rows: next.panelRows,
-        normalizeRows: normalizePanelRows,
-        isPanelOpen(panel) {
-            return isPanelOpenInLayoutSnapshot(next, panel);
-        },
-        rowWidthByName: {
-            top: getRowWidth("top"),
-            bottom: getRowWidth("bottom"),
-        },
-        panelGap: sanitizePanelGap,
-        getPanelMinWidth: () => 0,
-        maxOpenPerRow: LAYOUT_COLUMN_COUNT,
-        widthFit: false,
-    });
-    next.panelRows = cappedRows;
-    next.panelLayout = normalizePanelLayout(rowsToPanelLayout(cappedRows), { fallbackRows: cappedRows });
+    applySnapshotRowCapNormalization(next, { panelGap: sanitizePanelGap });
 
     const fallbackWidth = safeNumber(state.outputWidth, null);
     const baseLogWidth = clamp(safeNumber(state.logWidth ?? fallbackWidth, layoutState.logWidth), bounds.logWidth.min, bounds.logWidth.max);
@@ -4383,10 +4377,16 @@ function sanitizeLayoutState(state = {}) {
     const ratios = normalizePanelRatios(state.panelRatios, fallbackForRatios);
     next.panelRatios = ratios;
 
-    const rowFor = (panel) => getPanelRowFromRows(next.panelRows, panel);
+    const rowLookup = buildPanelRowLookup(next.panelRows);
+    const ratioRowWidthByName = {
+        top: resolvePanelRatioRowWidth("top"),
+        bottom: resolvePanelRatioRowWidth("bottom"),
+    };
     const widthFor = (panel, ratioKey) => {
-        const rowName = rowFor(panel);
-        const rowWidth = resolvePanelRatioRowWidth(rowName);
+        const rowName = rowLookup[panel] || "top";
+        const rowWidth = rowName === "bottom"
+            ? ratioRowWidthByName.bottom
+            : ratioRowWidthByName.top;
         return Math.round(rowWidth * ratios[ratioKey]);
     };
     const workspaceHeight = resolveWorkspaceHeightForRatios();
@@ -4397,7 +4397,7 @@ function sanitizeLayoutState(state = {}) {
     next.toolsWidth = clamp(widthFor("tools", "toolsWidth"), bounds.toolsWidth.min, bounds.toolsWidth.max);
     next.bottomHeight = clamp(Math.round(workspaceHeight * ratios.bottomHeight), bounds.bottomHeight.min, bounds.bottomHeight.max);
 
-    next.panelGap = clamp(safeNumber(state.panelGap, layoutState.panelGap), bounds.panelGap.min, bounds.panelGap.max);
+    next.panelGap = sanitizePanelGap;
     next.panelRadius = clamp(safeNumber(state.panelRadius, layoutState.panelRadius), bounds.cornerRadius.min, bounds.cornerRadius.max);
     next.dockMagnetDistance = clamp(
         safeNumber(state.dockMagnetDistance, layoutState.dockMagnetDistance),
@@ -7835,6 +7835,34 @@ function isPanelOpenInLayoutSnapshot(snapshot = {}, panel = "") {
 
 function getOpenPrimaryPanelCountFromSnapshot(snapshot = {}) {
     return PRIMARY_PANEL_NAMES.reduce((count, panel) => count + (isPanelOpenInLayoutSnapshot(snapshot, panel) ? 1 : 0), 0);
+}
+
+function ensureSnapshotPrimaryPanelFloor(snapshot = {}) {
+    if (getOpenPrimaryPanelCountFromSnapshot(snapshot) <= 0) {
+        snapshot.editorOpen = true;
+    }
+    return snapshot;
+}
+
+function applySnapshotRowCapNormalization(snapshot = {}, { panelGap = 0 } = {}) {
+    const cappedRows = solvePanelRows({
+        rows: snapshot.panelRows,
+        normalizeRows: normalizePanelRows,
+        isPanelOpen(panel) {
+            return isPanelOpenInLayoutSnapshot(snapshot, panel);
+        },
+        rowWidthByName: {
+            top: getRowWidth("top"),
+            bottom: getRowWidth("bottom"),
+        },
+        panelGap,
+        getPanelMinWidth: () => 0,
+        maxOpenPerRow: LAYOUT_COLUMN_COUNT,
+        widthFit: false,
+    });
+    snapshot.panelRows = cappedRows;
+    snapshot.panelLayout = normalizePanelLayout(rowsToPanelLayout(cappedRows), { fallbackRows: cappedRows });
+    return snapshot;
 }
 
 function syncPanelToggles() {

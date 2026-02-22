@@ -133,6 +133,46 @@ Keep entries short, dated, and explicit about why the change was made.
 - Follow-up:
 - Continue panel-contract slices with boot-payload resilience checks before broad orchestrator decomposition.
 
+## 2026-02-21T02:45:00Z - Slice 10 sanitize-guard decomposition + combined boot resilience contract
+
+- Date (UTC):
+- 2026-02-21T02:45:00Z
+- Area:
+- Orchestrator maintainability and layout boot invariant composition
+- Decision:
+- Refactored sanitize-time panel guard logic in `assets/js/app.js` into explicit snapshot helpers (`ensureSnapshotPrimaryPanelFloor`, `applySnapshotRowCapNormalization`) and routed `sanitizeLayoutState` through those helpers.
+- Added focused contract coverage in `tests/layout-micro.spec.js` that seeds a combined persisted payload (dense row state + all primary panels closed) and verifies reload recovery enforces both row caps and primary-panel floor together.
+- Why:
+- Keeps high-churn boot sanitization logic easier to reason about and reduces regression risk by proving composed invariants under a single realistic payload.
+- Follow-up:
+- Continue safe orchestrator decomposition with focused contracts that validate composed invariants rather than isolated branches only.
+
+## 2026-02-21T03:00:00Z - Slice 11 sanitize ratio-reconstruction micro-optimization
+
+- Date (UTC):
+- 2026-02-21T03:00:00Z
+- Area:
+- Layout sanitize performance and orchestrator efficiency
+- Decision:
+- Optimized `sanitizeLayoutState` in `assets/js/app.js` by caching top/bottom row-width reads during ratio-based width reconstruction and reusing the already-normalized `sanitizePanelGap` value.
+- Why:
+- Removes redundant DOM width lookups and duplicate panel-gap normalization in a high-churn sanitizer path while preserving existing behavior contracts.
+- Follow-up:
+- Continue low-risk sanitizer and layout-path micro-optimizations only when paired with focused contract validation evidence.
+
+## 2026-02-21T03:20:00Z - Slice 12 panel-row lookup micro-optimization
+
+- Date (UTC):
+- 2026-02-21T03:20:00Z
+- Area:
+- Layout ratio reconstruction efficiency and scan reduction
+- Decision:
+- Added `buildPanelRowLookup` in `assets/js/app.js` and reused it in both `buildPanelRatioSnapshot` and `sanitizeLayoutState` ratio reconstruction paths.
+- Why:
+- Reduces repeated `top`/`bottom` membership scans for each panel width calculation while preserving existing row fallback semantics.
+- Follow-up:
+- Continue micro-optimizations that replace repeated derived lookups with normalized local maps only when behavior contracts stay green.
+
 ## 2026-02-20T00:00:00Z - CSS Phase 2 micro-primitives and letter-spacing normalization
 
 - Date (UTC):

@@ -622,3 +622,95 @@ test("layout micro: persisted all-closed primary panel state recovers on reload"
   expect(result.openCount).toBeGreaterThanOrEqual(1);
   expect(result.states.editor).toBe("open");
 });
+
+test("layout micro: persisted dense all-closed payload recovers floor and row caps on reload", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const seeded = await page.evaluate(() => {
+    let layoutKey = "";
+    let layoutSnapshot = null;
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && parsed.panelRows && parsed.panelLayout) {
+          layoutKey = key;
+          layoutSnapshot = parsed;
+          break;
+        }
+      } catch {
+        // no-op
+      }
+    }
+
+    if (!layoutKey || !layoutSnapshot) {
+      return { ready: false };
+    }
+
+    const payload = {
+      ...layoutSnapshot,
+      logOpen: false,
+      editorOpen: false,
+      filesOpen: false,
+      sandboxOpen: false,
+      toolsOpen: false,
+      panelRows: {
+        top: ["log", "editor", "files", "sandbox", "tools"],
+        bottom: [],
+      },
+      panelLayout: {
+        top: ["log", "editor", "files", "sandbox", "tools"],
+        bottom: [],
+      },
+    };
+
+    localStorage.setItem(layoutKey, JSON.stringify(payload));
+    return { ready: true };
+  });
+
+  expect(seeded.ready).toBeTruthy();
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const result = await page.evaluate(() => {
+    const api = window.fazide;
+    const shell = document.querySelector("#appShell");
+    if (!api?.getState || !shell) {
+      return { ready: false };
+    }
+
+    const rows = api.getState()?.layout?.panelRows || {};
+    const top = Array.isArray(rows.top) ? rows.top : [];
+    const bottom = Array.isArray(rows.bottom) ? rows.bottom : [];
+    const states = {
+      log: String(shell.getAttribute("data-log") || ""),
+      editor: String(shell.getAttribute("data-editor") || ""),
+      files: String(shell.getAttribute("data-files") || ""),
+      sandbox: String(shell.getAttribute("data-sandbox") || ""),
+      tools: String(shell.getAttribute("data-tools") || ""),
+    };
+
+    const topOpen = top.filter((panel) => states[panel] === "open").length;
+    const bottomOpen = bottom.filter((panel) => states[panel] === "open").length;
+    const openCount = Object.values(states).filter((value) => value === "open").length;
+
+    return {
+      ready: true,
+      topCount: top.length,
+      bottomCount: bottom.length,
+      topOpen,
+      bottomOpen,
+      openCount,
+      editorState: states.editor,
+    };
+  });
+
+  expect(result.ready).toBeTruthy();
+  expect(result.openCount).toBeGreaterThanOrEqual(1);
+  expect(result.editorState).toBe("open");
+  expect(result.topOpen).toBeLessThanOrEqual(3);
+  expect(result.bottomOpen).toBeLessThanOrEqual(3);
+});

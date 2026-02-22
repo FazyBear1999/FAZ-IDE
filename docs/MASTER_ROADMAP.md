@@ -61,6 +61,9 @@ Until this lockdown is complete, optimization/organization/reliability work take
 - Slice 7 (2026-02-21): Panel index precision hardening — panel ordering now accepts only safe integer indices in `assets/js/app.js`; unsafe precision-edge integers no-op while valid extreme safe integers clamp to row bounds predictably. Validation: focused safe-index contract in `tests/layout-micro.spec.js`.
 - Slice 8 (2026-02-21): Persisted dense-row cap hardening — `sanitizeLayoutState` now enforces docking row caps in `assets/js/app.js`, preventing over-cap panel rows from stored layout payloads at boot. Validation: focused persisted-dense-row reload contract in `tests/layout-micro.spec.js`.
 - Slice 9 (2026-02-21): Persisted all-closed panel recovery — `sanitizeLayoutState` now enforces a primary-panel open floor in `assets/js/app.js`, preventing boot into blank-shell states from stored all-closed layouts. Validation: focused all-closed reload recovery contract in `tests/layout-micro.spec.js`.
+- Slice 10 (2026-02-21): Boot-guard decomposition + combined resilience proof — extracted sanitize-time panel guard helpers in `assets/js/app.js` (`ensureSnapshotPrimaryPanelFloor`, `applySnapshotRowCapNormalization`) and validated combined dense+all-closed persisted payload recovery via focused contract in `tests/layout-micro.spec.js`.
+- Slice 11 (2026-02-21): Sanitize ratio reconstruction micro-optimization — cached row width reads and reused normalized panel-gap value inside `sanitizeLayoutState` in `assets/js/app.js`, reducing redundant calculations while preserving layout behavior contracts.
+- Slice 12 (2026-02-21): Panel-row lookup micro-optimization — introduced `buildPanelRowLookup` in `assets/js/app.js` and reused it in `buildPanelRatioSnapshot` + `sanitizeLayoutState` ratio reconstruction flows to reduce repeated row membership scans without behavior drift.
 
 ## Optimization Program — Detailed Roadmap
 

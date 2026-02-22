@@ -20,6 +20,10 @@
 - Added focused contract coverage in `tests/layout-micro.spec.js` to verify persisted dense row layouts are capped deterministically after reload.
 - Added sanitize-time primary panel floor recovery in `assets/js/app.js` so persisted all-closed primary panel payloads reopen a safe default panel at boot.
 - Added focused contract coverage in `tests/layout-micro.spec.js` to verify all-closed persisted panel states recover to at least one open panel on reload.
+- Decomposed sanitize-time panel guard logic in `assets/js/app.js` into dedicated snapshot helpers (`ensureSnapshotPrimaryPanelFloor`, `applySnapshotRowCapNormalization`) to reduce orchestrator coupling while preserving behavior.
+- Added focused contract coverage in `tests/layout-micro.spec.js` for a combined persisted payload (dense rows + all-closed panels) to verify boot recovery enforces both primary-panel floor and row caps together.
+- Optimized `sanitizeLayoutState` in `assets/js/app.js` by caching row width reads for ratio width reconstruction and reusing the already-normalized panel-gap value, reducing redundant normalization/DOM width lookups while preserving behavior.
+- Optimized ratio reconstruction pathways in `assets/js/app.js` by adding a normalized panel→row lookup helper (`buildPanelRowLookup`) and reusing it in both `buildPanelRatioSnapshot` and `sanitizeLayoutState` to avoid repeated row membership scans.
 
 ## 2026-02-20
 
